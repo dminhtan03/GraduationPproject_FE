@@ -40,11 +40,11 @@ const extractUserFromToken = (accessToken: string | undefined): User | null => {
  * Login with email and password
  */
 export const loginWithEmail = async (
-  credentials: LoginRequest
+  credentials: LoginRequest,
 ): Promise<ApiResponse<LoginResponse>> => {
   const response = await api.post<BackendResponse<BackendAuthData>>(
     API_ENDPOINTS.AUTH.LOGIN,
-    credentials
+    credentials,
   );
 
   const backendData = response.data;
@@ -72,13 +72,13 @@ export const loginWithEmail = async (
 };
 
 export const loginWithGoogle = async (
-  googleToken: string
+  googleToken: string,
 ): Promise<ApiResponse<LoginResponse>> => {
   const response = await api.post<BackendResponse<BackendAuthData>>(
     API_ENDPOINTS.AUTH.GOOGLE_LOGIN,
     {
       token: googleToken,
-    } as GoogleLoginRequest
+    } as GoogleLoginRequest,
   );
 
   const backendData = response.data;
