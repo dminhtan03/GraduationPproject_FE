@@ -40,11 +40,26 @@ export interface DemoData {
 // Type cho routes thay vì enum
 export const Routes = {
   HOME: "/",
+  LOGIN: "/login",
+  LOG_OUT: "/logout",
   ABOUT: "/about",
   DASHBOARD: "/dashboard",
 } as const;
 
 export type RoutesType = (typeof Routes)[keyof typeof Routes];
+
+// Extended User interface for auth
+export interface AuthUser extends User {
+  verified?: boolean;
+  role?: string;
+}
+
+// Auth state interface
+export interface AuthState {
+  user: AuthUser | null;
+  token: string | null;
+  isAuthenticated: boolean;
+}
 
 // Type cho WebSocket message
 export interface WebSocketMessage {

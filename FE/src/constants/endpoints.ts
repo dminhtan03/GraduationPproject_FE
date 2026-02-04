@@ -3,7 +3,8 @@
 export const API_ENDPOINTS = {
   // Auth endpoints
   AUTH: {
-    LOGIN: "/auth/login",
+    LOGIN: "/auth/doLogin",
+    GOOGLE_LOGIN: "/auth/google",
     LOGOUT: "/auth/logout",
     REFRESH: "/auth/refresh",
     PROFILE: "/auth/profile",
@@ -31,7 +32,7 @@ export const API_ENDPOINTS = {
 // Helper function để build URL với params
 export const buildUrl = (
   endpoint: string,
-  params?: Record<string, string | number>
+  params?: Record<string, string | number>,
 ) => {
   if (!params) return endpoint;
 

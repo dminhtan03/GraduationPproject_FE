@@ -6,6 +6,7 @@ import { ROUTES } from "../constants";
 
 // Lazy load components để optimize performance
 const MainLayout = React.lazy(() => import("../components/Layout/MainLayout"));
+const LoginPage = React.lazy(() => import("../pages/Login"));
 const HomePage = React.lazy(() => import("../pages/Home"));
 const AboutPage = React.lazy(() => import("../pages/About"));
 const DashboardPage = React.lazy(() => import("../pages/Dashboard"));
@@ -50,6 +51,15 @@ const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({
 // Router configuration
 export const router = createBrowserRouter([
   {
+    path: ROUTES.LOGIN,
+    element: (
+      <SuspenseWrapper>
+        <LoginPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
     path: "/",
     element: (
       <SuspenseWrapper>
@@ -93,6 +103,12 @@ export const router = createBrowserRouter([
 
 // Route definitions để sử dụng trong navigation
 export const routeDefinitions = [
+  {
+    key: "login",
+    path: ROUTES.LOGIN,
+    label: "Đăng nhập",
+    icon: "login",
+  },
   {
     key: "home",
     path: ROUTES.HOME,

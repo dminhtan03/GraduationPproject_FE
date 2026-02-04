@@ -10,6 +10,7 @@ const createAxiosInstance = (): AxiosInstance => {
   const instance = axios.create({
     baseURL: API_CONFIG.BASE_URL,
     timeout: API_CONFIG.TIMEOUT,
+    withCredentials: true,
     headers: {
       "Content-Type": "application/json",
     },
@@ -36,7 +37,7 @@ const createAxiosInstance = (): AxiosInstance => {
     (error) => {
       logError(error, "Request Interceptor");
       return Promise.reject(error);
-    }
+    },
   );
 
   // Response interceptor - xử lý response và error
@@ -64,7 +65,7 @@ const createAxiosInstance = (): AxiosInstance => {
       }
 
       return Promise.reject(apiError);
-    }
+    },
   );
 
   return instance;
@@ -75,7 +76,7 @@ export const apiClient = createAxiosInstance();
 
 // Generic API call function
 export const apiCall = async <T>(
-  config: AxiosRequestConfig
+  config: AxiosRequestConfig,
 ): Promise<ApiResponse<T>> => {
   try {
     const response = await apiClient(config);

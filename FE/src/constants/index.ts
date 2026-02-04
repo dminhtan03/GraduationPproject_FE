@@ -11,8 +11,10 @@ export const API_CONFIG = {
 // Routes constants
 export const ROUTES = {
   HOME: "/",
+  LOGIN: "/login",
   ABOUT: "/about",
   DASHBOARD: "/dashboard",
+  LOG_OUT: "/logout",
 } as const;
 
 // LocalStorage keys

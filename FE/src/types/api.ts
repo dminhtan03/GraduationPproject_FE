@@ -7,6 +7,10 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface GoogleLoginRequest {
+  token: string;
+}
+
 export interface GetDataRequest {
   page?: number;
   limit?: number;
@@ -29,9 +33,9 @@ export interface GetDataResponse {
 
 // API endpoint types
 export type LoginApi = (
-  data: LoginRequest
+  data: LoginRequest,
 ) => Promise<ApiResponse<LoginResponse>>;
 export type GetDataApi = (
-  params: GetDataRequest
+  params: GetDataRequest,
 ) => Promise<ApiResponse<GetDataResponse>>;
 export type GetUserApi = () => Promise<ApiResponse<User>>;
