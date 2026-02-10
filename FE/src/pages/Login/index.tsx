@@ -1,174 +1,124 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { loginWithEmail, loginWithGoogle } from "../../services/authService";
-import { ROUTES } from "../../constants";
+import {
+  loginWithEmail,
+  loginWithGoogle,
+  getDefaultRouteByRole,
+} from "../../services/authService";
+import type { ApiError } from "../../types";
+import CustomMessage, {
+  MessageType,
+} from "../../components/common/CustomMessage";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import "../../styles/Login.css";
 
-// Google Sign-In button component
-
+/* ===== Google types ===== */
 type GoogleCredentialResponse = { credential?: string };
-
-type GoogleAccountsId = {
-  initialize: (options: {
-    client_id: string;
-    callback: (resp: GoogleCredentialResponse) => void;
-  }) => void;
-  renderButton: (
-    el: HTMLElement,
-    options?: { theme?: string; size?: string; width?: string | number },
-  ) => void;
-};
-
-type WindowGoogle = {
-  accounts: { id: GoogleAccountsId };
-};
 
 declare global {
   interface Window {
-    google?: WindowGoogle;
+    google?: any;
   }
 }
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  // Handle email/password login
+  const [popup, setPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
+
+  const showPopup = (type: MessageType, message: string) => {
+    setPopup({ type, message });
+    setTimeout(() => setPopup(null), 3000);
+  };
+
+  /* ===== Email login ===== */
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
 
     try {
       if (!email || !password) {
-        setError("Vui lòng nhập email và mật khẩu");
-        setLoading(false);
+        showPopup("warning", "Please enter both email and password");
         return;
       }
 
-      const response = await loginWithEmail({
-        email,
-        password,
-      });
+      const res = await loginWithEmail({ email, password });
 
-      if (response.success) {
-        console.log(" Login successful, redirecting to dashboard");
-        navigate(ROUTES.DASHBOARD);
+      if (res.success) {
+        showPopup("success", "Login successful");
+        const target = getDefaultRouteByRole(res.data?.user ?? null);
+        setTimeout(() => navigate(target), 800);
       } else {
-        setError(response.message || "Login failed");
+        showPopup("error", res.message || "Login failed");
       }
-    } catch (err: unknown) {
-      console.error("Login error:", err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError(String(err) || "Có lỗi xảy ra khi đăng nhập");
-      }
+    } catch (err) {
+      showPopup("error", (err as ApiError).message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle Google login
-  const handleGoogleLogin = React.useCallback(
-    async (response: GoogleCredentialResponse) => {
-      setError("");
-      setLoading(true);
+  /* ===== Google login ===== */
+  const handleGoogleLogin = async (response: GoogleCredentialResponse) => {
+    try {
+      const token = response?.credential;
+      if (!token) return;
 
-      try {
-        const googleToken = response?.credential;
-
-        if (!googleToken) {
-          setError("Không thể lấy token từ Google");
-          setLoading(false);
-          return;
-        }
-
-        const result = await loginWithGoogle(googleToken);
-
-        if (result.success) {
-          console.log("[v0] Google login successful, redirecting to dashboard");
-          navigate(ROUTES.DASHBOARD);
-        } else {
-          setError(result.message || "Đăng nhập Google thất bại");
-        }
-      } catch (err: unknown) {
-        console.error("[v0] Google login error:", err);
-        if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError(String(err) || "Có lỗi xảy ra khi đăng nhập bằng Google");
-        }
-      } finally {
-        setLoading(false);
+      const res = await loginWithGoogle(token);
+      if (res.success) {
+        const target = getDefaultRouteByRole(res.data?.user ?? null);
+        navigate(target);
       }
-    },
-    [navigate],
-  );
+    } catch {
+      showPopup("error", "Login with Google failed");
+    }
+  };
 
-  // Initialize Google Sign-In
+  /* ===== Load Google ===== */
   React.useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
-    script.defer = true;
     document.body.appendChild(script);
 
     script.onload = () => {
-      if (window.google) {
-        window.google.accounts.id.initialize({
-          client_id:
-            import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-            "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
-          callback: handleGoogleLogin,
-        });
+      window.google?.accounts.id.initialize({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        callback: handleGoogleLogin,
+      });
 
-        const googleButton = document.getElementById("google-signin-button");
-        if (googleButton) {
-          window.google.accounts.id.renderButton(googleButton, {
-            theme: "outline",
-            size: "large",
-            width: "100%",
-          });
-        }
-      }
+      window.google?.accounts.id.renderButton(
+        document.getElementById("google-signin-button"),
+        { theme: "outline", size: "large", width: "100%" },
+      );
     };
-
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, [handleGoogleLogin]);
+  }, []);
 
   return (
     <div className="login-container">
       <div className="login-wrapper">
-        {/* Logo Section */}
         <div className="login-header">
-          <div className="logo">
-            <span className="logo-icon">📚</span>
-          </div>
+          <div className="logo-icon">📚</div>
           <h1>UniBook</h1>
           <p>Smart Booking System</p>
         </div>
 
-        {/* Form Section */}
         <div className="login-form-wrapper">
           <h2>Login</h2>
 
-          {/* Error Message */}
-          {error && <div className="error-message">{error}</div>}
-
-          {/* Email Login Form */}
-          <form onSubmit={handleEmailLogin} className="login-form">
+          <form className="login-form" onSubmit={handleEmailLogin}>
             <div className="form-group">
-              <label htmlFor="email">Email</label>
+              <label>Email</label>
               <input
                 type="email"
-                id="email"
-                placeholder="example@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
@@ -176,70 +126,58 @@ const LoginPage: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="password">Password</label>
-              <input
-                type="password"
-                id="password"
-                placeholder="Enter password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-              />
+              <label>Password</label>
+
+              <div className="password-wrapper">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                />
+
+                <span
+                  className="password-toggle"
+                  onClick={() => setShowPassword((p) => !p)}
+                >
+                  {showPassword ? (
+                    <EyeSlashIcon className="w-5 h-5" />
+                  ) : (
+                    <EyeIcon className="w-5 h-5" />
+                  )}
+                </span>
+              </div>
             </div>
 
-            <button type="submit" className="btn-login" disabled={loading}>
+            <button className="btn-login" disabled={loading}>
               {loading ? "Logging in..." : "Login"}
             </button>
           </form>
 
-          {/* Divider */}
           <div className="divider">
             <span>Or</span>
           </div>
 
-          {/* Google Login Button */}
           <div id="google-signin-button" className="google-button"></div>
-
-          {/* Forgot Password Link */}
-          <p className="forgot-password-text">
-            <a href="#forgot-password" className="forgot-password-link">
-              Forgot Password?
-            </a>
-          </p>
         </div>
 
-        {/* Features Section */}
         <div className="login-features">
           <h3>Main Features</h3>
           <ul>
-            <li>
-              <span className="feature-icon">✓</span>
-              <span>Quick Meeting Room Booking</span>
-            </li>
-            <li>
-              <span className="feature-icon">✓</span>
-              <span>Real-time Availability Check</span>
-            </li>
-            <li>
-              <span className="feature-icon">✓</span>
-              <span>Room Amenities Management</span>
-            </li>
+            <li>✓ Quick Meeting Room Booking</li>
+            <li>✓ Real-time Availability Check</li>
+            <li>✓ Room Amenities Management</li>
           </ul>
         </div>
       </div>
 
-      {/* Right Panel with Design */}
-      <div className="login-illustration">
-        <div className="illustration-content">
-          <h2>Welcome!</h2>
-          <p>UniBook helps you manage meeting rooms efficiently</p>
-          <div className="illustration-shapes">
-            <div className="shape shape-1"></div>
-            <div className="shape shape-2"></div>
-            <div className="shape shape-3"></div>
-          </div>
-        </div>
-      </div>
+      {popup && (
+        <CustomMessage
+          type={popup.type}
+          message={popup.message}
+          onClose={() => setPopup(null)}
+        />
+      )}
     </div>
   );
 };

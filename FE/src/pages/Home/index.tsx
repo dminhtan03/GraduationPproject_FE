@@ -1,5 +1,3 @@
-// ===== HOME PAGE COMPONENT =====
-
 import React, { useEffect } from "react";
 import {
   Card,
@@ -211,7 +209,7 @@ const HomePage: React.FC = () => {
                   dataSource={posts.items}
                   renderItem={(
                     post: { id: number; title: string; userId: number },
-                    index: number
+                    index: number,
                   ) => (
                     <List.Item key={post.id}>
                       <List.Item.Meta

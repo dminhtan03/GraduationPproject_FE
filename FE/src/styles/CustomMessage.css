@@ -1,0 +1,67 @@
+.custom-message {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  min-width: 320px;
+  max-width: 420px;
+  padding: 14px 18px;
+  border-radius: 8px;
+
+  font-size: 15px;
+  font-weight: 500;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+
+  animation: slide-in-right 0.35s ease-out;
+}
+
+/* Icon */
+.custom-message-icon {
+  font-size: 20px;
+}
+
+/* Close button */
+.custom-message-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: inherit;
+}
+
+/* Types */
+.custom-message.success {
+  background: #28a745;
+  color: #fff;
+}
+
+.custom-message.error {
+  background: #dc3545;
+  color: #fff;
+}
+
+.custom-message.warning {
+  background: #ffc107;
+  color: #212529;
+}
+
+.custom-message.info {
+  background: #17a2b8;
+  color: #fff;
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

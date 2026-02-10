@@ -1,143 +1,144 @@
-// ===== HEADER COMPONENT =====
+// ===== HEADER COMPONENT (UniBooking) =====
 
 import React from "react";
-import { Layout, Button, Typography, Space, Dropdown, Avatar } from "antd";
+import { Layout, Button, Typography, Input, Avatar, Dropdown } from "antd";
 import {
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   BellOutlined,
   UserOutlined,
   SettingOutlined,
   LogoutOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
-import {
-  useAppDispatch,
-  useAppSelector,
-  toggleSidebar,
-  selectLayout,
-  selectTheme,
-} from "../../store";
+import { useNavigate } from "react-router-dom";
+import { useAppSelector, selectTheme } from "../../store";
+import { STORAGE_KEYS, ROUTES } from "../../constants";
+import { logout } from "../../services/authService";
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
 
-// Props interface
-interface HeaderProps {
-  // Có thể thêm props khác nếu cần
-}
+const APP_NAME = "UniBooking";
 
-// Header component
-const Header: React.FC<HeaderProps> = () => {
-  const dispatch = useAppDispatch();
-  const { sidebarCollapsed } = useAppSelector(selectLayout);
+const Header: React.FC = () => {
+  const navigate = useNavigate();
   const { mode } = useAppSelector(selectTheme);
 
-  // Menu cho user dropdown
+  const userJson = localStorage.getItem(STORAGE_KEYS.USER_DATA);
+  const user = userJson
+    ? (JSON.parse(userJson) as { name?: string; email?: string })
+    : null;
+  const initials = user?.name
+    ? user.name
+        .split(" ")
+        .map((s) => s[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "JD";
+
   const userMenuItems: MenuProps["items"] = [
-    {
-      key: "1",
-      label: "Thông tin cá nhân",
-      icon: <UserOutlined />,
-    },
-    {
-      key: "2",
-      label: "Cài đặt",
-      icon: <SettingOutlined />,
-    },
-    {
-      type: "divider",
-    },
-    {
-      key: "3",
-      label: "Đăng xuất",
-      icon: <LogoutOutlined />,
-      danger: true,
-    },
+    { key: "1", label: "My Profile", icon: <UserOutlined /> },
+    { key: "2", label: "Settings", icon: <SettingOutlined /> },
+    { type: "divider" },
+    { key: "3", label: "Logout", icon: <LogoutOutlined />, danger: true },
   ];
 
-  // Handle user menu click
   const handleUserMenuClick = ({ key }: { key: string }) => {
-    switch (key) {
-      case "1":
-        console.log("Xem thông tin cá nhân");
-        break;
-      case "2":
-        console.log("Mở cài đặt");
-        break;
-      case "3":
-        console.log("Đăng xuất");
-        break;
-    }
-  };
-
-  // Handle toggle sidebar
-  const handleToggleSidebar = () => {
-    dispatch(toggleSidebar());
+    if (key === "1") navigate(ROUTES.PROFILE);
+    if (key === "2") navigate(ROUTES.PROFILE_EDIT);
+    if (key === "3") logout().then(() => (window.location.href = "/login"));
   };
 
   return (
     <AntHeader
-      className={`
-        flex items-center justify-between px-4 
-        ${mode === "dark" ? "bg-gray-800" : "bg-white"} 
-        border-b border-gray-200 shadow-sm
-      `}
+      className={`flex items-center justify-between px-4 gap-4 ${
+        mode === "dark" ? "bg-gray-800" : "bg-white"
+      } border-b border-gray-200 shadow-sm`}
       style={{
         padding: "0 16px",
         background: mode === "dark" ? "#1f2937" : "#ffffff",
       }}
     >
-      {/* Left side - Logo and menu toggle */}
-      <div className="flex items-center space-x-4">
-        <Button
-          type="text"
-          icon={
-            sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />
-          }
-          onClick={handleToggleSidebar}
-          className="text-lg"
-        />
-
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-            <Text className="text-white font-bold text-sm">R</Text>
-          </div>
-          <Text strong className="text-lg">
-            React Base
-          </Text>
+      {/* Left: Logo */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div
+          className="w-9 h-9 rounded-lg flex items-center justify-center"
+          style={{ background: "#ff9500" }}
+        >
+          <span className="text-white text-lg" aria-hidden>
+            📚
+          </span>
         </div>
+        <Text strong className="text-lg hidden sm:inline">
+          {APP_NAME}
+        </Text>
       </div>
 
-      {/* Right side - Notifications and user menu */}
-      <Space size="large">
-        {/* Notification bell */}
+      {/* Center: Search */}
+      <div className="flex-1 max-w-xl mx-4">
+        <Input
+          placeholder="Search rooms..."
+          allowClear
+          className="rounded-lg"
+          style={{ background: mode === "dark" ? "#374151" : "#f3f4f6" }}
+        />
+      </div>
+
+      {/* Right: Notifications + User avatar/login button */}
+      <div className="flex items-center gap-1 flex-shrink-0">
         <Button
           type="text"
-          icon={<BellOutlined />}
-          className="text-lg"
-          onClick={() => console.log("Mở thông báo")}
+          icon={<BellOutlined className="text-lg" />}
+          onClick={() => {}}
         />
-
-        {/* User dropdown */}
-        <Dropdown
-          menu={{
-            items: userMenuItems,
-            onClick: handleUserMenuClick,
-          }}
-          placement="bottomRight"
-          arrow
-        >
-          <div className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 rounded-lg px-2 py-1">
-            <Avatar
-              size="small"
-              icon={<UserOutlined />}
-              className="bg-blue-500"
-            />
-            <Text className="hidden sm:inline">Fresher User</Text>
+        {user ? (
+          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate(ROUTES.PROFILE)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  navigate(ROUTES.PROFILE);
+                }
+              }}
+              className="flex items-center cursor-pointer hover:opacity-90 outline-none p-1"
+              title="My Profile"
+            >
+              <Avatar
+                size="default"
+                style={{ backgroundColor: "#ff9500" }}
+                className="flex items-center justify-center"
+              >
+                {initials}
+              </Avatar>
+            </div>
+            <Dropdown
+              menu={{ items: userMenuItems, onClick: handleUserMenuClick }}
+              placement="bottomRight"
+              arrow
+              trigger={["click"]}
+            >
+              <Button
+                type="text"
+                icon={<DownOutlined />}
+                className="flex items-center justify-center h-8 w-8"
+              />
+            </Dropdown>
           </div>
-        </Dropdown>
-      </Space>
+        ) : (
+          <Button
+            type="primary"
+            style={{ background: "#ff9500", borderColor: "#ff9500" }}
+            onClick={() => navigate(ROUTES.LOGIN)}
+            className="rounded-lg ml-2"
+          >
+            Login
+          </Button>
+        )}
+      </div>
     </AntHeader>
   );
 };

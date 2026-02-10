@@ -1,25 +1,24 @@
-// ===== SIDEBAR COMPONENT =====
+// ===== SIDEBAR COMPONENT (UniBooking) =====
 
 import React from "react";
 import { Layout, Menu, Typography } from "antd";
 import {
-  HomeOutlined,
-  InfoCircleOutlined,
-  DashboardOutlined,
+  AppstoreOutlined,
+  BankOutlined,
+  CalendarOutlined,
+  DesktopOutlined,
+  TeamOutlined,
+  AuditOutlined,
+  FolderOutlined,
 } from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAppSelector, selectLayout, selectTheme } from "../../store";
-import { routeDefinitions } from "../../router/AppRouter";
+import { ROUTES } from "../../constants";
 
 const { Sider } = Layout;
 const { Text } = Typography;
 
-// Icon mapping
-const iconMap = {
-  home: <HomeOutlined />,
-  info: <InfoCircleOutlined />,
-  dashboard: <DashboardOutlined />,
-};
+const APP_NAME = "UniBooking";
 
 // Sidebar component
 const Sidebar: React.FC = () => {
@@ -28,20 +27,50 @@ const Sidebar: React.FC = () => {
   const { sidebarCollapsed } = useAppSelector(selectLayout);
   const { mode } = useAppSelector(selectTheme);
 
-  // Menu items từ route definitions
-  const menuItems = routeDefinitions.map((route) => ({
-    key: route.path,
-    icon: iconMap[route.icon as keyof typeof iconMap],
-    label: route.label,
-  }));
+  const menuItems: {
+    key: string;
+    icon: React.ReactNode;
+    label: string;
+    children?: { key: string; icon: React.ReactNode; label: string }[];
+  }[] = [
+    { key: ROUTES.DASHBOARD, icon: <AppstoreOutlined />, label: "Dashboard" },
+    { key: ROUTES.ROOM_LIST, icon: <BankOutlined />, label: "Room List" },
+    {
+      key: ROUTES.MY_BOOKINGS,
+      icon: <CalendarOutlined />,
+      label: "My Bookings",
+    },
+    {
+      key: "categories",
+      icon: <FolderOutlined />,
+      label: "CATEGORIES",
+      children: [
+        { key: "category-tech", icon: <DesktopOutlined />, label: "Tech Labs" },
+        { key: "category-pods", icon: <TeamOutlined />, label: "Study Pods" },
+        {
+          key: "category-auditoriums",
+          icon: <AuditOutlined />,
+          label: "Auditoriums",
+        },
+      ],
+    },
+  ];
 
-  // Handle menu click
   const handleMenuClick = ({ key }: { key: string }) => {
-    navigate(key);
+    if (key.startsWith("category-")) {
+      navigate(ROUTES.DASHBOARD);
+      return;
+    }
+    if (key !== "categories") navigate(key);
   };
 
-  // Get current selected key
-  const selectedKey = location.pathname;
+  const path = location.pathname;
+  const selectedKey: string =
+    path === ROUTES.DASHBOARD || path === ROUTES.ROOM_LIST
+      ? ROUTES.DASHBOARD
+      : path.startsWith(ROUTES.PROFILE_EDIT)
+        ? ROUTES.PROFILE
+        : path;
 
   return (
     <Sider
@@ -55,20 +84,30 @@ const Sidebar: React.FC = () => {
         borderRight: "1px solid #e5e7eb",
       }}
     >
-      {/* Logo section */}
-      <div className="h-16 flex items-center justify-center border-b border-gray-200">
+      {/* Logo section - UniBooking */}
+      <div className="h-16 flex items-center justify-center border-b border-gray-200 px-2">
         {!sidebarCollapsed ? (
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-              <Text className="text-white font-bold text-sm">R</Text>
+          <div className="flex items-center gap-2">
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: "#ff9500" }}
+            >
+              <span className="text-white text-lg" aria-hidden>
+                📚
+              </span>
             </div>
-            <Text strong className="text-lg">
-              React Base
+            <Text strong className="text-lg truncate">
+              {APP_NAME}
             </Text>
           </div>
         ) : (
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-            <Text className="text-white font-bold text-sm">R</Text>
+          <div
+            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: "#ff9500" }}
+          >
+            <span className="text-white text-lg" aria-hidden>
+              📚
+            </span>
           </div>
         )}
       </div>
@@ -80,23 +119,11 @@ const Sidebar: React.FC = () => {
         selectedKeys={[selectedKey]}
         items={menuItems}
         onClick={handleMenuClick}
-        className="border-r-0"
+        className="border-r-0 mt-2"
         style={{
           background: mode === "dark" ? "#1f2937" : "#ffffff",
-          marginTop: "8px",
         }}
       />
-
-      {/* Footer info when not collapsed */}
-      {!sidebarCollapsed && (
-        <div className="absolute bottom-4 left-4 right-4">
-          <div className="bg-blue-50 rounded-lg p-3 text-center">
-            <Text className="text-xs text-gray-600">React Base v1.0.0</Text>
-            <br />
-            <Text className="text-xs text-gray-500">Fresher Training</Text>
-          </div>
-        </div>
-      )}
     </Sider>
   );
 };

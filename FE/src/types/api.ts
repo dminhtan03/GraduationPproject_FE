@@ -7,8 +7,9 @@ export interface LoginRequest {
   password: string;
 }
 
+/** BE AuthController expects body: { idToken: string } */
 export interface GoogleLoginRequest {
-  token: string;
+  idToken: string;
 }
 
 export interface GetDataRequest {

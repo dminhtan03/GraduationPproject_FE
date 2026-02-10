@@ -37,7 +37,7 @@ interface AppState {
 const initialState: AppState = {
   theme: {
     mode: "light",
-    primaryColor: "#1890ff",
+    primaryColor: "#ff9500",
   },
   layout: {
     sidebarCollapsed: false,

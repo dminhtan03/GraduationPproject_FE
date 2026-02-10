@@ -8,10 +8,18 @@ export const API_ENDPOINTS = {
   // - POST http://localhost:8080/api/v1/auth/refreshToken?refreshToken=...
   AUTH: {
     LOGIN: "/api/v1/auth/doLogin",
-    GOOGLE_LOGIN: "/api/v1/auth/google", // BE chưa có, placeholder
+    GOOGLE_LOGIN: "/api/v1/auth/google-login",
     LOGOUT: "/api/v1/auth/doLogout",
     REFRESH: "/api/v1/auth/refreshToken",
     PROFILE: "/api/v1/user/profile", // BE chưa có, placeholder
+  },
+
+  // Room endpoints (BE: replace with real API when ready)
+  // e.g. GET /api/v1/rooms?page=0&size=5&status=AVAILABLE&minCapacity=20
+  ROOMS: {
+    LIST: "/api/v1/rooms",
+    DETAIL: "/api/v1/rooms/:id",
+    BOOK: "/api/v1/reservations",
   },
 
   // User endpoints

@@ -10,6 +10,11 @@ const LoginPage = React.lazy(() => import("../pages/Login"));
 const HomePage = React.lazy(() => import("../pages/Home"));
 const AboutPage = React.lazy(() => import("../pages/About"));
 const DashboardPage = React.lazy(() => import("../pages/Dashboard"));
+const MyBookingsPage = React.lazy(() => import("../pages/MyBookings"));
+const ProfilePage = React.lazy(() => import("../pages/Profile"));
+const EditProfilePage = React.lazy(
+  () => import("../pages/Profile/EditProfile")
+);
 
 // Error boundary component cho routes
 const ErrorBoundary: React.FC = () => {
@@ -89,6 +94,30 @@ export const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <DashboardPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.MY_BOOKINGS,
+        element: (
+          <SuspenseWrapper>
+            <MyBookingsPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: "profile",
+        element: (
+          <SuspenseWrapper>
+            <ProfilePage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: "profile/edit",
+        element: (
+          <SuspenseWrapper>
+            <EditProfilePage />
           </SuspenseWrapper>
         ),
       },

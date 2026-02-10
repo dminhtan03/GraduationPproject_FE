@@ -10,7 +10,7 @@ import {
   LoginResponse,
 } from "../types/api";
 import { API_ENDPOINTS } from "../constants/endpoints";
-import { STORAGE_KEYS } from "../constants";
+import { ROUTES, STORAGE_KEYS } from "../constants";
 
 // Decode JWT để lấy thông tin user (email, fullName...) từ payload
 const decodeJwt = (token: string): any | null => {
@@ -23,16 +23,32 @@ const decodeJwt = (token: string): any | null => {
   }
 };
 
-// Chuẩn hoá dữ liệu user từ JWT payload (BE set claim "user" = fullName, "sub" = email)
+// Chuẩn hoá dữ liệu user từ JWT payload (BE: user=fullName, sub=email, roles=authorities)
+const parseRoles = (roles: unknown): string[] => {
+  if (!Array.isArray(roles)) return [];
+  return roles
+    .map((r: unknown) =>
+      typeof r === "string"
+        ? r
+        : ((r as { authority?: string })?.authority ?? ""),
+    )
+    .filter(Boolean);
+};
+
 const extractUserFromToken = (accessToken: string | undefined): User | null => {
   if (!accessToken) return null;
   const payload = decodeJwt(accessToken);
   if (!payload) return null;
 
+  const roles = parseRoles(payload.roles);
+  const role = roles[0] ?? undefined;
+
   return {
-    id: 0, // BE không trả id, tạm thời set 0
+    id: 0,
     name: payload.user || payload.fullName || payload.sub || "User",
     email: payload.sub || "",
+    role,
+    roles: roles.length ? roles : undefined,
   };
 };
 
@@ -71,14 +87,14 @@ export const loginWithEmail = async (
   };
 };
 
+/** Google login: gửi idToken (credential từ Google Sign-In) lên BE POST /api/v1/auth/google-login */
 export const loginWithGoogle = async (
-  googleToken: string,
+  idToken: string,
 ): Promise<ApiResponse<LoginResponse>> => {
+  // Đảm bảo truyền đúng key là idToken cho backend
   const response = await api.post<BackendResponse<BackendAuthData>>(
     API_ENDPOINTS.AUTH.GOOGLE_LOGIN,
-    {
-      token: googleToken,
-    } as GoogleLoginRequest,
+    { idToken },
   );
 
   const backendData = response.data;
@@ -122,4 +138,16 @@ export const logout = async (): Promise<void> => {
  */
 export const getProfile = async (): Promise<ApiResponse<any>> => {
   return await api.get(API_ENDPOINTS.AUTH.PROFILE);
+};
+
+/**
+ * Trả về route mặc định sau khi login theo role (BE: ROLE_ADMIN, ROLE_USER, ROLE_MAKE...)
+ */
+export const getDefaultRouteByRole = (user: User | null): string => {
+  if (!user?.role && !user?.roles?.length) return ROUTES.DASHBOARD;
+  const roles = user.roles ?? (user.role ? [user.role] : []);
+  if (roles.some((r) => r === "ROLE_ADMIN" || (r && r.includes("ADMIN")))) {
+    return ROUTES.ADMIN_DASHBOARD;
+  }
+  return ROUTES.DASHBOARD;
 };

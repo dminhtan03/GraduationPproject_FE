@@ -14,6 +14,11 @@ export const ROUTES = {
   LOGIN: "/login",
   ABOUT: "/about",
   DASHBOARD: "/dashboard",
+  ADMIN_DASHBOARD: "/admin/dashboard",
+  ROOM_LIST: "/dashboard",
+  MY_BOOKINGS: "/my-bookings",
+  PROFILE: "/profile",
+  PROFILE_EDIT: "/profile/edit",
   LOG_OUT: "/logout",
 } as const;
 

@@ -1,22 +1,14 @@
-// ===== FOOTER COMPONENT =====
+// ===== FOOTER COMPONENT (UniBooking) =====
 
 import React from "react";
-import { Layout, Typography, Space, Divider } from "antd";
-import {
-  GithubOutlined,
-  TwitterOutlined,
-  MailOutlined,
-  CopyrightOutlined,
-} from "@ant-design/icons";
+import { Layout, Typography, Divider } from "antd";
 import { useAppSelector, selectTheme } from "../../store";
 
 const { Footer: AntFooter } = Layout;
 const { Text, Link } = Typography;
 
-// Footer component
 const Footer: React.FC = () => {
   const { mode } = useAppSelector(selectTheme);
-  const currentYear = new Date().getFullYear();
 
   return (
     <AntFooter
@@ -29,117 +21,72 @@ const Footer: React.FC = () => {
       }}
     >
       <div className="max-w-6xl mx-auto px-4">
-        {/* Main footer content */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8">
-          {/* Brand section */}
-          <div className="text-center md:text-left">
-            <div className="flex items-center justify-center md:justify-start space-x-2 mb-4">
-              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                <Text className="text-white font-bold text-sm">R</Text>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 text-left">
+          {/* Brand */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ background: "#ff9500" }}
+              >
+                <span className="text-white text-sm" aria-hidden>
+                  📚
+                </span>
               </div>
-              <Text strong className="text-lg">
-                React Base
+              <Text strong className="text-base">
+                UniBooking
               </Text>
             </div>
-            <Text className="text-gray-600">
-              Base React application dành cho Fresher,
-              <br />
-              tích hợp đầy đủ các công nghệ hiện đại.
+            <Text className="text-gray-600 text-sm">
+              The official campus facility management platform for students,
+              faculty, and administrative staff members.
             </Text>
           </div>
 
-          {/* Quick links */}
-          <div className="text-center">
+          {/* Links */}
+          <div>
             <Text strong className="text-base mb-4 block">
-              Liên kết nhanh
+              LINKS
             </Text>
             <div className="space-y-2">
               <div>
-                <Link href="/" className="text-gray-600 hover:text-blue-500">
-                  Trang chủ
+                <Link
+                  href="#"
+                  className="text-gray-600 hover:text-orange-500 text-sm"
+                >
+                  Support Center
                 </Link>
               </div>
               <div>
                 <Link
-                  href="/about"
-                  className="text-gray-600 hover:text-blue-500"
+                  href="#"
+                  className="text-gray-600 hover:text-orange-500 text-sm"
                 >
-                  Giới thiệu
-                </Link>
-              </div>
-              <div>
-                <Link
-                  href="/dashboard"
-                  className="text-gray-600 hover:text-blue-500"
-                >
-                  Dashboard
+                  Campus Map
                 </Link>
               </div>
             </div>
           </div>
 
-          {/* Contact & Social */}
-          <div className="text-center md:text-right">
+          {/* Contact */}
+          <div>
             <Text strong className="text-base mb-4 block">
-              Liên hệ
+              CONTACT
             </Text>
-            <Space direction="vertical" size="small">
-              <div>
-                <MailOutlined className="mr-2" />
-                <Link
-                  href="mailto:contact@reactbase.com"
-                  className="text-gray-600 hover:text-blue-500"
-                >
-                  contact@reactbase.com
-                </Link>
-              </div>
-              <div className="flex justify-center md:justify-end space-x-4 mt-4">
-                <Link
-                  href="https://github.com"
-                  target="_blank"
-                  className="text-gray-600 hover:text-blue-500 text-lg"
-                >
-                  <GithubOutlined />
-                </Link>
-                <Link
-                  href="https://twitter.com"
-                  target="_blank"
-                  className="text-gray-600 hover:text-blue-500 text-lg"
-                >
-                  <TwitterOutlined />
-                </Link>
-              </div>
-            </Space>
+            <div className="space-y-2 text-gray-600 text-sm">
+              <div>IT Desk</div>
+              <div>Ext. 4022</div>
+            </div>
           </div>
         </div>
 
         <Divider className="my-4" />
 
-        {/* Copyright */}
         <div className="py-4">
           <Text className="text-gray-500 text-sm">
-            <CopyrightOutlined className="mr-1" />
-            {currentYear} React Base. Được phát triển bởi Fresher Team. Sử dụng
-            React, TypeScript, Ant Design và TailwindCSS.
+            © {new Date().getFullYear()} UniBooking. Campus facility management
+            platform.
           </Text>
-        </div>
-
-        {/* Tech stack info */}
-        <div className="py-2">
-          <Space
-            split={<Divider type="vertical" />}
-            className="text-xs text-gray-400"
-          >
-            <span>React 18</span>
-            <span>TypeScript</span>
-            <span>Vite</span>
-            <span>Ant Design</span>
-            <span>TailwindCSS</span>
-            <span>Redux Toolkit</span>
-            <span>React Router</span>
-            <span>Axios</span>
-            <span>WebSocket</span>
-          </Space>
         </div>
       </div>
     </AntFooter>

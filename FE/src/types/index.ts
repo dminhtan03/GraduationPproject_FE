@@ -21,12 +21,16 @@ export interface LoadingState {
   error: string | null;
 }
 
-// Interface cho user
+// Interface cho user (role từ JWT BE: sub=email, user=fullName, roles=ROLE_*)
 export interface User {
   id: number;
   name: string;
   email: string;
   avatar?: string;
+  /** Role chính (từ JWT claim roles), e.g. "ROLE_ADMIN", "ROLE_USER" */
+  role?: string;
+  /** Tất cả authorities từ BE */
+  roles?: string[];
 }
 
 // Interface cho data demo
@@ -66,4 +70,68 @@ export interface WebSocketMessage {
   type: "update" | "notification" | "error";
   data: unknown;
   timestamp: string;
+}
+
+// ===== ROOM (Campus Room Inventory) =====
+export type RoomStatus = "AVAILABLE" | "OCCUPIED";
+
+export interface Room {
+  id: string;
+  roomName: string;
+  /** e.g. "Floor 2 - Lab" */
+  floorInfo?: string;
+  building: string;
+  /** Capacity / Slot */
+  slot: number;
+  status: RoomStatus;
+  /** Optional category for filter: Tech Labs, Study Pods, Auditoriums */
+  category?: string;
+}
+
+// ===== PROFILE (My Profile / Edit Profile) =====
+export type ActivityStatus = "Confirmed" | "Completed" | "Cancelled";
+
+export interface RecentActivity {
+  id: string;
+  facilityName: string;
+  facilityIcon?: string;
+  dateTime: string;
+  timeRange?: string;
+  status: ActivityStatus;
+}
+
+export interface ProfileBookingStats {
+  totalBookings: number;
+  hoursSpent: number;
+  topFacility: string;
+}
+
+export interface ProfilePersonalInfo {
+  email: string;
+  studentId: string;
+  academicYear: string;
+  phoneNumber: string;
+  department: string;
+  emergencyContact: string;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  role: string;
+  department: string;
+  memberSince: string;
+  avatar?: string;
+  stats: ProfileBookingStats;
+  personalInfo: ProfilePersonalInfo;
+  recentActivities: RecentActivity[];
+}
+
+/** Edit Profile form (editable fields only; studentId & role read-only on UI) */
+export interface EditProfileFormData {
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  campusAddress: string;
+  avatar?: string;
 }

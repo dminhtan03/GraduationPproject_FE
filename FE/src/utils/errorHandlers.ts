@@ -6,10 +6,14 @@ import { ApiError } from "../types";
 export const handleApiError = (error: any): ApiError => {
   // Nếu là lỗi từ axios response
   if (error.response) {
+    const data = error.response.data;
+    const message =
+      data?.meta?.message || data?.message || "Có lỗi xảy ra từ server";
+    const code = data?.meta?.code ?? data?.code;
     return {
-      message: error.response.data?.message || "Có lỗi xảy ra từ server",
+      message,
       status: error.response.status,
-      code: error.response.data?.code,
+      code,
     };
   }
 

@@ -20,8 +20,11 @@ const createAxiosInstance = (): AxiosInstance => {
   instance.interceptors.request.use(
     (config) => {
       const token = localStorage.getItem(STORAGE_KEYS.USER_TOKEN);
-
-      if (token) {
+      // Không thêm Authorization cho login và google-login
+      const isAuthRequest =
+        config.url?.includes("/api/v1/auth/doLogin") ||
+        config.url?.includes("/api/v1/auth/google-login");
+      if (token && !isAuthRequest) {
         config.headers.Authorization = `Bearer ${token}`;
       }
 
