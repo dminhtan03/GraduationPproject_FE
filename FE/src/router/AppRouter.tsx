@@ -7,6 +7,9 @@ import { ROUTES } from "../constants";
 // Lazy load components để optimize performance
 const MainLayout = React.lazy(() => import("../components/Layout/MainLayout"));
 const LoginPage = React.lazy(() => import("../pages/Login"));
+const ForgotPasswordPage = React.lazy(
+  () => import("../pages/ForgotPassword"),
+);
 const HomePage = React.lazy(() => import("../pages/Home"));
 const AboutPage = React.lazy(() => import("../pages/About"));
 const DashboardPage = React.lazy(() => import("../pages/Dashboard"));
@@ -60,6 +63,15 @@ export const router = createBrowserRouter([
     element: (
       <SuspenseWrapper>
         <LoginPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.FORGOT_PASSWORD,
+    element: (
+      <SuspenseWrapper>
+        <ForgotPasswordPage />
       </SuspenseWrapper>
     ),
     errorElement: <ErrorBoundary />,

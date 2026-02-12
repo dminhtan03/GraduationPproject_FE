@@ -5,6 +5,7 @@ import {
   loginWithGoogle,
   getDefaultRouteByRole,
 } from "../../services/authService";
+import { ROUTES } from "../../constants";
 import type { ApiError } from "../../types";
 import CustomMessage, {
   MessageType,
@@ -147,6 +148,16 @@ const LoginPage: React.FC = () => {
                   )}
                 </span>
               </div>
+            </div>
+
+            <div className="form-footer">
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => navigate(ROUTES.FORGOT_PASSWORD)}
+              >
+                Forgot password?
+              </button>
             </div>
 
             <button className="btn-login" disabled={loading}>

@@ -29,6 +29,9 @@ export const API_ENDPOINTS = {
     CREATE: "/users",
     UPDATE: "/users/:id",
     DELETE: "/users/:id",
+    CHANGE_PASSWORD: "/api/v1/user/change-password",
+    FORGOT_PASSWORD_REQUEST: "/api/v1/user/forgot-password",
+    FORGOT_PASSWORD_VERIFY: "/api/v1/user/verify-forgot-password",
   },
   // Demo data endpoints (sử dụng JSONPlaceholder)
   DEMO: {

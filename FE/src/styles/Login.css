@@ -191,6 +191,27 @@ body {
   color: var(--primary-orange);
 }
 
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary-orange);
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.link-button:hover {
+  color: var(--dark-orange);
+  text-decoration: underline;
+}
+
 /* ===== Button ===== */
 .btn-login {
   width: 100%;
