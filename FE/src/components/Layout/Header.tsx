@@ -1,6 +1,6 @@
 // ===== HEADER COMPONENT (UniBooking) =====
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Layout, Button, Typography, Input, Avatar, Dropdown } from "antd";
 import {
   BellOutlined,
@@ -13,6 +13,9 @@ import type { MenuProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import { useAppSelector, selectTheme } from "../../store";
 import { STORAGE_KEYS, ROUTES } from "../../constants";
+import { api } from "../../services/api";
+import { API_ENDPOINTS } from "../../constants/endpoints";
+import type { UserProfile } from "../../types";
 import { logout } from "../../services/authService";
 
 const { Header: AntHeader } = Layout;
@@ -24,33 +27,44 @@ const Header: React.FC = () => {
   const navigate = useNavigate();
   const { mode } = useAppSelector(selectTheme);
 
-  const userJson = localStorage.getItem(STORAGE_KEYS.USER_DATA);
-  let user: any = null;
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      setLoadingProfile(true);
+      try {
+        const res = await api.get<any>(API_ENDPOINTS.AUTH.PROFILE);
+        const userData = res.data?.data || res.data;
+        setProfile(userData || null);
+      } catch {
+        setProfile(null);
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+    fetchProfile();
+  }, []);
+
   let initials = "";
   let displayName = "";
   let avatarUrl = undefined;
-  if (userJson) {
-    user = JSON.parse(userJson);
-    // Always use name field for initials if available
-    if (user.name) {
-      const nameParts = user.name.trim().split(" ").filter(Boolean);
-      if (nameParts.length >= 2) {
-        initials = (nameParts[0][0] + nameParts[1][0]).toUpperCase();
-      } else if (nameParts.length === 1) {
-        initials = nameParts[0][0].toUpperCase();
-      } else {
-        initials = "U";
-      }
-      displayName = user.name;
-    } else if (user.firstName && user.lastName) {
+  if (profile) {
+    if (profile.firstName && profile.lastName) {
       initials =
-        `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase();
-      displayName = `${user.firstName} ${user.lastName}`;
+        `${profile.firstName[0] ?? ""}${profile.lastName[0] ?? ""}`.toUpperCase();
+      displayName = `${profile.firstName} ${profile.lastName}`;
+    } else if (profile.firstName) {
+      initials = profile.firstName[0].toUpperCase();
+      displayName = profile.firstName;
+    } else if (profile.email) {
+      initials = profile.email[0].toUpperCase();
+      displayName = profile.email;
     } else {
       initials = "U";
       displayName = "User";
     }
-    if (user.avatar) avatarUrl = user.avatar;
+    if ((profile as any).avatar) avatarUrl = (profile as any).avatar;
   }
 
   const userMenuItems: MenuProps["items"] = [
@@ -108,8 +122,8 @@ const Header: React.FC = () => {
           icon={<BellOutlined className="text-lg" />}
           onClick={() => {}}
         />
-        {user ? (
-          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+        {profile ? (
+          <div className="flex items-center gap-1">
             <div
               role="button"
               tabIndex={0}
