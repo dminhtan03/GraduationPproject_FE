@@ -18,6 +18,25 @@ export interface GetDataRequest {
   search?: string;
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface VerifyOtpRequest {
+  email: string;
+  otp: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface BasicMessageResponse {
+  message: string;
+}
+
 // ===== BACKEND RESPONSE STRUCTURE =====
 // BE trả về dạng: { data: { accessToken, refreshToken }, meta: { code, message, ... } }
 export interface BackendMeta {

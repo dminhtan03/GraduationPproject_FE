@@ -12,6 +12,7 @@ export const API_CONFIG = {
 export const ROUTES = {
   HOME: "/",
   LOGIN: "/login",
+  FORGOT_PASSWORD: "/forgot-password",
   ABOUT: "/about",
   DASHBOARD: "/dashboard",
   ADMIN_DASHBOARD: "/admin/dashboard",
@@ -28,6 +29,7 @@ export const STORAGE_KEYS = {
   USER_DATA: "user_data",
   THEME: "app_theme",
   LANGUAGE: "app_language",
+  FORCED_PASSWORD_CHANGE: "force_password_change",
 } as const;
 
 // WebSocket message types

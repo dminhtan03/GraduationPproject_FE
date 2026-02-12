@@ -8,6 +8,10 @@ import {
   GoogleLoginRequest,
   LoginRequest,
   LoginResponse,
+  ForgotPasswordRequest,
+  VerifyOtpRequest,
+  ChangePasswordRequest,
+  BasicMessageResponse,
 } from "../types/api";
 import { API_ENDPOINTS } from "../constants/endpoints";
 import { ROUTES, STORAGE_KEYS } from "../constants";
@@ -150,4 +154,86 @@ export const getDefaultRouteByRole = (user: User | null): string => {
     return ROUTES.ADMIN_DASHBOARD;
   }
   return ROUTES.DASHBOARD;
+};
+
+const extractMessage = (
+  payload?: BackendResponse<BasicMessageResponse> | null,
+  fallback?: string,
+): string => {
+  if (!payload) return fallback || "";
+  return (
+    payload.meta?.message ||
+    payload.data?.message ||
+    fallback ||
+    "Action completed"
+  );
+};
+
+/**
+ * Step 1: request OTP for forgot password
+ */
+export const requestPasswordReset = async (
+  payload: ForgotPasswordRequest,
+): Promise<ApiResponse<BasicMessageResponse>> => {
+  const response = await api.post<BackendResponse<BasicMessageResponse>>(
+    API_ENDPOINTS.USERS.FORGOT_PASSWORD_REQUEST,
+    payload,
+  );
+
+  return {
+    ...response,
+    data: {
+      message: extractMessage(response.data, "OTP has been sent to your email"),
+    },
+  };
+};
+
+/**
+ * Step 2: verify OTP so backend issues a temporary password
+ */
+export const verifyResetOtp = async (
+  payload: VerifyOtpRequest,
+): Promise<ApiResponse<BasicMessageResponse>> => {
+  const response = await api.post<BackendResponse<BasicMessageResponse>>(
+    API_ENDPOINTS.USERS.FORGOT_PASSWORD_VERIFY,
+    payload,
+  );
+
+  return {
+    ...response,
+    data: {
+      message: extractMessage(
+        response.data,
+        "OTP verified. Please check your email for the temporary password.",
+      ),
+    },
+  };
+};
+
+/**
+ * Final step: change password after logging in with the temporary one
+ */
+export const changePassword = async (
+  payload: ChangePasswordRequest,
+): Promise<ApiResponse<BasicMessageResponse>> => {
+  const response = await api.post<BackendResponse<BasicMessageResponse>>(
+    API_ENDPOINTS.USERS.CHANGE_PASSWORD,
+    {
+      currentPassword: payload.currentPassword,
+      oldPassword: payload.currentPassword,
+      newPassword: payload.newPassword,
+      confirmPassword: payload.confirmPassword,
+      confirmNewPassword: payload.confirmPassword,
+    },
+  );
+
+  return {
+    ...response,
+    data: {
+      message: extractMessage(
+        response.data,
+        "Your password has been updated successfully.",
+      ),
+    },
+  };
 };

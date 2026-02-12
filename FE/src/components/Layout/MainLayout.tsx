@@ -1,18 +1,61 @@
 // ===== MAIN LAYOUT COMPONENT =====
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Layout, ConfigProvider, theme } from "antd";
 import { Outlet } from "react-router-dom";
 import { useAppSelector, selectTheme } from "../../store";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 import Footer from "./Footer";
+import { ChangePasswordModal } from "../common";
+import { STORAGE_KEYS } from "../../constants";
 
 const { Content } = Layout;
 
 // Main layout component
 const MainLayout: React.FC = () => {
   const { mode, primaryColor } = useAppSelector(selectTheme);
+
+  const [isChangePasswordVisible, setChangePasswordVisible] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(STORAGE_KEYS.FORCED_PASSWORD_CHANGE);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as { email?: string; enforcedAt?: string };
+      setUserEmail(parsed?.email);
+      if (!parsed?.email) {
+        const userRaw = localStorage.getItem(STORAGE_KEYS.USER_DATA);
+        if (userRaw) {
+          try {
+            const user = JSON.parse(userRaw) as { email?: string };
+            setUserEmail(user?.email);
+          } catch {
+            /* ignore parse errors */
+          }
+        }
+      }
+      setChangePasswordVisible(true);
+    } catch {
+      const userRaw = localStorage.getItem(STORAGE_KEYS.USER_DATA);
+      if (userRaw) {
+        try {
+          const user = JSON.parse(userRaw) as { email?: string };
+          setUserEmail(user?.email);
+        } catch {
+          /* ignore parse errors */
+        }
+      }
+      setChangePasswordVisible(true);
+    }
+  }, []);
+
+  const handlePasswordChanged = () => {
+    localStorage.removeItem(STORAGE_KEYS.FORCED_PASSWORD_CHANGE);
+    setChangePasswordVisible(false);
+  };
 
   // Ant Design theme config
   const antdTheme = {
@@ -55,6 +98,12 @@ const MainLayout: React.FC = () => {
           <Footer />
         </Layout>
       </Layout>
+
+      <ChangePasswordModal
+        open={isChangePasswordVisible}
+        email={userEmail}
+        onChanged={handlePasswordChanged}
+      />
     </ConfigProvider>
   );
 };
