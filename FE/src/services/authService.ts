@@ -5,7 +5,6 @@ import { ApiResponse, User } from "../types";
 import {
   BackendAuthData,
   BackendResponse,
-  GoogleLoginRequest,
   LoginRequest,
   LoginResponse,
   ForgotPasswordRequest,
@@ -73,18 +72,28 @@ export const loginWithEmail = async (
 
   if (accessToken) {
     localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    localStorage.setItem("refresh_token", refreshToken || "");
-  }
-
-  const user = extractUserFromToken(accessToken);
-  if (user) {
-    localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(user));
+    // Đưa refresh token vào cookies
+    if (refreshToken) {
+      document.cookie = `refresh_token=${refreshToken}; path=/; secure`; // secure nếu dùng https
+    }
+    // Fetch user profile from backend and save to localStorage
+    try {
+      const profileRes = await api.get(API_ENDPOINTS.AUTH.PROFILE, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (profileRes.success && profileRes.data) {
+        localStorage.setItem(
+          STORAGE_KEYS.USER_DATA,
+          JSON.stringify(profileRes.data),
+        );
+      }
+    } catch {}
   }
 
   return {
     ...response,
     data: {
-      user,
+      user: extractUserFromToken(accessToken),
       accessToken: accessToken || "",
       refreshToken: refreshToken || "",
     },
@@ -148,12 +157,12 @@ export const getProfile = async (): Promise<ApiResponse<any>> => {
  * Trả về route mặc định sau khi login theo role (BE: ROLE_ADMIN, ROLE_USER, ROLE_MAKE...)
  */
 export const getDefaultRouteByRole = (user: User | null): string => {
-  if (!user?.role && !user?.roles?.length) return ROUTES.DASHBOARD;
+  if (!user?.role && !user?.roles?.length) return ROUTES.ROOM_LIST;
   const roles = user.roles ?? (user.role ? [user.role] : []);
   if (roles.some((r) => r === "ROLE_ADMIN" || (r && r.includes("ADMIN")))) {
     return ROUTES.ADMIN_DASHBOARD;
   }
-  return ROUTES.DASHBOARD;
+  return ROUTES.ROOM_LIST;
 };
 
 const extractMessage = (

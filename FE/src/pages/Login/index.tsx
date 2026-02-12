@@ -46,8 +46,21 @@ const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
+      // Validate email FPT
+      const fptEmailRegex = /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/;
       if (!email || !password) {
         showPopup("warning", "Please enter both email and password");
+        setLoading(false);
+        return;
+      }
+      if (!fptEmailRegex.test(email)) {
+        showPopup("error", "Email must be in the format ...@fpt.edu.vn");
+        setLoading(false);
+        return;
+      }
+      if (password.length < 5) {
+        showPopup("error", "Password must be at least 6 characters long");
+        setLoading(false);
         return;
       }
 
@@ -107,7 +120,6 @@ const LoginPage: React.FC = () => {
     <div className="login-container">
       <div className="login-wrapper">
         <div className="login-header">
-          <div className="logo-icon">📚</div>
           <h1>UniBook</h1>
           <p>Smart Booking System</p>
         </div>

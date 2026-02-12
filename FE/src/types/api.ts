@@ -74,9 +74,9 @@ export interface GetDataResponse {
 
 // API endpoint types
 export type LoginApi = (
-  data: LoginRequest
+  data: LoginRequest,
 ) => Promise<ApiResponse<LoginResponse>>;
 export type GetDataApi = (
-  params: GetDataRequest
+  params: GetDataRequest,
 ) => Promise<ApiResponse<GetDataResponse>>;
 export type GetUserApi = () => Promise<ApiResponse<User>>;

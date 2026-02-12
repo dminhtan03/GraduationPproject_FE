@@ -7,16 +7,13 @@ import { ROUTES } from "../constants";
 // Lazy load components để optimize performance
 const MainLayout = React.lazy(() => import("../components/Layout/MainLayout"));
 const LoginPage = React.lazy(() => import("../pages/Login"));
-const ForgotPasswordPage = React.lazy(
-  () => import("../pages/ForgotPassword"),
-);
-const HomePage = React.lazy(() => import("../pages/Home"));
+const ForgotPasswordPage = React.lazy(() => import("../pages/ForgotPassword"));
+const DashboardPage = React.lazy(() => import("../pages/RoomList"));
 const AboutPage = React.lazy(() => import("../pages/About"));
-const DashboardPage = React.lazy(() => import("../pages/Dashboard"));
 const MyBookingsPage = React.lazy(() => import("../pages/MyBookings"));
 const ProfilePage = React.lazy(() => import("../pages/Profile"));
 const EditProfilePage = React.lazy(
-  () => import("../pages/Profile/EditProfile")
+  () => import("../pages/Profile/EditProfile"),
 );
 
 // Error boundary component cho routes
@@ -89,7 +86,7 @@ export const router = createBrowserRouter([
         index: true,
         element: (
           <SuspenseWrapper>
-            <HomePage />
+            <DashboardPage />
           </SuspenseWrapper>
         ),
       },
@@ -101,14 +98,7 @@ export const router = createBrowserRouter([
           </SuspenseWrapper>
         ),
       },
-      {
-        path: ROUTES.DASHBOARD,
-        element: (
-          <SuspenseWrapper>
-            <DashboardPage />
-          </SuspenseWrapper>
-        ),
-      },
+
       {
         path: ROUTES.MY_BOOKINGS,
         element: (
@@ -118,7 +108,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "profile",
+        path: ROUTES.PROFILE,
         element: (
           <SuspenseWrapper>
             <ProfilePage />
@@ -126,7 +116,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "profile/edit",
+        path: ROUTES.PROFILE_EDIT,
         element: (
           <SuspenseWrapper>
             <EditProfilePage />
@@ -138,7 +128,7 @@ export const router = createBrowserRouter([
   // Catch all route - redirect to home
   {
     path: "*",
-    element: <Navigate to={ROUTES.HOME} replace />,
+    element: <Navigate to={ROUTES.ROOM_LIST} replace />,
   },
 ]);
 

@@ -25,17 +25,33 @@ const Header: React.FC = () => {
   const { mode } = useAppSelector(selectTheme);
 
   const userJson = localStorage.getItem(STORAGE_KEYS.USER_DATA);
-  const user = userJson
-    ? (JSON.parse(userJson) as { name?: string; email?: string })
-    : null;
-  const initials = user?.name
-    ? user.name
-        .split(" ")
-        .map((s) => s[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "JD";
+  let user: any = null;
+  let initials = "";
+  let displayName = "";
+  let avatarUrl = undefined;
+  if (userJson) {
+    user = JSON.parse(userJson);
+    // Always use name field for initials if available
+    if (user.name) {
+      const nameParts = user.name.trim().split(" ").filter(Boolean);
+      if (nameParts.length >= 2) {
+        initials = (nameParts[0][0] + nameParts[1][0]).toUpperCase();
+      } else if (nameParts.length === 1) {
+        initials = nameParts[0][0].toUpperCase();
+      } else {
+        initials = "U";
+      }
+      displayName = user.name;
+    } else if (user.firstName && user.lastName) {
+      initials =
+        `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase();
+      displayName = `${user.firstName} ${user.lastName}`;
+    } else {
+      initials = "U";
+      displayName = "User";
+    }
+    if (user.avatar) avatarUrl = user.avatar;
+  }
 
   const userMenuItems: MenuProps["items"] = [
     { key: "1", label: "My Profile", icon: <UserOutlined /> },
@@ -105,15 +121,19 @@ const Header: React.FC = () => {
                 }
               }}
               className="flex items-center cursor-pointer hover:opacity-90 outline-none p-1"
-              title="My Profile"
+              title={displayName || "My Profile"}
             >
               <Avatar
                 size="default"
+                src={avatarUrl}
                 style={{ backgroundColor: "#ff9500" }}
                 className="flex items-center justify-center"
               >
                 {initials}
               </Avatar>
+              <span className="ml-2 font-medium text-gray-700 hidden sm:inline">
+                {displayName}
+              </span>
             </div>
             <Dropdown
               menu={{ items: userMenuItems, onClick: handleUserMenuClick }}

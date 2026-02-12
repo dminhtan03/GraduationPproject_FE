@@ -29,8 +29,6 @@ export interface User {
   avatar?: string;
   /** Role chính (từ JWT claim roles), e.g. "ROLE_ADMIN", "ROLE_USER" */
   role?: string;
-  /** Tất cả authorities từ BE */
-  roles?: string[];
 }
 
 // Interface cho data demo
@@ -88,50 +86,13 @@ export interface Room {
   category?: string;
 }
 
-// ===== PROFILE (My Profile / Edit Profile) =====
-export type ActivityStatus = "Confirmed" | "Completed" | "Cancelled";
-
-export interface RecentActivity {
-  id: string;
-  facilityName: string;
-  facilityIcon?: string;
-  dateTime: string;
-  timeRange?: string;
-  status: ActivityStatus;
-}
-
-export interface ProfileBookingStats {
-  totalBookings: number;
-  hoursSpent: number;
-  topFacility: string;
-}
-
-export interface ProfilePersonalInfo {
-  email: string;
-  studentId: string;
-  academicYear: string;
-  phoneNumber: string;
-  department: string;
-  emergencyContact: string;
-}
-
 export interface UserProfile {
   id: string;
-  name: string;
-  role: string;
-  department: string;
-  memberSince: string;
-  avatar?: string;
-  stats: ProfileBookingStats;
-  personalInfo: ProfilePersonalInfo;
-  recentActivities: RecentActivity[];
-}
-
-/** Edit Profile form (editable fields only; studentId & role read-only on UI) */
-export interface EditProfileFormData {
   firstName: string;
   lastName: string;
   phoneNumber: string;
-  campusAddress: string;
-  avatar?: string;
+  address: string;
+  department: string;
+  email: string;
+  gender: string;
 }

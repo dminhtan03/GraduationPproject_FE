@@ -2,7 +2,6 @@
 
 export const API_ENDPOINTS = {
   // Auth endpoints (mapping BE `/api/v1/auth/*`)
-  // Với `VITE_API_URL=http://localhost:8080` thì URL đầy đủ sẽ là:
   // - POST http://localhost:8080/api/v1/auth/doLogin
   // - POST http://localhost:8080/api/v1/auth/doLogout
   // - POST http://localhost:8080/api/v1/auth/refreshToken?refreshToken=...
@@ -11,10 +10,10 @@ export const API_ENDPOINTS = {
     GOOGLE_LOGIN: "/api/v1/auth/google-login",
     LOGOUT: "/api/v1/auth/doLogout",
     REFRESH: "/api/v1/auth/refreshToken",
-    PROFILE: "/api/v1/user/profile", // BE chưa có, placeholder
+    PROFILE: "/api/v1/auth/profile",
   },
 
-  // Room endpoints (BE: replace with real API when ready)
+  // Room endpoints
   // e.g. GET /api/v1/rooms?page=0&size=5&status=AVAILABLE&minCapacity=20
   ROOMS: {
     LIST: "/api/v1/rooms",
@@ -47,7 +46,7 @@ export const API_ENDPOINTS = {
 // Helper function để build URL với params
 export const buildUrl = (
   endpoint: string,
-  params?: Record<string, string | number>
+  params?: Record<string, string | number>,
 ) => {
   if (!params) return endpoint;
 

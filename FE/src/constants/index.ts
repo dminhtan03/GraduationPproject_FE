@@ -10,13 +10,11 @@ export const API_CONFIG = {
 
 // Routes constants
 export const ROUTES = {
-  HOME: "/",
   LOGIN: "/login",
   FORGOT_PASSWORD: "/forgot-password",
   ABOUT: "/about",
-  DASHBOARD: "/dashboard",
   ADMIN_DASHBOARD: "/admin/dashboard",
-  ROOM_LIST: "/dashboard",
+  ROOM_LIST: "/",
   MY_BOOKINGS: "/my-bookings",
   PROFILE: "/profile",
   PROFILE_EDIT: "/profile/edit",

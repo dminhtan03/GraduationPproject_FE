@@ -33,7 +33,6 @@ const Sidebar: React.FC = () => {
     label: string;
     children?: { key: string; icon: React.ReactNode; label: string }[];
   }[] = [
-    { key: ROUTES.DASHBOARD, icon: <AppstoreOutlined />, label: "Dashboard" },
     { key: ROUTES.ROOM_LIST, icon: <BankOutlined />, label: "Room List" },
     {
       key: ROUTES.MY_BOOKINGS,
