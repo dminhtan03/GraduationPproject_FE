@@ -1,11 +1,7 @@
-// ===== DASHBOARD PAGE – Campus Room Inventory =====
-// Data: Room list from system. Replace mock with API when BE ready:
-//   api.get(API_ENDPOINTS.ROOMS.LIST, { params: { page, size, status, minCapacity } })
-
 import React, { useCallback, useEffect, useState } from "react";
-import { Typography, Table, Button, Tag, Space, Alert } from "antd";
+import { Typography, Table, Alert } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { fetchMockRoomList, MOCK_TOTAL_ROOMS } from "../../utils/mockData";
+import { roomService } from "../../services/roomService";
 import type { Room, RoomStatus } from "../../types";
 
 const { Title, Text } = Typography;
@@ -16,7 +12,7 @@ const PAGE_SIZE = 5;
 
 const DashboardPage: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [total, setTotal] = useState(MOCK_TOTAL_ROOMS);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -26,14 +22,13 @@ const DashboardPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      // TODO: Replace with BE API – e.g. api.get(API_ENDPOINTS.ROOMS.LIST, { params: { page, size: PAGE_SIZE, status, minCapacity } })
-      const res = await fetchMockRoomList({
+      const res = await roomService.getRooms({
         page,
-        pageSize: PAGE_SIZE,
-        status: filter === "available" ? "AVAILABLE" : "all",
+        size: PAGE_SIZE,
+        status: filter === "available" ? "AVAILABLE" : undefined,
         minCapacity: filter === "large" ? 20 : undefined,
-        simulateFail: false, // Set true to test "Unable to load room data"
       });
+
       setRooms(res.items);
       setTotal(res.total);
     } catch (e) {
@@ -49,22 +44,6 @@ const DashboardPage: React.FC = () => {
     loadRooms();
   }, [loadRooms]);
 
-  const onFilterChange = (f: FilterType) => {
-    setFilter(f);
-    setPage(0);
-  };
-
-  const onBook = (room: Room) => {
-    if (room.status === "OCCUPIED") return;
-    // TODO: Navigate to booking flow or open modal
-    console.log("Book room:", room.id);
-  };
-
-  const onView = (room: Room) => {
-    // TODO: Navigate to room detail or open modal
-    console.log("View room:", room.id);
-  };
-
   const columns: ColumnsType<Room> = [
     {
       title: "ROOM NAME",
@@ -72,58 +51,36 @@ const DashboardPage: React.FC = () => {
       key: "roomName",
       render: (name: string, record: Room) => (
         <div>
-          <Text strong>{name}</Text>
+          <div className="font-semibold text-gray-800">{name}</div>
           {record.floorInfo && (
             <div className="text-xs text-gray-500">{record.floorInfo}</div>
           )}
         </div>
       ),
+      width: "40%",
     },
     {
       title: "BUILDING",
       dataIndex: "building",
       key: "building",
-    },
-    {
-      title: "CAP.",
-      dataIndex: "slot",
-      key: "slot",
-      width: 80,
-      align: "center",
+      width: "40%",
     },
     {
       title: "STATUS",
       dataIndex: "status",
       key: "status",
-      width: 120,
+      width: "20%",
       render: (status: RoomStatus) => (
-        <Tag color={status === "AVAILABLE" ? "green" : "red"}>
-          {status === "AVAILABLE" ? "AVAILABLE" : "OCCUPIED"}
-        </Tag>
-      ),
-    },
-    {
-      title: "ACTION",
-      key: "action",
-      width: 160,
-      render: (_, record: Room) => (
-        <Space>
-          <Button
-            type="primary"
-            size="small"
-            disabled={record.status === "OCCUPIED"}
-            onClick={() => onBook(record)}
-            style={{
-              background: record.status === "AVAILABLE" ? "#ff9500" : undefined,
-              borderColor: "#ff9500",
-            }}
-          >
-            Book
-          </Button>
-          <Button type="link" size="small" onClick={() => onView(record)}>
-            View
-          </Button>
-        </Space>
+        <span
+          className={`px-3 py-1 rounded-full text-xs font-semibold
+            ${
+              status === "AVAILABLE"
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-600"
+            }`}
+        >
+          {status}
+        </span>
       ),
     },
   ];
@@ -131,99 +88,101 @@ const DashboardPage: React.FC = () => {
   const start = page * PAGE_SIZE + 1;
   const end = Math.min((page + 1) * PAGE_SIZE, total);
 
+  // Search state for table
+  const [tableSearch, setTableSearch] = useState("");
+  const filteredRooms = rooms.filter(
+    (r) =>
+      r.roomName.toLowerCase().includes(tableSearch.trim().toLowerCase()) ||
+      (r.building &&
+        r.building.toLowerCase().includes(tableSearch.trim().toLowerCase())),
+  );
+
   return (
-    <div className="fade-in">
-      <div className="mb-6">
-        <Title level={2} className="mb-1">
+    <div className="max-w-6xl mx-auto px-6 py-10">
+      <div className="mb-8">
+        <Title level={2} className="!mb-1 text-gray-800 font-semibold">
           Campus Room Inventory
         </Title>
-        <Text className="text-gray-600">
+        <Text className="text-gray-500">
           Real-time availability across all university wings
         </Text>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <Button
-          type={filter === "all" ? "primary" : "default"}
-          onClick={() => onFilterChange("all")}
-          style={
-            filter === "all"
-              ? { background: "#ff9500", borderColor: "#ff9500" }
-              : undefined
-          }
-        >
-          All Rooms
-        </Button>
-        <Button
-          type={filter === "available" ? "primary" : "default"}
-          onClick={() => onFilterChange("available")}
-          style={
-            filter === "available"
-              ? { background: "#ff9500", borderColor: "#ff9500" }
-              : undefined
-          }
-        >
-          Available Only
-        </Button>
-        <Button
-          type={filter === "large" ? "primary" : "default"}
-          onClick={() => onFilterChange("large")}
-          style={
-            filter === "large"
-              ? { background: "#ff9500", borderColor: "#ff9500" }
-              : undefined
-          }
-        >
-          Large (20+)
-        </Button>
+      {/* Filter + Search */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex gap-3">
+          {["all", "available", "large"].map((f) => (
+            <button
+              key={f}
+              onClick={() => {
+                setFilter(f as FilterType);
+                setPage(0);
+              }}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition
+                ${
+                  filter === f
+                    ? "bg-orange-500 text-white shadow"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+            >
+              {f === "all"
+                ? "All Rooms"
+                : f === "available"
+                  ? "Available Only"
+                  : "Large (20+)"}
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          placeholder="Search by room or building..."
+          value={tableSearch}
+          onChange={(e) => setTableSearch(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-orange-400"
+        />
       </div>
 
-      {/* Error state: Unable to load room data */}
       {error && (
         <Alert
           message="Unable to load room data"
           description={error}
           type="error"
           showIcon
-          className="mb-4"
-          action={
-            <Button size="small" onClick={loadRooms}>
-              Retry
-            </Button>
-          }
+          className="mb-6"
         />
       )}
 
-      {/* Table */}
-      <Table<Room>
-        columns={columns}
-        dataSource={rooms}
-        rowKey="id"
-        loading={loading}
-        pagination={false}
-        size="middle"
-      />
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <Table<Room>
+          columns={columns}
+          dataSource={filteredRooms}
+          rowKey="id"
+          loading={loading}
+          pagination={false}
+        />
+      </div>
 
-      {/* Pagination at bottom */}
-      <div className="flex items-center justify-between mt-4 flex-wrap gap-2">
-        <Text className="text-gray-600">
-          Showing {loading ? "0" : start}–{loading ? "0" : end} of {total} rooms
+      <div className="flex justify-between items-center mt-6">
+        <Text className="text-gray-500 text-sm">
+          Showing {loading ? 0 : start}–{loading ? 0 : end} of {total}
         </Text>
-        <Space>
-          <Button
-            disabled={page === 0 || loading}
+
+        <div className="flex gap-2">
+          <button
+            disabled={page === 0}
             onClick={() => setPage((p) => Math.max(0, p - 1))}
+            className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40"
           >
             &lt;
-          </Button>
-          <Button
-            disabled={end >= total || loading}
+          </button>
+          <button
+            disabled={end >= total}
             onClick={() => setPage((p) => p + 1)}
+            className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40"
           >
             &gt;
-          </Button>
-        </Space>
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -1,7 +1,16 @@
 // ===== HEADER COMPONENT (UniBooking) =====
 
 import React, { useEffect, useState } from "react";
-import { Layout, Button, Typography, Input, Avatar, Dropdown } from "antd";
+import {
+  Layout,
+  Button,
+  Typography,
+  Input,
+  Avatar,
+  Dropdown,
+  AutoComplete,
+  Spin,
+} from "antd";
 import {
   BellOutlined,
   UserOutlined,
@@ -17,6 +26,7 @@ import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
 import type { UserProfile } from "../../types";
 import { logout } from "../../services/authService";
+import { roomService } from "../../services/roomService";
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
@@ -29,6 +39,11 @@ const Header: React.FC = () => {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Search state
+  const [searchValue, setSearchValue] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -45,6 +60,50 @@ const Header: React.FC = () => {
     };
     fetchProfile();
   }, []);
+
+  // Search handler
+  const handleSearchRoom = async (value: string) => {
+    setSearchValue(value);
+    if (!value || value.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      // Lấy tất cả phòng, filter theo roomName hoặc building
+      const res = await roomService.getRooms({ page: 0, size: 50 });
+      const keyword = value.trim().toLowerCase();
+      const filtered = res.items.filter(
+        (r) =>
+          r.roomName.toLowerCase().includes(keyword) ||
+          (r.building && r.building.toLowerCase().includes(keyword)),
+      );
+      setSearchResults(
+        filtered.map((r) => ({
+          value: r.roomName + " - " + r.building,
+          label: (
+            <div>
+              <span className="font-semibold">{r.roomName}</span>
+              <span className="text-xs text-gray-500 ml-2">{r.building}</span>
+            </div>
+          ),
+          room: r,
+        })),
+      );
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSelectRoom = (value: string, option: any) => {
+    // Có thể chuyển hướng sang trang chi tiết phòng hoặc highlight phòng
+    // Ví dụ: navigate(`/rooms/${option.room.id}`);
+    // Hiện tại chỉ clear search
+    setSearchValue("");
+    setSearchResults([]);
+  };
 
   let initials = "";
   let displayName = "";
@@ -107,12 +166,24 @@ const Header: React.FC = () => {
 
       {/* Center: Search */}
       <div className="flex-1 max-w-xl mx-4">
-        <Input
-          placeholder="Search rooms..."
+        <AutoComplete
+          value={searchValue}
+          options={searchResults}
+          onSearch={handleSearchRoom}
+          onSelect={handleSelectRoom}
           allowClear
-          className="rounded-lg"
-          style={{ background: mode === "dark" ? "#374151" : "#f3f4f6" }}
-        />
+          style={{ width: "100%" }}
+          notFoundContent={searchLoading ? <Spin size="small" /> : null}
+        >
+          <Input.Search
+            placeholder="Search rooms by name or building..."
+            enterButton
+            loading={searchLoading}
+            onSearch={handleSearchRoom}
+            className="rounded-lg"
+            style={{ background: mode === "dark" ? "#374151" : "#f3f4f6" }}
+          />
+        </AutoComplete>
       </div>
 
       {/* Right: Notifications + User avatar/login button */}

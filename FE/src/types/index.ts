@@ -76,14 +76,15 @@ export type RoomStatus = "AVAILABLE" | "OCCUPIED";
 export interface Room {
   id: string;
   roomName: string;
-  /** e.g. "Floor 2 - Lab" */
-  floorInfo?: string;
   building: string;
-  /** Capacity / Slot */
+  floorInfo?: string;
   slot: number;
   status: RoomStatus;
-  /** Optional category for filter: Tech Labs, Study Pods, Auditoriums */
-  category?: string;
+}
+
+export interface Building {
+  id: number;
+  name: string;
 }
 
 export interface UserProfile {
