@@ -71,23 +71,16 @@ export const loginWithEmail = async (
   const refreshToken = backendData?.data?.refreshToken;
 
   if (accessToken) {
+    // Dọn các key nhạy cảm cũ nếu còn
+    try {
+      localStorage.removeItem("user");
+      localStorage.removeItem("user_data");
+    } catch {}
     localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
     // Đưa refresh token vào cookies
     if (refreshToken) {
       document.cookie = `refresh_token=${refreshToken}; path=/; secure`; // secure nếu dùng https
     }
-    // Fetch user profile from backend and save to localStorage
-    try {
-      const profileRes = await api.get(API_ENDPOINTS.AUTH.PROFILE, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (profileRes.success && profileRes.data) {
-        localStorage.setItem(
-          STORAGE_KEYS.USER_DATA,
-          JSON.stringify(profileRes.data),
-        );
-      }
-    } catch {}
   }
 
   return {
@@ -115,14 +108,18 @@ export const loginWithGoogle = async (
   const refreshToken = backendData?.data?.refreshToken;
 
   if (accessToken) {
+    try {
+      localStorage.removeItem("user");
+      localStorage.removeItem("user_data");
+    } catch {}
     localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    localStorage.setItem("refresh_token", refreshToken || "");
+    // Đưa refresh token vào cookies giống như login bằng email
+    if (refreshToken) {
+      document.cookie = `refresh_token=${refreshToken}; path=/; secure`;
+    }
   }
 
   const user = extractUserFromToken(accessToken);
-  if (user) {
-    localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(user));
-  }
 
   return {
     ...response,
@@ -142,7 +139,10 @@ export const logout = async (): Promise<void> => {
     await api.post(API_ENDPOINTS.AUTH.LOGOUT);
   } finally {
     localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
-    localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+    try {
+      localStorage.removeItem("user");
+      localStorage.removeItem("user_data");
+    } catch {}
   }
 };
 

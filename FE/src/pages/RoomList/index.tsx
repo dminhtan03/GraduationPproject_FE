@@ -8,7 +8,7 @@ const { Title, Text } = Typography;
 
 type FilterType = "all" | "available" | "large";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 const DashboardPage: React.FC = () => {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -69,7 +69,7 @@ const DashboardPage: React.FC = () => {
       title: "STATUS",
       dataIndex: "status",
       key: "status",
-      width: "20%",
+      width: "15%",
       render: (status: RoomStatus) => (
         <span
           className={`px-3 py-1 rounded-full text-xs font-semibold
@@ -83,10 +83,30 @@ const DashboardPage: React.FC = () => {
         </span>
       ),
     },
-  ];
+    {
+      title: "ACTION",
+      key: "action",
+      width: "10%",
+      render: (_: unknown, record: Room) => {
+        const isAvailable = record.status === "AVAILABLE";
+        const label = isAvailable ? "Book" : "View";
 
-  const start = page * PAGE_SIZE + 1;
-  const end = Math.min((page + 1) * PAGE_SIZE, total);
+        return (
+          <button
+            type="button"
+            className={`px-4 py-1 rounded-full text-xs font-semibold transition
+              ${
+                isAvailable
+                  ? "bg-orange-500 text-white hover:bg-orange-600"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+          >
+            {label}
+          </button>
+        );
+      },
+    },
+  ];
 
   // Search state for table
   const [tableSearch, setTableSearch] = useState("");
@@ -97,8 +117,16 @@ const DashboardPage: React.FC = () => {
         r.building.toLowerCase().includes(tableSearch.trim().toLowerCase())),
   );
 
+  const pagedRooms = filteredRooms.slice(
+    page * PAGE_SIZE,
+    (page + 1) * PAGE_SIZE,
+  );
+
+  const start = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const end = Math.min((page + 1) * PAGE_SIZE, total);
+
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
       <div className="mb-8">
         <Title level={2} className="!mb-1 text-gray-800 font-semibold">
           Campus Room Inventory
@@ -153,13 +181,16 @@ const DashboardPage: React.FC = () => {
       )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <Table<Room>
-          columns={columns}
-          dataSource={filteredRooms}
-          rowKey="id"
-          loading={loading}
-          pagination={false}
-        />
+        <div className="overflow-x-auto">
+          <Table<Room>
+            columns={columns}
+            dataSource={pagedRooms}
+            rowKey="id"
+            loading={loading}
+            pagination={false}
+            scroll={{ x: 800 }}
+          />
+        </div>
       </div>
 
       <div className="flex justify-between items-center mt-6">

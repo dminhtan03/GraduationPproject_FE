@@ -6,13 +6,18 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: "Inter", system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   color: #1f2937;
   background-color: #ffffff;
-  min-height: 100vh;
 }
 
 /* ===== ANT DESIGN CUSTOMIZATIONS ===== */

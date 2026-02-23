@@ -6,7 +6,6 @@ import { RouterProvider } from "react-router-dom";
 import { store } from "./store";
 import { router } from "./router/AppRouter";
 import { ErrorBoundary } from "./components/common";
-import "./index.css";
 
 // Main App Component
 function App() {

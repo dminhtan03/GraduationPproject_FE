@@ -45,15 +45,29 @@ function flattenRooms(data: any, params: GetRoomParams): Room[] {
 
 export const roomService = {
   async getRooms(params: GetRoomParams): Promise<RoomResponse> {
-    const res = await api.get<any>("/api/v1/dashboard/rooms-map");
-    const data = res.data?.data || res.data;
-    const allRooms = flattenRooms(data, params);
-    // Pagination
-    const start = params.page * params.size;
-    const end = start + params.size;
+    const res = await api.get<any>("/api/v1/dashboard/rooms-map", {
+      params: {
+        page: params.page,
+        size: params.size,
+        status: params.status,
+        minCapacity: params.minCapacity,
+      },
+    });
+
+    const payload = res.data || {};
+    const data = payload.data ?? payload;
+
+    // Backend có thể đã filter & phân trang; flattenRooms chỉ chuẩn hóa structure
+    const rooms = flattenRooms(data, params);
+
+    const meta = payload.meta as { total?: number | null } | undefined;
+
     return {
-      items: allRooms.slice(start, end),
-      total: allRooms.length,
+      items: rooms,
+      total:
+        typeof meta?.total === "number" && meta.total >= 0
+          ? meta.total
+          : rooms.length,
     };
   },
 };
