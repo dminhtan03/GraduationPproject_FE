@@ -33,7 +33,6 @@ const Sidebar: React.FC = () => {
     label: string;
     children?: { key: string; icon: React.ReactNode; label: string }[];
   }[] = [
-    { key: ROUTES.DASHBOARD, icon: <AppstoreOutlined />, label: "Dashboard" },
     { key: ROUTES.ROOM_LIST, icon: <BankOutlined />, label: "Room List" },
     {
       key: ROUTES.MY_BOOKINGS,
@@ -58,19 +57,14 @@ const Sidebar: React.FC = () => {
 
   const handleMenuClick = ({ key }: { key: string }) => {
     if (key.startsWith("category-")) {
-      navigate(ROUTES.DASHBOARD);
+      navigate(ROUTES.ROOM_LIST, { state: { category: key } });
       return;
     }
     if (key !== "categories") navigate(key);
   };
 
   const path = location.pathname;
-  const selectedKey: string =
-    path === ROUTES.DASHBOARD || path === ROUTES.ROOM_LIST
-      ? ROUTES.DASHBOARD
-      : path.startsWith(ROUTES.PROFILE_EDIT)
-        ? ROUTES.PROFILE
-        : path;
+  const selectedKey = path;
 
   return (
     <Sider

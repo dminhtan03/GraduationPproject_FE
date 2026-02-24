@@ -12,13 +12,14 @@
   --success-color: #388e3c;
 }
 
-* {
+.login-container,
+.login-container * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-body {
+.login-container {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
     "Helvetica Neue", sans-serif;
   background-color: var(--neutral-light);

@@ -26,28 +26,8 @@ const MainLayout: React.FC = () => {
     try {
       const parsed = JSON.parse(raw) as { email?: string; enforcedAt?: string };
       setUserEmail(parsed?.email);
-      if (!parsed?.email) {
-        const userRaw = localStorage.getItem(STORAGE_KEYS.USER_DATA);
-        if (userRaw) {
-          try {
-            const user = JSON.parse(userRaw) as { email?: string };
-            setUserEmail(user?.email);
-          } catch {
-            /* ignore parse errors */
-          }
-        }
-      }
       setChangePasswordVisible(true);
     } catch {
-      const userRaw = localStorage.getItem(STORAGE_KEYS.USER_DATA);
-      if (userRaw) {
-        try {
-          const user = JSON.parse(userRaw) as { email?: string };
-          setUserEmail(user?.email);
-        } catch {
-          /* ignore parse errors */
-        }
-      }
       setChangePasswordVisible(true);
     }
   }, []);

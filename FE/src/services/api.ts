@@ -3,7 +3,15 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 import { ApiResponse, ApiError } from "../types";
 import { API_CONFIG, STORAGE_KEYS } from "../constants";
+import { API_ENDPOINTS } from "../constants/endpoints";
 import { handleApiError, logError } from "../utils/errorHandlers";
+
+// Helper: đọc refresh token từ cookie (do FE lưu)
+const getRefreshTokenFromCookie = (): string | null => {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|; )refresh_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
 
 // Tạo axios instance với config cơ bản
 const createAxiosInstance = (): AxiosInstance => {
@@ -55,15 +63,45 @@ const createAxiosInstance = (): AxiosInstance => {
 
       return response;
     },
-    (error) => {
+    async (error) => {
       const apiError = handleApiError(error);
       logError(apiError, "Response Interceptor");
 
-      // Nếu lỗi 401, redirect về login
+      const originalRequest: any = error.config || {};
+
+      // Nếu 401 lần đầu tiên, thử gọi refresh token
+      if (apiError.status === 401 && !originalRequest._retry) {
+        originalRequest._retry = true;
+        try {
+          const refreshToken = getRefreshTokenFromCookie();
+          if (!refreshToken) {
+            throw new Error("No refresh token");
+          }
+
+          const refreshResponse = await instance.post(
+            `${API_ENDPOINTS.AUTH.REFRESH}?refreshToken=${encodeURIComponent(
+              refreshToken,
+            )}`,
+          );
+
+          const newAccessToken =
+            refreshResponse.data?.data?.accessToken ||
+            refreshResponse.data?.accessToken;
+
+          if (newAccessToken) {
+            localStorage.setItem(STORAGE_KEYS.USER_TOKEN, newAccessToken);
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+            return instance(originalRequest);
+          }
+        } catch (refreshError) {
+          logError(refreshError as ApiError, "Refresh Token Error");
+        }
+      }
+
+      // Nếu vẫn 401 hoặc refresh thất bại, xoá token và đưa về login
       if (apiError.status === 401) {
         localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.USER_DATA);
-        // TODO: Redirect to login page
         window.location.href = "/login";
       }
 

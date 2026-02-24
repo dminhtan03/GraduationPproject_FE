@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { Modal, Form, Input, message } from "antd";
 import { changePassword } from "../../services/authService";
 import { ApiError } from "../../types";
-import { STORAGE_KEYS } from "../../constants";
 
 interface ChangePasswordModalProps {
   open: boolean;
@@ -19,15 +18,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   const [loading, setLoading] = useState(false);
 
   const resolvedEmail = React.useMemo(() => {
-    if (email) return email;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.USER_DATA);
-      if (!raw) return undefined;
-      const parsed = JSON.parse(raw) as { email?: string };
-      return parsed?.email;
-    } catch {
-      return undefined;
-    }
+    return email;
   }, [email]);
 
   const handleSubmit = async () => {
@@ -73,17 +64,22 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
       maskClosable={false}
     >
       <p className="mb-4 text-sm text-gray-500">
-        Hi {resolvedEmail || "there"}, for security reasons please replace the temporary
-        password with one you can remember.
+        Hi {resolvedEmail || "there"}, for security reasons please replace the
+        temporary password with one you can remember.
       </p>
 
       <Form form={form} layout="vertical">
         <Form.Item
           label="Temporary password"
           name="currentPassword"
-          rules={[{ required: true, message: "Enter the password you just used" }]}
+          rules={[
+            { required: true, message: "Enter the password you just used" },
+          ]}
         >
-          <Input.Password placeholder="Temporary password" autoComplete="current-password" />
+          <Input.Password
+            placeholder="Temporary password"
+            autoComplete="current-password"
+          />
         </Form.Item>
 
         <Form.Item
@@ -95,7 +91,10 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           ]}
           hasFeedback
         >
-          <Input.Password placeholder="New password" autoComplete="new-password" />
+          <Input.Password
+            placeholder="New password"
+            autoComplete="new-password"
+          />
         </Form.Item>
 
         <Form.Item
@@ -115,7 +114,10 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             }),
           ]}
         >
-          <Input.Password placeholder="Confirm password" autoComplete="new-password" />
+          <Input.Password
+            placeholder="Confirm password"
+            autoComplete="new-password"
+          />
         </Form.Item>
       </Form>
     </Modal>

@@ -5,7 +5,6 @@ import { ApiResponse, User } from "../types";
 import {
   BackendAuthData,
   BackendResponse,
-  GoogleLoginRequest,
   LoginRequest,
   LoginResponse,
   ForgotPasswordRequest,
@@ -72,19 +71,22 @@ export const loginWithEmail = async (
   const refreshToken = backendData?.data?.refreshToken;
 
   if (accessToken) {
+    // Dọn các key nhạy cảm cũ nếu còn
+    try {
+      localStorage.removeItem("user");
+      localStorage.removeItem("user_data");
+    } catch {}
     localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    localStorage.setItem("refresh_token", refreshToken || "");
-  }
-
-  const user = extractUserFromToken(accessToken);
-  if (user) {
-    localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(user));
+    // Đưa refresh token vào cookies
+    if (refreshToken) {
+      document.cookie = `refresh_token=${refreshToken}; path=/; secure`; // secure nếu dùng https
+    }
   }
 
   return {
     ...response,
     data: {
-      user,
+      user: extractUserFromToken(accessToken),
       accessToken: accessToken || "",
       refreshToken: refreshToken || "",
     },
@@ -106,14 +108,18 @@ export const loginWithGoogle = async (
   const refreshToken = backendData?.data?.refreshToken;
 
   if (accessToken) {
+    try {
+      localStorage.removeItem("user");
+      localStorage.removeItem("user_data");
+    } catch {}
     localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    localStorage.setItem("refresh_token", refreshToken || "");
+    // Đưa refresh token vào cookies giống như login bằng email
+    if (refreshToken) {
+      document.cookie = `refresh_token=${refreshToken}; path=/; secure`;
+    }
   }
 
   const user = extractUserFromToken(accessToken);
-  if (user) {
-    localStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(user));
-  }
 
   return {
     ...response,
@@ -133,7 +139,10 @@ export const logout = async (): Promise<void> => {
     await api.post(API_ENDPOINTS.AUTH.LOGOUT);
   } finally {
     localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
-    localStorage.removeItem(STORAGE_KEYS.USER_DATA);
+    try {
+      localStorage.removeItem("user");
+      localStorage.removeItem("user_data");
+    } catch {}
   }
 };
 
@@ -148,12 +157,12 @@ export const getProfile = async (): Promise<ApiResponse<any>> => {
  * Trả về route mặc định sau khi login theo role (BE: ROLE_ADMIN, ROLE_USER, ROLE_MAKE...)
  */
 export const getDefaultRouteByRole = (user: User | null): string => {
-  if (!user?.role && !user?.roles?.length) return ROUTES.DASHBOARD;
+  if (!user?.role && !user?.roles?.length) return ROUTES.ROOM_LIST;
   const roles = user.roles ?? (user.role ? [user.role] : []);
   if (roles.some((r) => r === "ROLE_ADMIN" || (r && r.includes("ADMIN")))) {
     return ROUTES.ADMIN_DASHBOARD;
   }
-  return ROUTES.DASHBOARD;
+  return ROUTES.ROOM_LIST;
 };
 
 const extractMessage = (
