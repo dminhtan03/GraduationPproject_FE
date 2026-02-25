@@ -9,6 +9,7 @@ const MainLayout = React.lazy(() => import("../components/Layout/MainLayout"));
 const LoginPage = React.lazy(() => import("../pages/Login"));
 const ForgotPasswordPage = React.lazy(() => import("../pages/ForgotPassword"));
 const DashboardPage = React.lazy(() => import("../pages/RoomList"));
+const RoomMapPage = React.lazy(() => import("../pages/RoomMap"));
 const AboutPage = React.lazy(() => import("../pages/About"));
 const MyBookingsPage = React.lazy(() => import("../pages/MyBookings"));
 const ProfilePage = React.lazy(() => import("../pages/Profile"));
@@ -120,6 +121,14 @@ export const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <EditProfilePage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.ROOM_MAP,
+        element: (
+          <SuspenseWrapper>
+            <RoomMapPage />
           </SuspenseWrapper>
         ),
       },
