@@ -54,7 +54,6 @@ const extractUserFromToken = (accessToken: string | undefined): User | null => {
     roles: roles.length ? roles : undefined,
   };
 };
-
 /**
  * Login with email and password
  */
