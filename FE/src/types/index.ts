@@ -29,6 +29,8 @@ export interface User {
   avatar?: string;
   /** Role chính (từ JWT claim roles), e.g. "ROLE_ADMIN", "ROLE_USER" */
   role?: string;
+  /** Tất cả authorities từ BE */
+  roles?: string[];
 }
 
 // Interface cho data demo

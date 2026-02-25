@@ -9,6 +9,7 @@ import {
   LoginResponse,
   ForgotPasswordRequest,
   VerifyOtpRequest,
+  ResendOtpRequest,
   ChangePasswordRequest,
   BasicMessageResponse,
 } from "../types/api";
@@ -215,6 +216,25 @@ export const verifyResetOtp = async (
         response.data,
         "OTP verified. Please check your email for the temporary password.",
       ),
+    },
+  };
+};
+
+/**
+ * Resend OTP when previous OTP expired
+ */
+export const resendResetOtp = async (
+  payload: ResendOtpRequest,
+): Promise<ApiResponse<BasicMessageResponse>> => {
+  const response = await api.post<BackendResponse<BasicMessageResponse>>(
+    API_ENDPOINTS.USERS.RESEND_OTP,
+    payload,
+  );
+
+  return {
+    ...response,
+    data: {
+      message: extractMessage(response.data, "OTP has been resent to your email"),
     },
   };
 };

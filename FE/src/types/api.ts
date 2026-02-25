@@ -27,6 +27,10 @@ export interface VerifyOtpRequest {
   otp: string;
 }
 
+export interface ResendOtpRequest {
+  email: string;
+}
+
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;

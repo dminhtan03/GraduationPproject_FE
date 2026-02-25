@@ -47,17 +47,17 @@ const LoginPage: React.FC = () => {
 
     try {
       // Validate email FPT
-      const fptEmailRegex = /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/;
-      if (!email || !password) {
-        showPopup("warning", "Please enter both email and password");
-        setLoading(false);
-        return;
-      }
-      if (!fptEmailRegex.test(email)) {
-        showPopup("error", "Email must be in the format ...@fpt.edu.vn");
-        setLoading(false);
-        return;
-      }
+      // const fptEmailRegex = /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/;
+      // if (!email || !password) {
+      //   showPopup("warning", "Please enter both email and password");
+      //   setLoading(false);
+      //   return;
+      // }
+      // if (!fptEmailRegex.test(email)) {
+      //   showPopup("error", "Email must be in the format ...@fpt.edu.vn");
+      //   setLoading(false);
+      //   return;
+      // }
       if (password.length < 5) {
         showPopup("error", "Password must be at least 6 characters long");
         setLoading(false);
