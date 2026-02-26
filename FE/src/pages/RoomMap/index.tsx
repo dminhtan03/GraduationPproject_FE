@@ -105,10 +105,17 @@ const RoomMapPage: React.FC = () => {
 
   const handleRoomClick = (room: MapRoom) => {
     if (!currentBuilding || !currentFloor) return;
-    setSelectedRoom({
-      ...room,
-      buildingName: currentBuilding.buildingName,
-      floorName: currentFloor.floorName,
+    navigate(ROUTES.ROOM_DETAIL.replace(":roomId", room.roomId), {
+      state: {
+        room: {
+          id: room.roomId,
+          roomName: room.locationCode,
+          building: currentBuilding.buildingName,
+          floorInfo: currentFloor.floorName,
+          slot: 0,
+          status: room.status === "AVAILABLE" ? "AVAILABLE" : "OCCUPIED",
+        },
+      },
     });
   };
 

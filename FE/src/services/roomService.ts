@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type { Room, RoomStatus } from "../types";
+import { API_ENDPOINTS, buildUrl } from "../constants/endpoints";
 
 export interface GetRoomParams {
   page: number;
@@ -90,5 +91,10 @@ export const roomService = {
     const res = await api.get<any>("/api/v1/dashboard/rooms-map");
     const data = res.data?.data || res.data || {};
     return data as RoomsMapResponse;
+  },
+
+  async getRoomDetail(roomId: string): Promise<any> {
+    const res = await api.get<any>(buildUrl(API_ENDPOINTS.ROOMS.DETAIL, { id: roomId }));
+    return res.data?.data || res.data;
   },
 };
