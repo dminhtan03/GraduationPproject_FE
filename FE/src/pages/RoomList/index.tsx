@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Typography, Table, Alert } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { useNavigate } from "react-router-dom";
 import { roomService } from "../../services/roomService";
 import type { Room, RoomStatus } from "../../types";
+import { ROUTES } from "../../constants";
 
 const { Title, Text } = Typography;
 
@@ -11,6 +13,7 @@ type FilterType = "all" | "available" | "large";
 const PAGE_SIZE = 10;
 
 const DashboardPage: React.FC = () => {
+  const navigate = useNavigate();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -63,7 +66,14 @@ const DashboardPage: React.FC = () => {
       title: "BUILDING",
       dataIndex: "building",
       key: "building",
-      width: "40%",
+      width: "25%",
+    },
+    {
+      title: "CAP.",
+      dataIndex: "slot",
+      key: "slot",
+      width: "10%",
+      render: (slot: number) => <span>{slot}</span>,
     },
     {
       title: "STATUS",
@@ -100,6 +110,12 @@ const DashboardPage: React.FC = () => {
                   ? "bg-orange-500 text-white hover:bg-orange-600"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
+            onClick={() => {
+              if (!isAvailable) return;
+              navigate(ROUTES.BOOK_ROOM.replace(":roomId", record.id), {
+                state: { room: record },
+              });
+            }}
           >
             {label}
           </button>

@@ -15,6 +15,7 @@ export const ROUTES = {
   ABOUT: "/about",
   ADMIN_DASHBOARD: "/admin/dashboard",
   ROOM_LIST: "/",
+  BOOK_ROOM: "/book-room/:roomId",
   MY_BOOKINGS: "/my-bookings",
   PROFILE: "/profile",
   PROFILE_EDIT: "/profile/edit",

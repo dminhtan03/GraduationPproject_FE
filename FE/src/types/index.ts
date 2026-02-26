@@ -84,6 +84,36 @@ export interface Room {
   status: RoomStatus;
 }
 
+export interface CreateReservationRequest {
+  roomId: string;
+  purpose: string;
+  startTime: string;
+  endTime: string;
+  attendeeCount?: number;
+  note?: string;
+}
+
+export type ReservationStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELLED"
+  | "COMPLETED"
+  | string;
+
+export interface Reservation {
+  id: string;
+  roomName: string;
+  building: string;
+  purpose: string;
+  startTime: string;
+  endTime: string;
+  status: ReservationStatus;
+  attendeeCount?: number;
+  note?: string;
+  createdAt?: string;
+}
+
 export interface Building {
   id: number;
   name: string;
