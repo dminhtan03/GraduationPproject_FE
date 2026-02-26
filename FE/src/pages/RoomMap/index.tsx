@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "antd";
+import { TagIcon } from "@heroicons/react/24/outline";
 import { roomService, type RoomsMapBuilding } from "../../services/roomService";
 import { ROUTES } from "../../constants";
 import {
@@ -121,7 +122,6 @@ const RoomMapPage: React.FC = () => {
           roomName: selectedRoom.locationCode,
           building: selectedRoom.buildingName,
           floorInfo: selectedRoom.floorName,
-          slot: selectedRoom.slot ?? 0,
           status: selectedRoom.status,
         },
       },
@@ -358,7 +358,7 @@ const RoomMapPage: React.FC = () => {
           {!selectedRoom && (
             <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-500 text-sm">
               <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-3">
-                <span className="text-lg">🏷️</span>
+                <TagIcon className="w-5 h-5 text-slate-500" />
               </div>
               <p className="font-medium text-slate-700 mb-1">Select a room</p>
               <p className="text-xs text-slate-500">

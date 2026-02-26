@@ -27,6 +27,7 @@ import { API_ENDPOINTS } from "../../constants/endpoints";
 import type { UserProfile } from "../../types";
 import { logout } from "../../services/authService";
 import { roomService } from "../../services/roomService";
+import { BookOpenIcon } from "@heroicons/react/24/outline";
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
@@ -98,9 +99,10 @@ const Header: React.FC = () => {
   };
 
   const handleSelectRoom = (value: string, option: any) => {
-    // Có thể chuyển hướng sang trang chi tiết phòng hoặc highlight phòng
-    // Ví dụ: navigate(`/rooms/${option.room.id}`);
-    // Hiện tại chỉ clear search
+    // Điều hướng tới trang chi tiết/đặt phòng theo roomId
+    if (option?.room?.id) {
+      navigate(ROUTES.BOOK_ROOM.replace(":roomId", option.room.id));
+    }
     setSearchValue("");
     setSearchResults([]);
   };
@@ -155,9 +157,7 @@ const Header: React.FC = () => {
           className="w-9 h-9 rounded-lg flex items-center justify-center"
           style={{ background: "#ff9500" }}
         >
-          <span className="text-white text-lg" aria-hidden>
-            📚
-          </span>
+          <BookOpenIcon className="w-5 h-5 text-white" aria-hidden />
         </div>
         <Text strong className="text-lg hidden sm:inline">
           {APP_NAME}

@@ -3,6 +3,7 @@
 import React from "react";
 import { Layout, Typography, Divider } from "antd";
 import { useAppSelector, selectTheme } from "../../store";
+import { BookOpenIcon } from "@heroicons/react/24/outline";
 
 const { Footer: AntFooter } = Layout;
 const { Text, Link } = Typography;
@@ -29,17 +30,16 @@ const Footer: React.FC = () => {
                 className="w-8 h-8 rounded-lg flex items-center justify-center"
                 style={{ background: "#ff9500" }}
               >
-                <span className="text-white text-sm" aria-hidden>
-                  📚
-                </span>
+                <BookOpenIcon className="w-4 h-4 text-white" aria-hidden />
               </div>
               <Text strong className="text-base">
                 UniBooking
               </Text>
             </div>
             <Text className="text-gray-600 text-sm">
-              The official campus facility management platform for students,
-              faculty, and administrative staff members.
+              Smart meeting room booking platform for your campus. Quickly
+              browse rooms, check real-time availability, and manage your
+              reservations in one place.
             </Text>
           </div>
 
@@ -54,7 +54,7 @@ const Footer: React.FC = () => {
                   href="#"
                   className="text-gray-600 hover:text-orange-500 text-sm"
                 >
-                  Support Center
+                  Room List
                 </Link>
               </div>
               <div>
@@ -62,7 +62,15 @@ const Footer: React.FC = () => {
                   href="#"
                   className="text-gray-600 hover:text-orange-500 text-sm"
                 >
-                  Campus Map
+                  Room Map
+                </Link>
+              </div>
+              <div>
+                <Link
+                  href="#"
+                  className="text-gray-600 hover:text-orange-500 text-sm"
+                >
+                  My Bookings
                 </Link>
               </div>
             </div>
@@ -74,8 +82,8 @@ const Footer: React.FC = () => {
               CONTACT
             </Text>
             <div className="space-y-2 text-gray-600 text-sm">
-              <div>IT Desk</div>
-              <div>Ext. 4022</div>
+              <div>UniBooking Support</div>
+              <div>support@unibooking.edu</div>
             </div>
           </div>
         </div>
@@ -84,8 +92,8 @@ const Footer: React.FC = () => {
 
         <div className="py-4">
           <Text className="text-gray-500 text-sm">
-            © {new Date().getFullYear()} UniBooking. Campus facility management
-            platform.
+            © {new Date().getFullYear()} UniBooking. Meeting room booking
+            platform for your campus.
           </Text>
         </div>
       </div>

@@ -16,6 +16,9 @@ import {
 import { API_ENDPOINTS } from "../constants/endpoints";
 import { ROUTES, STORAGE_KEYS } from "../constants";
 
+// Max-age cho refresh token trong cookie: 7 ngày (theo BE 604800000 ms)
+const REFRESH_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 604800
+
 // Decode JWT để lấy thông tin user (email, fullName...) từ payload
 const decodeJwt = (token: string): any | null => {
   try {
@@ -72,7 +75,6 @@ export const loginWithEmail = async (
   const refreshToken = backendData?.data?.refreshToken;
 
   if (accessToken) {
-    // Dọn các key nhạy cảm cũ nếu còn
     try {
       localStorage.removeItem("user");
       localStorage.removeItem("user_data");
@@ -80,7 +82,9 @@ export const loginWithEmail = async (
     localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
     // Đưa refresh token vào cookies
     if (refreshToken) {
-      document.cookie = `refresh_token=${refreshToken}; path=/; secure`; // secure nếu dùng https
+      document.cookie = `refresh_token=${encodeURIComponent(
+        refreshToken,
+      )}; path=/; max-age=${REFRESH_TOKEN_MAX_AGE_SECONDS}; secure`;
     }
   }
 
@@ -116,7 +120,9 @@ export const loginWithGoogle = async (
     localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
     // Đưa refresh token vào cookies giống như login bằng email
     if (refreshToken) {
-      document.cookie = `refresh_token=${refreshToken}; path=/; secure`;
+      document.cookie = `refresh_token=${encodeURIComponent(
+        refreshToken,
+      )}; path=/; max-age=${REFRESH_TOKEN_MAX_AGE_SECONDS}; secure`;
     }
   }
 
@@ -234,7 +240,10 @@ export const resendResetOtp = async (
   return {
     ...response,
     data: {
-      message: extractMessage(response.data, "OTP has been resent to your email"),
+      message: extractMessage(
+        response.data,
+        "OTP has been resent to your email",
+      ),
     },
   };
 };
