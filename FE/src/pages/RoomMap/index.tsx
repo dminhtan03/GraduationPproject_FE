@@ -113,9 +113,17 @@ const RoomMapPage: React.FC = () => {
 
   const handleBooking = () => {
     if (!selectedRoom) return;
-    navigate(ROUTES.ROOM_DETAIL, {
+    // Pass roomId in URL and full room data in state
+    navigate(ROUTES.BOOK_ROOM.replace(":roomId", selectedRoom.roomId), {
       state: {
-        room: selectedRoom,
+        room: {
+          id: selectedRoom.roomId,
+          roomName: selectedRoom.locationCode,
+          building: selectedRoom.buildingName,
+          floorInfo: selectedRoom.floorName,
+          slot: selectedRoom.slot ?? 0,
+          status: selectedRoom.status,
+        },
       },
     });
   };
