@@ -34,8 +34,12 @@ const DashboardPage: React.FC = () => {
 
       setRooms(res.items);
       setTotal(res.total);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to load room data");
+    } catch (e: any) {
+      const message =
+        e && typeof e === "object" && typeof e.message === "string"
+          ? e.message
+          : "Unable to load room data";
+      setError(message);
       setRooms([]);
       setTotal(0);
     } finally {
@@ -143,13 +147,22 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-      <div className="mb-8">
-        <Title level={2} className="!mb-1 text-gray-800 font-semibold">
-          Campus Room Inventory
-        </Title>
-        <Text className="text-gray-500">
-          Real-time availability across all university wings
-        </Text>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <Title level={2} className="!mb-1 text-gray-800 font-semibold">
+            Campus Room Inventory
+          </Title>
+          <Text className="text-gray-500">
+            Real-time availability across all university wings
+          </Text>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate("/room-map")}
+          className="self-start px-4 py-2 rounded-lg bg-orange-500 text-white text-sm font-medium shadow hover:bg-orange-600"
+        >
+          Show Room Map
+        </button>
       </div>
 
       {/* Filter + Search */}

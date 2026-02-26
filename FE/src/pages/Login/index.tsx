@@ -30,6 +30,9 @@ const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
   const [popup, setPopup] = useState<{
     type: MessageType;
     message: string;
@@ -45,21 +48,32 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     setLoading(true);
 
+    setEmailError(null);
+    setPasswordError(null);
+
     try {
-      // Validate email FPT
-      // const fptEmailRegex = /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/;
-      // if (!email || !password) {
-      //   showPopup("warning", "Please enter both email and password");
-      //   setLoading(false);
-      //   return;
-      // }
-      // if (!fptEmailRegex.test(email)) {
-      //   showPopup("error", "Email must be in the format ...@fpt.edu.vn");
-      //   setLoading(false);
-      //   return;
-      // }
-      if (password.length < 5) {
-        showPopup("error", "Password must be at least 6 characters long");
+      // Validate email & password
+      const fptEmailRegex = /^[a-zA-Z0-9._%+-]+@fpt\.edu\.vn$/;
+
+      let hasError = false;
+
+      if (!email) {
+        setEmailError("Email is required");
+        hasError = true;
+      } else if (!fptEmailRegex.test(email)) {
+        setEmailError("Email must be in the format ...@fpt.edu.vn");
+        hasError = true;
+      }
+
+      if (!password) {
+        setPasswordError("Password is required");
+        hasError = true;
+      } else if (password.length < 6) {
+        setPasswordError("Password must be at least 6 characters long");
+        hasError = true;
+      }
+
+      if (hasError) {
         setLoading(false);
         return;
       }
@@ -133,9 +147,16 @@ const LoginPage: React.FC = () => {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError(null);
+                }}
                 disabled={loading}
+                className={emailError ? "input-invalid" : ""}
               />
+              {emailError && (
+                <p className="input-error-message">{emailError}</p>
+              )}
             </div>
 
             <div className="form-group">
@@ -145,8 +166,12 @@ const LoginPage: React.FC = () => {
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (passwordError) setPasswordError(null);
+                  }}
                   disabled={loading}
+                  className={passwordError ? "input-invalid" : ""}
                 />
 
                 <span
@@ -160,6 +185,9 @@ const LoginPage: React.FC = () => {
                   )}
                 </span>
               </div>
+              {passwordError && (
+                <p className="input-error-message">{passwordError}</p>
+              )}
             </div>
 
             <div className="form-footer">

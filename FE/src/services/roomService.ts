@@ -13,6 +13,21 @@ export interface RoomResponse {
   total: number;
 }
 
+// Raw structure from /api/v1/dashboard/rooms-map
+export interface RoomsMapBuilding {
+  buildingId: string;
+  buildingName: string;
+  floors: {
+    floorId: string;
+    floorName: string;
+    rooms: any[];
+  }[];
+}
+
+export interface RoomsMapResponse {
+  buildingResponse: RoomsMapBuilding[];
+}
+
 // Flatten rooms from buildingResponse -> floors -> rooms
 function flattenRooms(data: any, params: GetRoomParams): Room[] {
   if (!data || !Array.isArray(data.buildingResponse)) return [];
@@ -69,5 +84,11 @@ export const roomService = {
           ? meta.total
           : rooms.length,
     };
+  },
+
+  async getRoomsMap(): Promise<RoomsMapResponse> {
+    const res = await api.get<any>("/api/v1/dashboard/rooms-map");
+    const data = res.data?.data || res.data || {};
+    return data as RoomsMapResponse;
   },
 };

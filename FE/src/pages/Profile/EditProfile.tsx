@@ -1,228 +1,259 @@
-// ===== EDIT PROFILE PAGE =====
-// Only authenticated users; users can only edit their own profile.
-// TODO: Replace mock save with api.put(API_ENDPOINTS.USER.PROFILE, payload) when BE ready
-
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Typography,
   Card,
-  Form,
-  Input,
+  Row,
+  Col,
   Button,
   Avatar,
+  Alert,
+  Form,
+  Input,
   message,
-  Breadcrumb,
-  Space,
 } from "antd";
-import {
-  LockOutlined,
-  DeleteOutlined,
-  PhoneOutlined,
-  EnvironmentOutlined,
-} from "@ant-design/icons";
+import { UserOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
-import { STORAGE_KEYS } from "../../constants";
-import { getMockEditProfileInitial } from "../../utils/mockData";
+import { api } from "../../services/api";
+import { API_ENDPOINTS } from "../../constants/endpoints";
+import type { UserProfile } from "../../types";
 
 const { Title, Text } = Typography;
-const { TextArea } = Input;
 
-// Format: +1 (555) 000-0000 — allow flexible spaces
-const PHONE_REGEX = /^\+1\s*\(\s*\d{3}\s*\)\s*\d{3}\s*-\s*\d{4}$/;
+const phoneRegex = /^0\d{0,9}$/;
 
 const EditProfilePage: React.FC = () => {
   const navigate = useNavigate();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
-  const [saving, setSaving] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
+
+  const loadProfile = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get<any>(API_ENDPOINTS.AUTH.PROFILE);
+      const userData = res.data?.data || res.data;
+      if (userData) {
+        setProfile(userData);
+        form.setFieldsValue({
+          phoneNumber: userData.phoneNumber || "",
+          address: userData.address || "",
+        });
+      } else {
+        setError("Unable to load profile data");
+      }
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.meta?.message ||
+        (e instanceof Error ? e.message : "Unable to load profile data");
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [form]);
 
   useEffect(() => {
-    const token = localStorage.getItem(STORAGE_KEYS.USER_TOKEN);
-    if (!token) {
-      navigate(ROUTES.LOGIN, { replace: true });
-      return;
-    }
-    const initial = getMockEditProfileInitial();
-    form.setFieldsValue({
-      firstName: initial.firstName,
-      lastName: initial.lastName,
-      phoneNumber: initial.phoneNumber,
-      campusAddress: initial.campusAddress.replace(/\\n/g, "\n"),
-    });
-    setAvatarUrl(initial.avatar);
-  }, [form, navigate]);
+    loadProfile();
+  }, [loadProfile]);
 
   const handleCancel = () => {
-    form.resetFields();
     navigate(ROUTES.PROFILE);
   };
 
-  const handleSave = async () => {
+  const handleSubmit = async (values: {
+    phoneNumber: string;
+    address: string;
+  }) => {
+    setSubmitting(true);
+    setError(null);
     try {
-      await form.validateFields();
-    } catch {
-      return;
-    }
-
-    const values = form.getFieldsValue();
-    const phone = values.phoneNumber?.trim().replace(/\s+/g, " ");
-    if (phone && !PHONE_REGEX.test(phone)) {
-      form.setFields([
-        { name: "phoneNumber", errors: ["Format: +1 (555) 000-0000"] },
-      ]);
-      return;
-    }
-
-    setSaving(true);
-    try {
-      // TODO: await api.put(API_ENDPOINTS.USER.PROFILE, { firstName, lastName, phoneNumber, campusAddress, avatar: avatarUrl })
-      await new Promise((r) => setTimeout(r, 600));
+      await api.put(API_ENDPOINTS.USERS.UPDATE_INFO, {
+        phoneNumber: values.phoneNumber.trim(),
+        address: values.address.trim(),
+      });
       message.success("Profile updated successfully");
       navigate(ROUTES.PROFILE);
-    } catch {
-      message.error("Update failed. Please try again.");
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.meta?.message ||
+        (e instanceof Error ? e.message : "Failed to update profile");
+      setError(msg);
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
-  const initial = getMockEditProfileInitial();
-  const initials =
-    `${initial.firstName[0]}${initial.lastName[0]}`.toUpperCase();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[300px]">
+        <div className="h-12 w-12 rounded-full border-4 border-orange-500 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
-  const handleChangePhoto = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const url = URL.createObjectURL(file);
-        setAvatarUrl(url);
-        message.success("Photo updated. Click Save Changes to confirm.");
-      }
-    };
-    input.click();
-  };
+  if (error && !profile) {
+    return (
+      <div className="max-w-3xl mx-auto mt-10">
+        <Alert
+          message="Unable to load profile"
+          description={error}
+          type="error"
+          showIcon
+        />
+      </div>
+    );
+  }
+
+  if (!profile) return null;
+
+  const initials =
+    `${profile.firstName?.[0] ?? ""}${profile.lastName?.[0] ?? ""}`.toUpperCase();
 
   return (
-    <div className="fade-in">
-      <Breadcrumb
-        className="mb-2"
-        items={[{ title: "Settings" }, { title: "Edit Profile" }]}
-      />
-      <Title level={2} className="mb-6">
-        Edit Profile
-      </Title>
+    <div className="max-w-5xl mx-auto px-6 py-10">
+      <div className="mb-8">
+        <Title level={2} className="!mb-1 text-orange-500 font-semibold">
+          Edit Profile
+        </Title>
+        <Text className="text-gray-500">
+          Update your contact information. Other details are read-only.
+        </Text>
+      </div>
 
-      {/* Profile header card */}
-      <Card className="mb-6 rounded-xl">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="relative">
-            <Avatar
-              size={80}
-              src={avatarUrl}
-              style={{ backgroundColor: "#ff9500" }}
-              className="flex items-center justify-center text-2xl"
-            >
-              {initials}
-            </Avatar>
-            <div
-              className="absolute bottom-0 right-0 w-6 h-6 rounded-full flex items-center justify-center text-white text-xs"
-              style={{ background: "#ff9500" }}
-            >
-              <LockOutlined />
-            </div>
-          </div>
-          <div className="flex-1 min-w-0">
-            <Title level={4} className="mb-0">
-              {initial.firstName} {initial.lastName}
+      <Card className="rounded-2xl shadow-md border-0 mb-8">
+        <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
+          <Avatar
+            size={100}
+            style={{ backgroundColor: "#ff7a00" }}
+            className="text-3xl font-semibold"
+            icon={!initials && <UserOutlined />}
+          >
+            {initials}
+          </Avatar>
+
+          <div className="flex-1 text-center md:text-left">
+            <Title level={3} className="!mb-1">
+              {profile.firstName} {profile.lastName}
             </Title>
-            <Text className="text-gray-600">
-              {initial.role} • ID: {initial.studentId}
+            <Text className="text-gray-500 block mb-2">
+              {profile.department}
             </Text>
+            <Text className="text-gray-600 text-sm">{profile.email}</Text>
           </div>
-          <Button onClick={handleChangePhoto} className="rounded-lg">
-            Change Photo
-          </Button>
         </div>
       </Card>
 
-      <Form form={form} layout="vertical" onFinish={handleSave}>
-        <Card title="Basic Information" className="mb-6 rounded-xl">
-          <Form.Item
-            name="firstName"
-            label="First Name"
-            rules={[{ required: true, message: "First name is required" }]}
-          >
-            <Input placeholder="First Name" className="rounded-lg" />
-          </Form.Item>
-          <Form.Item
-            name="lastName"
-            label="Last Name"
-            rules={[{ required: true, message: "Last name is required" }]}
-          >
-            <Input placeholder="Last Name" className="rounded-lg" />
-          </Form.Item>
-        </Card>
+      <Card className="rounded-2xl shadow-md border-0">
+        <div className="flex items-center justify-between mb-6">
+          <Title level={4} className="mb-0 text-gray-700">
+            Personal Information
+          </Title>
+        </div>
 
-        <Card title="Contact Details" className="mb-6 rounded-xl">
-          <Form.Item
-            name="phoneNumber"
-            label="Phone Number"
-            help="Format: +1 (555) 000-0000"
-            rules={[
-              { required: true, message: "Phone number is required" },
-              {
-                pattern: PHONE_REGEX,
-                message: "Format: +1 (555) 000-0000",
-              },
-            ]}
-          >
-            <Input
-              prefix={<PhoneOutlined className="text-gray-400" />}
-              placeholder="+1 (555) 123-4567"
-              className="rounded-lg"
+        {error && (
+          <div className="mb-4">
+            <Alert
+              message="Update failed"
+              description={error}
+              type="error"
+              showIcon
             />
-          </Form.Item>
-          <Form.Item
-            name="campusAddress"
-            label="Campus Address"
-            rules={[{ required: true, message: "Campus address is required" }]}
-          >
-            <TextArea
-              rows={3}
-              placeholder="Building, Room&#10;Street, Campus"
-              className="rounded-lg"
-            />
-          </Form.Item>
-        </Card>
+          </div>
+        )}
 
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <Space className="text-gray-500 text-sm">
-            <Button type="link" className="p-0" icon={<LockOutlined />}>
-              Change Password
-            </Button>
-          </Space>
-          <Space>
-            <Button onClick={handleCancel} className="rounded-lg">
+        <Form
+          layout="vertical"
+          form={form}
+          onFinish={handleSubmit}
+          initialValues={{
+            phoneNumber: profile.phoneNumber || "",
+            address: profile.address || "",
+          }}
+        >
+          <Row gutter={[32, 24]}>
+            <Col xs={24} md={12}>
+              <ReadOnlyItem label="First Name" value={profile.firstName} />
+              <ReadOnlyItem label="Last Name" value={profile.lastName} />
+              <ReadOnlyItem label="Email" value={profile.email} />
+              <ReadOnlyItem label="Gender" value={profile.gender} />
+            </Col>
+
+            <Col xs={24} md={12}>
+              <Form.Item
+                label={
+                  <span className="text-xs font-semibold tracking-wide text-gray-400 uppercase">
+                    Phone Number
+                  </span>
+                }
+                name="phoneNumber"
+                rules={[
+                  { required: true, message: "Phone number is required" },
+                  {
+                    pattern: phoneRegex,
+                    message:
+                      "Phone must start with 0 and contain up to 10 digits",
+                  },
+                ]}
+              >
+                <Input
+                  maxLength={10}
+                  placeholder="Enter phone number"
+                  className="bg-white rounded-lg"
+                />
+              </Form.Item>
+
+              <Form.Item
+                label={
+                  <span className="text-xs font-semibold tracking-wide text-gray-400 uppercase">
+                    Address
+                  </span>
+                }
+                name="address"
+                rules={[{ required: true, message: "Address is required" }]}
+              >
+                <Input.TextArea
+                  rows={3}
+                  placeholder="Enter address"
+                  className="bg-white rounded-lg"
+                />
+              </Form.Item>
+
+              <ReadOnlyItem label="Department" value={profile.department} />
+            </Col>
+          </Row>
+
+          <div className="mt-6 flex justify-end gap-3">
+            <Button onClick={handleCancel} className="rounded-xl px-6 h-10">
               Cancel
             </Button>
             <Button
               type="primary"
               htmlType="submit"
-              loading={saving}
-              className="rounded-lg"
-              style={{ background: "#ff9500", borderColor: "#ff9500" }}
+              loading={submitting}
+              className="rounded-xl px-6 h-10"
+              style={{ background: "#ff7a00", borderColor: "#ff7a00" }}
             >
               Save Changes
             </Button>
-          </Space>
-        </div>
-      </Form>
+          </div>
+        </Form>
+      </Card>
     </div>
   );
 };
+
+const ReadOnlyItem = ({ label, value }: { label: string; value?: string }) => (
+  <div className="mb-5">
+    <div className="text-xs font-semibold tracking-wide text-gray-400 uppercase mb-1">
+      {label}
+    </div>
+    <div className="text-base font-medium text-gray-800 bg-gray-50 rounded-lg px-4 py-2">
+      {value || "-"}
+    </div>
+  </div>
+);
 
 export default EditProfilePage;
