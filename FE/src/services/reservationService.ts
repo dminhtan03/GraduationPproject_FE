@@ -1,6 +1,7 @@
 import { api } from "./api";
 import { API_ENDPOINTS } from "../constants/endpoints";
 import type {
+  ApiError,
   CreateReservationRequest,
   Reservation,
   ReservationPageResult,
@@ -81,18 +82,47 @@ export const reservationService = {
     const requestedPage = query.page ?? 0;
     const requestedSize = query.size ?? 5;
 
-    const response = await api.get<any>(API_ENDPOINTS.ROOMS.MY_STATUS, {
+    const paramsSerializer = (params: Record<string, any>) => {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value == null || value === "") return;
+        if (Array.isArray(value)) {
+          value.forEach((item) => {
+            if (item != null && item !== "") {
+              searchParams.append(key, String(item));
+            }
+          });
+          return;
+        }
+        searchParams.append(key, String(value));
+      });
+      return searchParams.toString();
+    };
+
+    const requestConfig = {
       params: {
         page: requestedPage,
         size: requestedSize,
         locationCode: query.locationCode,
         address: query.address,
-        statuses: query.statuses?.length ? query.statuses.join(",") : undefined,
+        statuses: query.statuses,
         buildingId: query.buildingId,
         startTime: query.startTime,
         endTime: query.endTime,
       },
-    });
+      paramsSerializer,
+    };
+
+    let response;
+    try {
+      response = await api.get<any>(API_ENDPOINTS.ROOMS.MY_STATUS, requestConfig);
+    } catch (error) {
+      const apiError = error as ApiError;
+      if (apiError.status !== 404 && apiError.status !== 405) {
+        throw error;
+      }
+      response = await api.get<any>(API_ENDPOINTS.ROOMS.BOOK, requestConfig);
+    }
 
     const payload = response.data || {};
     const source = payload?.data ?? payload;
