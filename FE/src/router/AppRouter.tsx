@@ -11,7 +11,6 @@ const ForgotPasswordPage = React.lazy(() => import("../pages/ForgotPassword"));
 const DashboardPage = React.lazy(() => import("../pages/RoomList"));
 const BookRoomPage = React.lazy(() => import("../pages/BookRoom"));
 const RoomMapPage = React.lazy(() => import("../pages/RoomMap"));
-const RoomDetailPage = React.lazy(() => import("../pages/RoomDetail"));
 const AboutPage = React.lazy(() => import("../pages/About"));
 const MyBookingsPage = React.lazy(() => import("../pages/MyBookings"));
 const ProfilePage = React.lazy(() => import("../pages/Profile"));
@@ -115,14 +114,6 @@ export const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <BookRoomPage />
-          </SuspenseWrapper>
-        ),
-      },
-      {
-        path: ROUTES.ROOM_DETAIL,
-        element: (
-          <SuspenseWrapper>
-            <RoomDetailPage />
           </SuspenseWrapper>
         ),
       },

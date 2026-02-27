@@ -105,7 +105,7 @@ const RoomMapPage: React.FC = () => {
 
   const handleRoomClick = (room: MapRoom) => {
     if (!currentBuilding || !currentFloor) return;
-    navigate(ROUTES.ROOM_DETAIL.replace(":roomId", room.roomId), {
+    navigate(ROUTES.BOOK_ROOM.replace(":roomId", room.roomId), {
       state: {
         room: {
           id: room.roomId,

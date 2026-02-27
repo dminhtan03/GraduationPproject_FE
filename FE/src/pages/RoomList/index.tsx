@@ -115,7 +115,7 @@ const DashboardPage: React.FC = () => {
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
               }`}
             onClick={() => {
-              navigate(ROUTES.ROOM_DETAIL.replace(":roomId", record.id), {
+              navigate(ROUTES.BOOK_ROOM.replace(":roomId", record.id), {
                 state: { room: record },
               });
             }}
