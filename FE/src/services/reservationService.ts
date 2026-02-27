@@ -1,6 +1,11 @@
 import { api } from "./api";
 import { API_ENDPOINTS } from "../constants/endpoints";
-import type { ApiError, CreateReservationRequest, Reservation } from "../types";
+import type {
+  CreateReservationRequest,
+  Reservation,
+  ReservationPageResult,
+  ReservationStatusQuery,
+} from "../types";
 
 const toArray = (payload: any): any[] => {
   if (Array.isArray(payload)) return payload;
@@ -16,19 +21,37 @@ const toArray = (payload: any): any[] => {
 
 const normalizeReservation = (item: any): Reservation => {
   const roomRef = item?.room ?? item?.roomResponse ?? {};
+  const buildingRef =
+    item?.buildingResponse ?? item?.buildingInfo ?? roomRef?.buildingResponse ?? {};
 
   return {
-    id: String(item?.id ?? item?.reservationId ?? `${Date.now()}-${Math.random()}`),
+    id: String(
+      item?.id ??
+        item?.reservationId ??
+        item?.reservationCode ??
+        item?.code ??
+        `${item?.startTime ?? ""}-${item?.endTime ?? ""}`,
+    ),
     roomName:
+      item?.locationCode ??
+      item?.roomCode ??
+      item?.roomLocationCode ??
       item?.roomName ??
       roomRef?.roomName ??
       roomRef?.locationCode ??
+      roomRef?.roomCode ??
       roomRef?.name ??
       "Unknown room",
     building:
+      item?.address ??
+      item?.buildingAddress ??
+      item?.buildingName ??
       item?.building ??
       roomRef?.building ??
+      roomRef?.address ??
       roomRef?.buildingName ??
+      buildingRef?.address ??
+      buildingRef?.buildingName ??
       "Unknown building",
     purpose: item?.purpose ?? item?.reason ?? item?.title ?? "-",
     startTime: item?.startTime ?? item?.startDateTime ?? item?.fromTime ?? "",
@@ -52,18 +75,54 @@ export const reservationService = {
     });
   },
 
-  async getMyBookings(): Promise<Reservation[]> {
-    try {
-      const response = await api.get<any>(API_ENDPOINTS.ROOMS.MY_BOOKINGS);
-      return toArray(response.data).map(normalizeReservation);
-    } catch (error) {
-      const apiError = error as ApiError;
-      if (apiError.status !== 404) {
-        throw error;
-      }
+  async getMyBookings(
+    query: ReservationStatusQuery = {},
+  ): Promise<ReservationPageResult> {
+    const requestedPage = query.page ?? 0;
+    const requestedSize = query.size ?? 5;
 
-      const fallbackResponse = await api.get<any>(API_ENDPOINTS.ROOMS.BOOK);
-      return toArray(fallbackResponse.data).map(normalizeReservation);
-    }
+    const response = await api.get<any>(API_ENDPOINTS.ROOMS.MY_STATUS, {
+      params: {
+        page: requestedPage,
+        size: requestedSize,
+        locationCode: query.locationCode,
+        address: query.address,
+        statuses: query.statuses?.length ? query.statuses.join(",") : undefined,
+        buildingId: query.buildingId,
+        startTime: query.startTime,
+        endTime: query.endTime,
+      },
+    });
+
+    const payload = response.data || {};
+    const source = payload?.data ?? payload;
+    const items = toArray(payload).map(normalizeReservation);
+
+    const total =
+      payload?.meta?.total ??
+      source?.totalElements ??
+      source?.total ??
+      source?.page?.totalElements ??
+      items.length;
+
+    const page =
+      source?.number ??
+      source?.pageNumber ??
+      source?.page ??
+      source?.pageable?.pageNumber ??
+      requestedPage;
+
+    const size =
+      source?.size ??
+      source?.pageSize ??
+      source?.pageable?.pageSize ??
+      requestedSize;
+
+    return {
+      items,
+      total: Number(total) || 0,
+      page: Number(page) || 0,
+      size: Number(size) || requestedSize,
+    };
   },
 };

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Typography, Empty, Table, Tag, Alert } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { TablePaginationConfig } from "antd/es/table";
 import { CalendarOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
@@ -29,24 +30,40 @@ const MyBookingsPage: React.FC = () => {
   const [bookings, setBookings] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [total, setTotal] = useState(0);
 
-  const loadBookings = useCallback(async () => {
+  const loadBookings = useCallback(async (nextPage = page, nextSize = pageSize) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await reservationService.getMyBookings();
-      setBookings(data);
+      const result = await reservationService.getMyBookings({
+        page: Math.max(nextPage - 1, 0),
+        size: nextSize,
+      });
+      setBookings(result.items);
+      setTotal(result.total);
+      setPage(result.page + 1);
+      setPageSize(result.size);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load bookings");
       setBookings([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize]);
 
   useEffect(() => {
-    loadBookings();
+    loadBookings(1, pageSize);
   }, [loadBookings]);
+
+  const handleTableChange = (pagination: TablePaginationConfig) => {
+    const nextPage = pagination.current || 1;
+    const nextSize = pagination.pageSize || pageSize;
+    loadBookings(nextPage, nextSize);
+  };
 
   const columns: ColumnsType<Reservation> = [
     {
@@ -114,7 +131,7 @@ const MyBookingsPage: React.FC = () => {
         </button>
         <button
           type="button"
-          onClick={loadBookings}
+          onClick={() => loadBookings(page, pageSize)}
           className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
           disabled={loading}
         >
@@ -144,7 +161,14 @@ const MyBookingsPage: React.FC = () => {
             loading={loading}
             columns={columns}
             dataSource={bookings}
-            pagination={{ pageSize: 8 }}
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              showSizeChanger: true,
+              pageSizeOptions: ["5", "10", "20"],
+            }}
+            onChange={handleTableChange}
             scroll={{ x: 980 }}
           />
         </div>

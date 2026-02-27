@@ -19,7 +19,7 @@ export const API_ENDPOINTS = {
     LIST: "/api/v1/rooms-map",
     DETAIL: "/api/v1/rooms/:id",
     BOOK: "/api/v1/reservations",
-    MY_BOOKINGS: "/api/v1/reservations/my-bookings",
+    MY_STATUS: "/api/v1/reservations/my-status",
   },
 
   // User endpoints

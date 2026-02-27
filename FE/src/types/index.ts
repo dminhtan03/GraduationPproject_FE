@@ -114,6 +114,24 @@ export interface Reservation {
   createdAt?: string;
 }
 
+export interface ReservationStatusQuery {
+  page?: number;
+  size?: number;
+  locationCode?: string;
+  address?: string;
+  statuses?: string[];
+  buildingId?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface ReservationPageResult {
+  items: Reservation[];
+  total: number;
+  page: number;
+  size: number;
+}
+
 export interface Building {
   id: number;
   name: string;
