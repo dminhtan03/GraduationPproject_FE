@@ -39,8 +39,11 @@ const RoomDetailPage: React.FC = () => {
         const data = await roomService.getRoomDetail(normalizedRoomId);
         setDetail(data || null);
       } catch (e) {
-        const apiMessage = (e as ApiError).message || "Unable to load room details";
-        const isRoomNotFound = apiMessage.toUpperCase().includes("ROOM NOT FOUND");
+        const apiMessage =
+          (e as ApiError).message || "Unable to load room details";
+        const isRoomNotFound = apiMessage
+          .toUpperCase()
+          .includes("ROOM NOT FOUND");
 
         if (isRoomNotFound) {
           setDetail(null);
@@ -75,7 +78,11 @@ const RoomDetailPage: React.FC = () => {
   );
 
   const building = useMemo(
-    () => detail?.buildingName || detail?.building || roomFromState?.building || "-",
+    () =>
+      detail?.buildingName ||
+      detail?.building ||
+      roomFromState?.building ||
+      "-",
     [detail, roomFromState],
   );
 
@@ -104,10 +111,7 @@ const RoomDetailPage: React.FC = () => {
     [detail],
   );
 
-  const checkInTime = useMemo(
-    () => detail?.checkInTime || "-",
-    [detail],
-  );
+  const checkInTime = useMemo(() => detail?.checkInTime || "-", [detail]);
 
   const handleBook = () => {
     if (!normalizedRoomId) {
@@ -136,7 +140,9 @@ const RoomDetailPage: React.FC = () => {
           <Title level={2} className="!mb-1 text-gray-800 font-semibold">
             Room Details
           </Title>
-          <Text className="text-gray-500">Review room information before booking</Text>
+          <Text className="text-gray-500">
+            Review room information before booking
+          </Text>
         </div>
         <button
           type="button"
@@ -169,54 +175,80 @@ const RoomDetailPage: React.FC = () => {
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
         {loading ? (
-          <div className="py-12 text-center text-gray-500">Loading room details...</div>
+          <div className="py-12 text-center text-gray-500">
+            Loading room details...
+          </div>
         ) : (
           <div className="space-y-5">
             <div>
               <div className="text-sm text-gray-500 mb-1">Room</div>
-              <div className="text-2xl font-semibold text-gray-900">{roomName}</div>
+              <div className="text-2xl font-semibold text-gray-900">
+                {roomName}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
                 <div className="text-xs text-gray-500 mb-1">Building</div>
-                <div className="text-sm font-semibold text-gray-800">{building}</div>
+                <div className="text-sm font-semibold text-gray-800">
+                  {building}
+                </div>
               </div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
                 <div className="text-xs text-gray-500 mb-1">Floor</div>
-                <div className="text-sm font-semibold text-gray-800">{floor}</div>
+                <div className="text-sm font-semibold text-gray-800">
+                  {floor}
+                </div>
               </div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
                 <div className="text-xs text-gray-500 mb-1">Capacity</div>
-                <div className="text-sm font-semibold text-gray-800">{slot}</div>
+                <div className="text-sm font-semibold text-gray-800">
+                  {slot}
+                </div>
               </div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
                 <div className="text-xs text-gray-500 mb-1">Status</div>
-                <div className="text-sm font-semibold text-gray-800">{status}</div>
+                <div className="text-sm font-semibold text-gray-800">
+                  {status}
+                </div>
               </div>
             </div>
 
             <div>
               <div className="text-xs text-gray-500 mb-2">Description</div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-700">
-                {detail?.description || detail?.note || "No additional room description."}
+                {detail?.description ||
+                  detail?.note ||
+                  "No additional room description."}
               </div>
             </div>
 
             <div>
-              <div className="text-xs text-gray-500 mb-2">Current check-in status</div>
+              <div className="text-xs text-gray-500 mb-2">
+                Current check-in status
+              </div>
               <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-700 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <div className="text-[11px] text-gray-500 mb-1">Current user</div>
-                  <div className="font-semibold text-gray-800">{currentUserName}</div>
+                  <div className="text-[11px] text-gray-500 mb-1">
+                    Current user
+                  </div>
+                  <div className="font-semibold text-gray-800">
+                    {currentUserName}
+                  </div>
                 </div>
                 <div>
                   <div className="text-[11px] text-gray-500 mb-1">User id</div>
-                  <div className="font-semibold text-gray-800">{currentUserId}</div>
+                  <div className="font-semibold text-gray-800">
+                    {currentUserId}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-gray-500 mb-1">Check-in time</div>
-                  <div className="font-semibold text-gray-800">{checkInTime}</div>
+                  <div className="text-[11px] text-gray-500 mb-1">
+                    Check-in time
+                  </div>
+                  <div className="font-semibold text-gray-800">
+                    {checkInTime}
+                  </div>
                 </div>
               </div>
             </div>
