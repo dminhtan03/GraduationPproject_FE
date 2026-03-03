@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Alert, Typography, message } from "antd";
+import { ClockCircleOutlined } from "@ant-design/icons";
 import { reservationService } from "../../services/reservationService";
 import { ROUTES } from "../../constants";
 import type { ApiError, Room } from "../../types";
@@ -10,6 +11,35 @@ const { Title, Text } = Typography;
 interface LocationState {
   room?: Room;
 }
+
+const pad = (value: number) => value.toString().padStart(2, "0");
+
+const formatDateTimeLocal = (date: Date) => {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const getSuggestedEndTime = (startValue: string) => {
+  const startDate = new Date(startValue);
+  if (Number.isNaN(startDate.getTime())) return "";
+
+  const next = new Date(startDate);
+  next.setSeconds(0, 0);
+
+  const minutes = next.getMinutes();
+  if (minutes === 0 || minutes === 30) {
+    next.setMinutes(minutes + 30);
+  } else if (minutes < 30) {
+    next.setMinutes(30);
+  } else {
+    next.setMinutes(60);
+  }
+
+  if (next <= startDate) {
+    next.setMinutes(next.getMinutes() + 30);
+  }
+
+  return formatDateTimeLocal(next);
+};
 
 const BookRoomPage: React.FC = () => {
   const navigate = useNavigate();
@@ -64,6 +94,17 @@ const BookRoomPage: React.FC = () => {
     }
   };
 
+  const handleStartTimeChange = (value: string) => {
+    setStartTime(value);
+    if (!value) {
+      setEndTime("");
+      return;
+    }
+
+    const suggestedEndTime = getSuggestedEndTime(value);
+    setEndTime(suggestedEndTime);
+  };
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
       <Title level={2} className="!mb-1 text-gray-800 font-semibold">
@@ -116,29 +157,41 @@ const BookRoomPage: React.FC = () => {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Start time</label>
-            <input
-              type="datetime-local"
-              value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              disabled={loading}
-              required
-            />
+        <div className="rounded-xl border border-orange-100 bg-orange-50/40 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ClockCircleOutlined className="text-orange-500" />
+            <span className="text-sm font-semibold text-orange-700">Meeting Time</span>
           </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">End time</label>
-            <input
-              type="datetime-local"
-              value={endTime}
-              onChange={(event) => setEndTime(event.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              disabled={loading}
-              required
-            />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Start time</label>
+              <input
+                type="datetime-local"
+                value={startTime}
+                onChange={(event) => handleStartTimeChange(event.target.value)}
+                className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                disabled={loading}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">End time</label>
+              <input
+                type="datetime-local"
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+                min={startTime || undefined}
+                className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                disabled={loading}
+                required
+              />
+            </div>
           </div>
+
+          <p className="mt-3 text-xs text-orange-700">
+            End time is auto-suggested to the next half-hour boundary (e.g. 14:10 → 14:30, 15:15 → 15:30).
+          </p>
         </div>
 
         <div>
