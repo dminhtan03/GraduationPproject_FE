@@ -17,6 +17,7 @@ const ProfilePage = React.lazy(() => import("../pages/Profile"));
 const EditProfilePage = React.lazy(
   () => import("../pages/Profile/EditProfile"),
 );
+const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
 
 // Error boundary component cho routes
 const ErrorBoundary: React.FC = () => {
@@ -141,6 +142,14 @@ export const router = createBrowserRouter([
           </SuspenseWrapper>
         ),
       },
+      {
+        path: ROUTES.AI_ASSISTANT,
+        element: (
+          <SuspenseWrapper>
+            <AIAssistantPage />
+          </SuspenseWrapper>
+        ),
+      },
     ],
   },
   // Catch all route - redirect to home
@@ -160,7 +169,7 @@ export const routeDefinitions = [
   },
   {
     key: "home",
-    path: ROUTES.HOME,
+    path: ROUTES.ROOM_LIST,
     label: "Trang chủ",
     icon: "home",
   },
@@ -172,7 +181,7 @@ export const routeDefinitions = [
   },
   {
     key: "dashboard",
-    path: ROUTES.DASHBOARD,
+    path: ROUTES.ADMIN_DASHBOARD,
     label: "Dashboard",
     icon: "dashboard",
   },

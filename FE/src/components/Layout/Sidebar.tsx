@@ -11,6 +11,7 @@ import {
   AuditOutlined,
   FolderOutlined,
 } from "@ant-design/icons";
+import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAppSelector, selectLayout, selectTheme } from "../../store";
 import { ROUTES } from "../../constants";
@@ -30,10 +31,15 @@ const Sidebar: React.FC = () => {
   const menuItems: {
     key: string;
     icon: React.ReactNode;
-    label: string;
-    children?: { key: string; icon: React.ReactNode; label: string }[];
+    label: React.ReactNode;
+    children?: { key: string; icon: React.ReactNode; label: React.ReactNode }[];
   }[] = [
     { key: ROUTES.ROOM_LIST, icon: <BankOutlined />, label: "Room List" },
+    {
+      key: ROUTES.AI_ASSISTANT,
+      icon: <AppstoreOutlined />,
+      label: "AI Assistant",
+    },
     {
       key: ROUTES.MY_BOOKINGS,
       icon: <CalendarOutlined />,
@@ -86,9 +92,7 @@ const Sidebar: React.FC = () => {
               className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
               style={{ background: "#ff9500" }}
             >
-              <span className="text-white text-lg" aria-hidden>
-                📚
-              </span>
+              <BookOpenIcon className="w-5 h-5 text-white" aria-hidden />
             </div>
             <Text strong className="text-lg truncate">
               {APP_NAME}

@@ -1,5 +1,12 @@
 // ===== TYPES DÀNH CHO API =====
-import { ApiResponse, ApiError, User, DemoData } from "./index";
+import {
+  ApiResponse,
+  ApiError,
+  User,
+  DemoData,
+  Reservation,
+  RoomStatus,
+} from "./index";
 
 // ===== REQUEST TYPES =====
 export interface LoginRequest {
@@ -74,6 +81,29 @@ export interface GetDataResponse {
   total: number;
   page: number;
   totalPages: number;
+}
+
+// ===== AI ASSISTANT TYPES =====
+
+export interface AiChatRequestDto {
+  message: string;
+  startTime?: string;
+  endTime?: string;
+  capacity?: number;
+}
+
+export interface AiRoomSuggestion {
+  roomId: string;
+  locationCode: string;
+  score?: number | null;
+  status: RoomStatus | string;
+}
+
+export interface AiChatResponseDto {
+  reply: string;
+  suggestions?: AiRoomSuggestion[];
+  reservationCreated: boolean;
+  reservation?: Reservation | null;
 }
 
 // API endpoint types

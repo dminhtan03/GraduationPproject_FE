@@ -7,7 +7,7 @@ import { useAppSelector, selectTheme } from "../../store";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 import Footer from "./Footer";
-import { ChangePasswordModal } from "../common";
+import { AiChatWidget, ChangePasswordModal } from "../common";
 import { STORAGE_KEYS } from "../../constants";
 
 const { Content } = Layout;
@@ -78,6 +78,9 @@ const MainLayout: React.FC = () => {
           <Footer />
         </Layout>
       </Layout>
+
+      {/* Floating AI chat widget visible on all main screens */}
+      <AiChatWidget />
 
       <ChangePasswordModal
         open={isChangePasswordVisible}

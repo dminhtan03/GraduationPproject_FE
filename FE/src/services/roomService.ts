@@ -54,8 +54,10 @@ function flattenRooms(data: any, params: GetRoomParams): Room[] {
   // Filter by status
   if (params.status) rooms = rooms.filter((r) => r.status === params.status);
   // Filter by minCapacity
-  if (params.minCapacity)
-    rooms = rooms.filter((r) => r.slot >= params.minCapacity);
+  const minCapacity = params.minCapacity;
+  if (typeof minCapacity === "number") {
+    rooms = rooms.filter((r) => r.slot >= minCapacity);
+  }
   return rooms;
 }
 
@@ -94,7 +96,9 @@ export const roomService = {
   },
 
   async getRoomDetail(roomId: string): Promise<any> {
-    const res = await api.get<any>(buildUrl(API_ENDPOINTS.ROOMS.DETAIL, { id: roomId }));
+    const res = await api.get<any>(
+      buildUrl(API_ENDPOINTS.ROOMS.DETAIL, { id: roomId }),
+    );
     return res.data?.data || res.data;
   },
 };
