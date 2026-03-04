@@ -102,16 +102,12 @@ export type ReservationStatus =
   | string;
 
 export interface Reservation {
-  id: string;
-  roomName: string;
-  building: string;
-  purpose: string;
-  startTime: string;
-  endTime: string;
-  status: ReservationStatus;
-  attendeeCount?: number;
-  note?: string;
-  createdAt?: string;
+  id?: string;
+  locationCode?: string;
+  address?: string;
+  startTime?: string;
+  endTime?: string;
+  status?: ReservationStatus;
 }
 
 export interface ReservationStatusQuery {

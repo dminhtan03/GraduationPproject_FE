@@ -21,46 +21,35 @@ const toArray = (payload: any): any[] => {
 };
 
 const normalizeReservation = (item: any): Reservation => {
-  const roomRef = item?.room ?? item?.roomResponse ?? {};
-  const buildingRef =
-    item?.buildingResponse ?? item?.buildingInfo ?? roomRef?.buildingResponse ?? {};
+  const resolvedStatus =
+    item?.status ??
+    item?.reservationStatus ??
+    item?.bookingStatus ??
+    item?.state ??
+    item?.statusName ??
+    (Array.isArray(item?.statuses) ? item.statuses[0] : undefined);
 
   return {
-    id: String(
-      item?.id ??
-        item?.reservationId ??
-        item?.reservationCode ??
-        item?.code ??
-        `${item?.startTime ?? ""}-${item?.endTime ?? ""}`,
-    ),
-    roomName:
+    id:
+      item?.id != null
+        ? String(item.id)
+        : item?.reservationId != null
+          ? String(item.reservationId)
+          : undefined,
+    locationCode:
       item?.locationCode ??
-      item?.roomCode ??
       item?.roomLocationCode ??
+      item?.roomCode ??
       item?.roomName ??
-      roomRef?.roomName ??
-      roomRef?.locationCode ??
-      roomRef?.roomCode ??
-      roomRef?.name ??
-      "Unknown room",
-    building:
+      undefined,
+    address:
       item?.address ??
       item?.buildingAddress ??
       item?.buildingName ??
-      item?.building ??
-      roomRef?.building ??
-      roomRef?.address ??
-      roomRef?.buildingName ??
-      buildingRef?.address ??
-      buildingRef?.buildingName ??
-      "Unknown building",
-    purpose: item?.purpose ?? item?.reason ?? item?.title ?? "-",
-    startTime: item?.startTime ?? item?.startDateTime ?? item?.fromTime ?? "",
-    endTime: item?.endTime ?? item?.endDateTime ?? item?.toTime ?? "",
-    status: (item?.status ?? item?.bookingStatus ?? item?.state ?? "PENDING").toString(),
-    attendeeCount: item?.attendeeCount ?? item?.participants,
-    note: item?.note,
-    createdAt: item?.createdAt ?? item?.createdDate,
+      undefined,
+    startTime: item?.startTime ?? item?.startDateTime ?? item?.fromTime ?? undefined,
+    endTime: item?.endTime ?? item?.endDateTime ?? item?.toTime ?? undefined,
+    status: resolvedStatus != null ? String(resolvedStatus) : undefined,
   };
 };
 

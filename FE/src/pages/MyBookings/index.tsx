@@ -12,7 +12,8 @@ const { Title, Paragraph } = Typography;
 
 const formatDateTime = (value: string) => {
   if (!value) return "-";
-  const date = new Date(value);
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
 };
@@ -67,31 +68,27 @@ const MyBookingsPage: React.FC = () => {
 
   const columns: ColumnsType<Reservation> = [
     {
-      title: "ROOM",
-      key: "room",
-      render: (_: unknown, record: Reservation) => (
-        <div>
-          <div className="font-semibold text-gray-800">{record.roomName}</div>
-          <div className="text-xs text-gray-500">{record.building}</div>
-        </div>
-      ),
-      width: "26%",
+      title: "LOCATION CODE",
+      dataIndex: "locationCode",
+      key: "locationCode",
+      width: "20%",
+      render: (value: string | undefined) => value || "-",
     },
     {
-      title: "PURPOSE",
-      dataIndex: "purpose",
-      key: "purpose",
-      width: "20%",
-      render: (value: string) => value || "-",
+      title: "ADDRESS",
+      dataIndex: "address",
+      key: "address",
+      width: "26%",
+      render: (value: string | undefined) => value || "-",
     },
     {
       title: "TIME",
       key: "time",
-      width: "28%",
+      width: "34%",
       render: (_: unknown, record: Reservation) => (
         <div className="text-xs">
-          <div>From: {formatDateTime(record.startTime)}</div>
-          <div>To: {formatDateTime(record.endTime)}</div>
+          <div>From: {formatDateTime(record.startTime || "")}</div>
+          <div>To: {formatDateTime(record.endTime || "")}</div>
         </div>
       ),
     },
@@ -99,18 +96,9 @@ const MyBookingsPage: React.FC = () => {
       title: "STATUS",
       dataIndex: "status",
       key: "status",
-      width: "12%",
-      render: (status: string) => (
-        <Tag color={getStatusColor(status)}>{status || "PENDING"}</Tag>
-      ),
-    },
-    {
-      title: "CREATED",
-      dataIndex: "createdAt",
-      key: "createdAt",
-      width: "14%",
-      render: (value: string) => (
-        <span className="text-xs text-gray-500">{formatDateTime(value)}</span>
+      width: "20%",
+      render: (status: string | undefined) => (
+        <Tag color={getStatusColor(status || "")}>{status || "-"}</Tag>
       ),
     },
   ];
@@ -157,7 +145,10 @@ const MyBookingsPage: React.FC = () => {
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <Table<Reservation>
-            rowKey="id"
+            rowKey={(record, index) =>
+              record.id ||
+              `${record.locationCode || "no-code"}-${record.startTime || "no-time"}-${index}`
+            }
             loading={loading}
             columns={columns}
             dataSource={bookings}
