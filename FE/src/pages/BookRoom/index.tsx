@@ -20,27 +20,13 @@ const formatDateTimeLocal = (date: Date) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
-const getSuggestedEndTime = (startValue: string) => {
+const addMinutesToDateTimeLocal = (startValue: string, minutesToAdd: number) => {
   const startDate = new Date(startValue);
   if (Number.isNaN(startDate.getTime())) return "";
 
-  const next = new Date(startDate);
-  next.setSeconds(0, 0);
-
-  const minutes = next.getMinutes();
-  if (minutes === 0 || minutes === 30) {
-    next.setMinutes(minutes + 30);
-  } else if (minutes < 30) {
-    next.setMinutes(30);
-  } else {
-    next.setMinutes(60);
-  }
-
-  if (next <= startDate) {
-    next.setMinutes(next.getMinutes() + 30);
-  }
-
-  return formatDateTimeLocal(next);
+  const endDate = new Date(startDate);
+  endDate.setMinutes(endDate.getMinutes() + minutesToAdd);
+  return formatDateTimeLocal(endDate);
 };
 
 const BookRoomPage: React.FC = () => {
@@ -52,6 +38,7 @@ const BookRoomPage: React.FC = () => {
   const [purpose, setPurpose] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState<30 | 60>(30);
   const [attendeeCount, setAttendeeCount] = useState<number | "">("");
   const [note, setNote] = useState("");
   const [acceptedRules, setAcceptedRules] = useState(false);
@@ -132,8 +119,17 @@ const BookRoomPage: React.FC = () => {
       return;
     }
 
-    const suggestedEndTime = getSuggestedEndTime(value);
+    const suggestedEndTime = addMinutesToDateTimeLocal(value, durationMinutes);
     setEndTime(suggestedEndTime);
+  };
+
+  const handleQuickDuration = (minutes: 30 | 60) => {
+    setDurationMinutes(minutes);
+    if (!startTime) {
+      message.warning("Please pick start time first.");
+      return;
+    }
+    setEndTime(addMinutesToDateTimeLocal(startTime, minutes));
   };
 
   const handleBackToForm = () => {
@@ -214,27 +210,52 @@ const BookRoomPage: React.FC = () => {
                     type="datetime-local"
                     value={startTime}
                     onChange={(event) => handleStartTimeChange(event.target.value)}
+                    step={1800}
                     className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
                     disabled={loading}
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">End time</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Quick end time</label>
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDuration(30)}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${
+                        durationMinutes === 30
+                          ? "bg-orange-500 text-white border-orange-500"
+                          : "bg-white text-orange-700 border-orange-200 hover:bg-orange-50"
+                      }`}
+                      disabled={loading}
+                    >
+                      +30p
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickDuration(60)}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${
+                        durationMinutes === 60
+                          ? "bg-orange-500 text-white border-orange-500"
+                          : "bg-white text-orange-700 border-orange-200 hover:bg-orange-50"
+                      }`}
+                      disabled={loading}
+                    >
+                      +1h
+                    </button>
+                  </div>
                   <input
                     type="datetime-local"
                     value={endTime}
-                    onChange={(event) => setEndTime(event.target.value)}
-                    min={startTime || undefined}
-                    className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    disabled={loading}
+                    readOnly
+                    className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-gray-50 text-gray-700"
                     required
                   />
                 </div>
               </div>
 
               <p className="mt-3 text-xs text-orange-700">
-                End time is auto-suggested to the next half-hour boundary (e.g. 14:10 → 14:30, 15:15 → 15:30).
+                Select start time in 30-minute slots, then choose +30p or +1h to auto-fill end time quickly.
               </p>
             </div>
 
