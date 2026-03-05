@@ -1,5 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Avatar, Button, Empty, Input, Spin, Tag, Typography } from "antd";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Avatar, Button, Empty, Input, Tag, Typography } from "antd";
 import {
   ClockCircleOutlined,
   PlusOutlined,
@@ -14,7 +20,7 @@ import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 type Sender = "user" | "bot";
 
@@ -53,6 +59,7 @@ const AIAssistantPage: React.FC = () => {
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -134,7 +141,7 @@ const AIAssistantPage: React.FC = () => {
         const botMessage: ChatMessage = {
           id: createId(),
           sender: "bot",
-          text: "Xin lỗi, hiện tại AI Assistant đang gặp sự cố. Vui lòng thử lại sau.",
+          text: "Sorry, I'm currently experiencing some issues. Please try again later.",
           createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, botMessage]);
@@ -148,6 +155,14 @@ const AIAssistantPage: React.FC = () => {
   const handleQuickAction = (prompt: string) => {
     handleSend(prompt);
   };
+
+  useEffect(() => {
+    if (!messagesEndRef.current) return;
+    messagesEndRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
+  }, [messages, isSending]);
 
   const renderMessage = (message: ChatMessage) => {
     const isUser = message.sender === "user";
@@ -299,7 +314,7 @@ const AIAssistantPage: React.FC = () => {
 
       {/* Right: Chat area */}
       <div className="col-span-9 flex flex-col">
-        <div className="flex-1 rounded-2xl bg-gray-50 border border-gray-200 shadow-sm p-4 flex flex-col">
+        <div className="flex-1 rounded-2xl bg-gray-50 border border-gray-200 shadow-sm p-4 flex flex-col max-h-[70vh] overflow-hidden">
           {/* Top: current summary */}
           {selectedSession && (
             <div className="mb-4">
@@ -308,10 +323,6 @@ const AIAssistantPage: React.FC = () => {
                   AI Assistant
                 </Title>
               </div>
-              <Paragraph type="secondary" className="mb-0 text-sm">
-                I can help you find and book study rooms based on your capacity,
-                time and location preferences.
-              </Paragraph>
             </div>
           )}
 
@@ -325,11 +336,29 @@ const AIAssistantPage: React.FC = () => {
               messages.map((m) => renderMessage(m))
             )}
             {isSending && (
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <Spin size="small" />
-                <span>AI Assistant is thinking...</span>
+              <div className="flex mb-4 justify-start">
+                <div className="flex items-end gap-2 flex-row">
+                  <Avatar
+                    size={32}
+                    style={{
+                      backgroundColor: "#e5e7eb",
+                      color: "#111827",
+                      fontSize: 12,
+                    }}
+                  >
+                    <RobotOutlined />
+                  </Avatar>
+                  <div className="max-w-xs rounded-2xl px-4 py-2 shadow-sm text-sm leading-relaxed bg-white text-gray-800 border border-gray-100 rounded-bl-none">
+                    <span className="typing-dots">
+                      <span />
+                      <span />
+                      <span />
+                    </span>
+                  </div>
+                </div>
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Suggestions list */}

@@ -18,8 +18,10 @@ const EditProfilePage = React.lazy(
   () => import("../pages/Profile/EditProfile"),
 );
 const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
+const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
 
 // Error boundary component cho routes
+// eslint-disable-next-line react-refresh/only-export-components
 const ErrorBoundary: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -38,6 +40,7 @@ const ErrorBoundary: React.FC = () => {
 };
 
 // Loading component cho lazy loading
+// eslint-disable-next-line react-refresh/only-export-components
 const PageLoading: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -50,6 +53,7 @@ const PageLoading: React.FC = () => {
 };
 
 // Wrapper component với Suspense
+// eslint-disable-next-line react-refresh/only-export-components
 const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -147,6 +151,14 @@ export const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <AIAssistantPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.NOTIFICATIONS,
+        element: (
+          <SuspenseWrapper>
+            <NotificationsPage />
           </SuspenseWrapper>
         ),
       },

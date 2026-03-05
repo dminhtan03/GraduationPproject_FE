@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { Button, Input } from "antd";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Avatar, Button, Input } from "antd";
 import {
   CloseOutlined,
   MessageOutlined,
@@ -8,6 +8,9 @@ import {
 } from "@ant-design/icons";
 import { aiService } from "../../services/aiService";
 import type { AiChatResponseDto } from "../../types/api";
+import type { UserProfile } from "../../types";
+import { api } from "../../services/api";
+import { API_ENDPOINTS } from "../../constants/endpoints";
 
 type Sender = "user" | "bot";
 
@@ -26,6 +29,8 @@ export const AiChatWidget: React.FC = () => {
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [hasGreeted, setHasGreeted] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isOpen || hasGreeted) return;
@@ -40,6 +45,46 @@ export const AiChatWidget: React.FC = () => {
     ]);
     setHasGreeted(true);
   }, [isOpen, hasGreeted]);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await api.get<UserProfile | { data: UserProfile }>(
+          API_ENDPOINTS.AUTH.PROFILE,
+        );
+        const raw = res.data;
+        const nested = (raw as { data?: UserProfile }).data;
+        const userData: UserProfile | null = nested || (raw as UserProfile);
+        setProfile(userData || null);
+      } catch {
+        setProfile(null);
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  let userInitials = "U";
+  if (profile) {
+    if (profile.firstName && profile.lastName) {
+      userInitials = `${profile.firstName[0] ?? ""}${
+        profile.lastName[0] ?? ""
+      }`.toUpperCase();
+    } else if (profile.firstName) {
+      userInitials = profile.firstName[0].toUpperCase();
+    } else if (profile.email) {
+      userInitials = profile.email[0].toUpperCase();
+    }
+  }
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }
+  }, [messages, isSending, isOpen]);
 
   const handleSend = useCallback(
     async (overrideText?: string) => {
@@ -91,7 +136,7 @@ export const AiChatWidget: React.FC = () => {
   return (
     <>
       {isOpen && (
-        <div className="fixed bottom-24 right-4 md:right-6 w-80 md:w-96 bg-white rounded-2xl shadow-xl border border-gray-200 z-50 flex flex-col overflow-hidden">
+        <div className="fixed bottom-24 right-4 md:right-6 w-80 md:w-96 max-h-[70vh] bg-white rounded-2xl shadow-xl border border-gray-200 z-50 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-2 bg-orange-500 text-white">
             <div className="flex items-center gap-2">
@@ -129,18 +174,58 @@ export const AiChatWidget: React.FC = () => {
                     }`}
                   >
                     <div
-                      className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${
-                        isUser
-                          ? "bg-orange-500 text-white rounded-br-none"
-                          : "bg-white text-gray-800 border border-gray-100 rounded-bl-none"
+                      className={`flex items-end gap-2 ${
+                        isUser ? "flex-row-reverse" : "flex-row"
                       }`}
                     >
-                      {m.text}
+                      <Avatar
+                        size={24}
+                        style={{
+                          backgroundColor: isUser ? "#f97316" : "#e5e7eb",
+                          color: isUser ? "#ffffff" : "#111827",
+                          fontSize: 11,
+                        }}
+                      >
+                        {isUser ? userInitials : <RobotOutlined />}
+                      </Avatar>
+                      <div
+                        className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${
+                          isUser
+                            ? "bg-orange-500 text-white rounded-br-none"
+                            : "bg-white text-gray-800 border border-gray-100 rounded-bl-none"
+                        }`}
+                      >
+                        {m.text}
+                      </div>
                     </div>
                   </div>
                 );
               })
             )}
+            {isSending && (
+              <div className="flex mb-2 justify-start">
+                <div className="flex items-end gap-2 flex-row">
+                  <Avatar
+                    size={24}
+                    style={{
+                      backgroundColor: "#e5e7eb",
+                      color: "#111827",
+                      fontSize: 11,
+                    }}
+                  >
+                    <RobotOutlined />
+                  </Avatar>
+                  <div className="max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm bg-white text-gray-800 border border-gray-100 rounded-bl-none">
+                    <span className="typing-dots">
+                      <span />
+                      <span />
+                      <span />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Input */}

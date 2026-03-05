@@ -72,6 +72,28 @@ export interface WebSocketMessage {
   timestamp: string;
 }
 
+// ===== NOTIFICATIONS =====
+
+export type NotificationCategory =
+  | "system"
+  | "ai"
+  | "booking"
+  | "batch"
+  | "other";
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  category?: NotificationCategory;
+  read?: boolean;
+  /** Optional progress for long-running jobs (0-100) */
+  progress?: number;
+  /** Optional short status label, e.g. "In progress", "Completed" */
+  statusText?: string;
+}
+
 // ===== ROOM (Campus Room Inventory) =====
 export type RoomStatus = "AVAILABLE" | "OCCUPIED";
 

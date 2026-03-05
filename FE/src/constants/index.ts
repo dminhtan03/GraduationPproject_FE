@@ -20,6 +20,7 @@ export const ROUTES = {
   BOOK_ROOM: "/book-room/:roomId",
   MY_BOOKINGS: "/my-bookings",
   AI_ASSISTANT: "/ai-assistant",
+  NOTIFICATIONS: "/notifications",
   PROFILE: "/profile",
   PROFILE_EDIT: "/profile/edit",
   LOG_OUT: "/logout",

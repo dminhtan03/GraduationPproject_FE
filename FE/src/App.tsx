@@ -6,13 +6,16 @@ import { RouterProvider } from "react-router-dom";
 import { store } from "./store";
 import { router } from "./router/AppRouter";
 import { ErrorBoundary } from "./components/common";
+import { NotificationProvider } from "./context/NotificationContext";
 
 // Main App Component
 function App() {
   return (
     <ErrorBoundary>
       <Provider store={store}>
-        <RouterProvider router={router} />
+        <NotificationProvider>
+          <RouterProvider router={router} />
+        </NotificationProvider>
       </Provider>
     </ErrorBoundary>
   );
