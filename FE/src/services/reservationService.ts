@@ -53,6 +53,39 @@ const normalizeReservation = (item: any): Reservation => {
   };
 };
 
+const shouldTryFallback = (error: unknown): boolean => {
+  const apiError = error as ApiError;
+  return apiError?.status === 404 || apiError?.status === 405;
+};
+
+const postWithFallback = async (
+  primaryUrl: string,
+  fallbackUrls: string[],
+  payload?: Record<string, any>,
+) => {
+  try {
+    return await api.post(primaryUrl, payload);
+  } catch (error) {
+    if (!shouldTryFallback(error)) {
+      throw error;
+    }
+
+    let lastError = error;
+    for (const fallbackUrl of fallbackUrls) {
+      try {
+        return await api.post(fallbackUrl, payload);
+      } catch (fallbackError) {
+        lastError = fallbackError;
+        if (!shouldTryFallback(fallbackError)) {
+          throw fallbackError;
+        }
+      }
+    }
+
+    throw lastError;
+  }
+};
+
 export const reservationService = {
   async createReservation(payload: CreateReservationRequest) {
     return api.post(API_ENDPOINTS.ROOMS.BOOK, {
@@ -143,5 +176,33 @@ export const reservationService = {
       page: Number(page) || 0,
       size: Number(size) || requestedSize,
     };
+  },
+
+  async checkInBooking(reservationId: string) {
+    const normalizedId = String(reservationId);
+    const checkInUrl = API_ENDPOINTS.ROOMS.CHECK_IN.replace(":id", normalizedId);
+
+    return postWithFallback(
+      checkInUrl,
+      [
+        `${API_ENDPOINTS.ROOMS.BOOK}/${normalizedId}/check-in`,
+        `${API_ENDPOINTS.ROOMS.BOOK}/check-in/${normalizedId}`,
+      ],
+      { reservationId: normalizedId },
+    );
+  },
+
+  async cancelBooking(reservationId: string) {
+    const normalizedId = String(reservationId);
+    const cancelUrl = API_ENDPOINTS.ROOMS.CANCEL_BOOKING.replace(":id", normalizedId);
+
+    return postWithFallback(
+      cancelUrl,
+      [
+        `${API_ENDPOINTS.ROOMS.BOOK}/${normalizedId}/cancel`,
+        `${API_ENDPOINTS.ROOMS.BOOK}/cancel/${normalizedId}`,
+      ],
+      { reservationId: normalizedId },
+    );
   },
 };

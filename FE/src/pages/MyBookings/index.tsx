@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Typography, Empty, Table, Tag, Alert } from "antd";
+import { Typography, Empty, Table, Tag, Alert, Button, Popconfirm, Space, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TablePaginationConfig } from "antd/es/table";
 import { CalendarOutlined } from "@ant-design/icons";
@@ -22,8 +22,19 @@ const getStatusColor = (status: string) => {
   const normalized = status.toUpperCase();
   if (normalized === "APPROVED" || normalized === "COMPLETED") return "green";
   if (normalized === "PENDING") return "gold";
+  if (normalized === "CHECKED_IN") return "blue";
   if (normalized === "REJECTED" || normalized === "CANCELLED") return "red";
   return "default";
+};
+
+const canCheckIn = (status: string) => {
+  const normalized = status.toUpperCase();
+  return normalized === "APPROVED";
+};
+
+const canCancel = (status: string) => {
+  const normalized = status.toUpperCase();
+  return !["CANCELLED", "COMPLETED", "REJECTED"].includes(normalized);
 };
 
 const MyBookingsPage: React.FC = () => {
@@ -34,6 +45,7 @@ const MyBookingsPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const [total, setTotal] = useState(0);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   const loadBookings = useCallback(async (nextPage = page, nextSize = pageSize) => {
     setLoading(true);
@@ -59,6 +71,36 @@ const MyBookingsPage: React.FC = () => {
   useEffect(() => {
     loadBookings(1, pageSize);
   }, [loadBookings]);
+
+  const handleCheckIn = async (reservationId?: string) => {
+    if (!reservationId) return;
+
+    setActionLoadingId(reservationId);
+    try {
+      await reservationService.checkInBooking(reservationId);
+      message.success("Check-in thành công");
+      await loadBookings(page, pageSize);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "Không thể check-in booking");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleCancelBooking = async (reservationId?: string) => {
+    if (!reservationId) return;
+
+    setActionLoadingId(reservationId);
+    try {
+      await reservationService.cancelBooking(reservationId);
+      message.success("Hủy booking thành công");
+      await loadBookings(page, pageSize);
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : "Không thể hủy booking");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   const handleTableChange = (pagination: TablePaginationConfig) => {
     const nextPage = pagination.current || 1;
@@ -96,10 +138,60 @@ const MyBookingsPage: React.FC = () => {
       title: "STATUS",
       dataIndex: "status",
       key: "status",
-      width: "20%",
+      width: "14%",
       render: (status: string | undefined) => (
         <Tag color={getStatusColor(status || "")}>{status || "-"}</Tag>
       ),
+    },
+    {
+      title: "ACTIONS",
+      key: "actions",
+      width: "20%",
+      render: (_: unknown, record: Reservation) => {
+        const status = record.status || "";
+        const isLoading = actionLoadingId === record.id;
+
+        return (
+          <Space>
+            <Popconfirm
+              title="Xác nhận check-in?"
+              description="Bạn sẽ check-in cho booking này ngay bây giờ."
+              onConfirm={() => handleCheckIn(record.id)}
+              okText="Check-in"
+              cancelText="Đóng"
+              disabled={!record.id || !canCheckIn(status)}
+            >
+              <Button
+                type="primary"
+                size="small"
+                loading={isLoading && canCheckIn(status)}
+                disabled={!record.id || !canCheckIn(status)}
+              >
+                Check-in
+              </Button>
+            </Popconfirm>
+
+            <Popconfirm
+              title="Xác nhận hủy booking?"
+              description="Thao tác này không thể hoàn tác."
+              onConfirm={() => handleCancelBooking(record.id)}
+              okText="Hủy booking"
+              cancelText="Đóng"
+              okButtonProps={{ danger: true }}
+              disabled={!record.id || !canCancel(status)}
+            >
+              <Button
+                danger
+                size="small"
+                loading={isLoading && canCancel(status)}
+                disabled={!record.id || !canCancel(status)}
+              >
+                Cancel
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
