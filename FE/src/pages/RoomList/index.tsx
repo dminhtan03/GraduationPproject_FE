@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Typography, Table, Alert } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +8,7 @@ import { ROUTES } from "../../constants";
 
 const { Title, Text } = Typography;
 
-type FilterType = "all" | "available" | "large";
+type FilterType = "all" | "available" | "unavailable";
 
 const PAGE_SIZE = 10;
 
@@ -26,14 +26,14 @@ const DashboardPage: React.FC = () => {
     setError(null);
     try {
       const res = await roomService.getRooms({
-        page,
-        size: PAGE_SIZE,
-        status: filter === "available" ? "AVAILABLE" : undefined,
-        minCapacity: filter === "large" ? 20 : undefined,
+        page: 0,
+        size: 1000,
+        status: undefined,
+        minCapacity: undefined,
       });
 
       setRooms(res.items);
-      setTotal(res.total);
+      setTotal(res.items.length);
     } catch (e: any) {
       const message =
         e && typeof e === "object" && typeof e.message === "string"
@@ -45,7 +45,7 @@ const DashboardPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, filter]);
+  }, []);
 
   useEffect(() => {
     loadRooms();
@@ -129,7 +129,17 @@ const DashboardPage: React.FC = () => {
 
   // Search state for table
   const [tableSearch, setTableSearch] = useState("");
-  const filteredRooms = rooms.filter(
+  const statusFilteredRooms = useMemo(() => {
+    if (filter === "available") {
+      return rooms.filter((r) => r.status === "AVAILABLE");
+    }
+    if (filter === "unavailable") {
+      return rooms.filter((r) => r.status !== "AVAILABLE");
+    }
+    return rooms;
+  }, [rooms, filter]);
+
+  const filteredRooms = statusFilteredRooms.filter(
     (r) =>
       r.roomName.toLowerCase().includes(tableSearch.trim().toLowerCase()) ||
       (r.building &&
@@ -141,8 +151,9 @@ const DashboardPage: React.FC = () => {
     (page + 1) * PAGE_SIZE,
   );
 
-  const start = total === 0 ? 0 : page * PAGE_SIZE + 1;
-  const end = Math.min((page + 1) * PAGE_SIZE, total);
+  const totalFiltered = filteredRooms.length;
+  const start = totalFiltered === 0 ? 0 : page * PAGE_SIZE + 1;
+  const end = Math.min((page + 1) * PAGE_SIZE, totalFiltered);
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
@@ -167,7 +178,7 @@ const DashboardPage: React.FC = () => {
       {/* Filter + Search */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex gap-3">
-          {["all", "available", "large"].map((f) => (
+          {["all", "available", "unavailable"].map((f) => (
             <button
               key={f}
               onClick={() => {
@@ -182,10 +193,10 @@ const DashboardPage: React.FC = () => {
                 }`}
             >
               {f === "all"
-                ? "All Rooms"
+                ? "All"
                 : f === "available"
-                  ? "Available Only"
-                  : "Large (20+)"}
+                  ? "Available"
+                  : "Unavailable"}
             </button>
           ))}
         </div>
@@ -235,7 +246,7 @@ const DashboardPage: React.FC = () => {
             &lt;
           </button>
           <button
-            disabled={end >= total}
+            disabled={end >= totalFiltered}
             onClick={() => setPage((p) => p + 1)}
             className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40"
           >

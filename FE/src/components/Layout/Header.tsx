@@ -211,7 +211,7 @@ const Header: React.FC = () => {
             onClick={handleBellClick}
           />
           {unreadCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 h-4 min-w-[16px] rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center leading-none px-[3px]">
+            <span className="absolute top-0 right-0 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white border border-white shadow-sm px-0.5">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
@@ -288,51 +288,88 @@ const Header: React.FC = () => {
                 You have no notifications yet.
               </div>
             ) : (
-              latestNotifications.map((n) => (
+              latestNotifications.map((n, index) => (
                 <div
                   key={n.id}
-                  className="flex items-start gap-2.5 mb-2.5 last:mb-0 rounded-xl bg-white px-3 py-2.5 shadow-sm border border-gray-100"
+                  className={
+                    index === 0 && n.category === "batch"
+                      ? "mb-2.5 last:mb-0 rounded-2xl bg-orange-50 border border-orange-100 shadow-sm px-4 py-3"
+                      : "flex items-start gap-3 mb-2.5 last:mb-0 rounded-xl bg-white px-3 py-2.5 shadow-sm border border-gray-100"
+                  }
                 >
-                  <div
-                    className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center text-xs ${
-                      n.category === "batch"
-                        ? "bg-orange-100 text-orange-500"
-                        : n.category === "ai"
-                          ? "bg-blue-100 text-blue-500"
-                          : n.category === "booking"
-                            ? "bg-green-100 text-green-500"
-                            : "bg-gray-100 text-gray-500"
-                    }`}
-                  >
-                    {n.category === "batch" && <span>↻</span>}
-                    {n.category === "ai" && <span>🤖</span>}
-                    {n.category === "booking" && <span>✓</span>}
-                    {!n.category && <span>•</span>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="font-medium text-gray-900 truncate">
-                        {n.title}
-                      </p>
-                    </div>
-                    <p className="text-xs text-gray-600 mb-0.5 line-clamp-2">
-                      {n.message}
-                    </p>
-                    <div className="flex items-center justify-between text-[11px] text-gray-400">
-                      <span>
-                        {new Date(n.createdAt).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
+                  {index === 0 && n.category === "batch" ? (
+                    <>
+                      <div className="flex items-start gap-3 mb-2">
+                        <div className="mt-1 w-8 h-8 rounded-full flex items-center justify-center text-xs bg-orange-100 text-orange-500">
+                          ↻
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm">
+                            {n.title}
+                          </p>
+                          <p className="text-xs text-gray-600 truncate">
+                            {n.message}
+                          </p>
+                        </div>
+                      </div>
                       {typeof n.progress === "number" && (
-                        <span>
-                          {`${Math.min(100, Math.max(0, n.progress)).toFixed(0)}% Complete`}
-                        </span>
+                        <div className="mt-1">
+                          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-orange-400"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  Math.max(0, n.progress),
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500">
+                            <span>{`${Math.min(
+                              100,
+                              Math.max(0, n.progress),
+                            ).toFixed(0)}% Complete`}</span>
+                            {n.statusText && (
+                              <span className="text-orange-500 font-medium">
+                                {n.statusText}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       )}
-                      {n.statusText && <span>{n.statusText}</span>}
-                    </div>
-                  </div>
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center text-xs ${
+                          n.category === "ai"
+                            ? "bg-blue-100 text-blue-500"
+                            : n.category === "booking"
+                              ? "bg-green-100 text-green-500"
+                              : "bg-gray-100 text-gray-500"
+                        }`}
+                      >
+                        {n.category === "ai" && <span>🤖</span>}
+                        {n.category === "booking" && <span>✓</span>}
+                        {!n.category && <span>•</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 text-sm">
+                          {n.title}
+                        </p>
+                        <p className="text-xs text-gray-600 mb-0.5">
+                          {n.message}
+                        </p>
+                        <span className="text-[11px] text-gray-400">
+                          {new Date(n.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))
             )}

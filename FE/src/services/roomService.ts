@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type { Room, RoomStatus } from "../types";
+import type { MapRoomStatus } from "../utils";
 import { API_ENDPOINTS, buildUrl } from "../constants/endpoints";
 
 export interface GetRoomParams {
@@ -27,6 +28,20 @@ export interface RoomsMapBuilding {
 
 export interface RoomsMapResponse {
   buildingResponse: RoomsMapBuilding[];
+}
+
+export interface RoomStatusRequest {
+  buildingId: string;
+  floorId: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface RoomStatusItem {
+  roomId: string;
+  locationCode: string;
+  status: MapRoomStatus;
+  score: number | null;
 }
 
 // Flatten rooms from buildingResponse -> floors -> rooms
@@ -93,6 +108,27 @@ export const roomService = {
     const res = await api.get<any>("/api/v1/dashboard/rooms-map");
     const data = res.data?.data || res.data || {};
     return data as RoomsMapResponse;
+  },
+
+  // Tìm phòng TRỐNG theo khoảng thời gian (BE: /api/v1/rooms/search)
+  async searchAvailableRooms(
+    payload: RoomStatusRequest,
+  ): Promise<RoomStatusItem[]> {
+    const res = await api.post<any>("/api/v1/rooms/search", payload);
+
+    const list = res.data?.data || res.data || [];
+
+    const arr = Array.isArray(list) ? list : [];
+
+    return arr.map((item: any) => ({
+      roomId: item.seatId ?? item.roomId,
+      locationCode: item.locationCode,
+      status: (item.status as MapRoomStatus) ?? "AVAILABLE",
+      score:
+        typeof item.score === "number" && !Number.isNaN(item.score)
+          ? item.score
+          : null,
+    }));
   },
 
   async getRoomDetail(roomId: string): Promise<any> {

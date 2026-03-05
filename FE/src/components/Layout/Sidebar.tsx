@@ -6,10 +6,6 @@ import {
   AppstoreOutlined,
   BankOutlined,
   CalendarOutlined,
-  DesktopOutlined,
-  TeamOutlined,
-  AuditOutlined,
-  FolderOutlined,
 } from "@ant-design/icons";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -45,28 +41,10 @@ const Sidebar: React.FC = () => {
       icon: <CalendarOutlined />,
       label: "My Bookings",
     },
-    {
-      key: "categories",
-      icon: <FolderOutlined />,
-      label: "CATEGORIES",
-      children: [
-        { key: "category-tech", icon: <DesktopOutlined />, label: "Tech Labs" },
-        { key: "category-pods", icon: <TeamOutlined />, label: "Study Pods" },
-        {
-          key: "category-auditoriums",
-          icon: <AuditOutlined />,
-          label: "Auditoriums",
-        },
-      ],
-    },
   ];
 
   const handleMenuClick = ({ key }: { key: string }) => {
-    if (key.startsWith("category-")) {
-      navigate(ROUTES.ROOM_LIST, { state: { category: key } });
-      return;
-    }
-    if (key !== "categories") navigate(key);
+    navigate(key);
   };
 
   const path = location.pathname;
