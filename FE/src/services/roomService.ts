@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type { Room, RoomStatus } from "../types";
+import type { MapRoomStatus } from "../utils";
 import { API_ENDPOINTS, buildUrl } from "../constants/endpoints";
 
 export interface GetRoomParams {
@@ -29,6 +30,20 @@ export interface RoomsMapResponse {
   buildingResponse: RoomsMapBuilding[];
 }
 
+export interface RoomStatusRequest {
+  buildingId: string;
+  floorId: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface RoomStatusItem {
+  roomId: string;
+  locationCode: string;
+  status: MapRoomStatus;
+  score: number | null;
+}
+
 // Flatten rooms from buildingResponse -> floors -> rooms
 function flattenRooms(data: any, params: GetRoomParams): Room[] {
   if (!data || !Array.isArray(data.buildingResponse)) return [];
@@ -54,8 +69,10 @@ function flattenRooms(data: any, params: GetRoomParams): Room[] {
   // Filter by status
   if (params.status) rooms = rooms.filter((r) => r.status === params.status);
   // Filter by minCapacity
-  if (params.minCapacity)
-    rooms = rooms.filter((r) => r.slot >= params.minCapacity);
+  const minCapacity = params.minCapacity;
+  if (typeof minCapacity === "number") {
+    rooms = rooms.filter((r) => r.slot >= minCapacity);
+  }
   return rooms;
 }
 
@@ -93,8 +110,31 @@ export const roomService = {
     return data as RoomsMapResponse;
   },
 
+  // Tìm phòng TRỐNG theo khoảng thời gian (BE: /api/v1/rooms/search)
+  async searchAvailableRooms(
+    payload: RoomStatusRequest,
+  ): Promise<RoomStatusItem[]> {
+    const res = await api.post<any>("/api/v1/rooms/search", payload);
+
+    const list = res.data?.data || res.data || [];
+
+    const arr = Array.isArray(list) ? list : [];
+
+    return arr.map((item: any) => ({
+      roomId: item.seatId ?? item.roomId,
+      locationCode: item.locationCode,
+      status: (item.status as MapRoomStatus) ?? "AVAILABLE",
+      score:
+        typeof item.score === "number" && !Number.isNaN(item.score)
+          ? item.score
+          : null,
+    }));
+  },
+
   async getRoomDetail(roomId: string): Promise<any> {
-    const res = await api.get<any>(buildUrl(API_ENDPOINTS.ROOMS.DETAIL, { id: roomId }));
+    const res = await api.get<any>(
+      buildUrl(API_ENDPOINTS.ROOMS.DETAIL, { id: roomId }),
+    );
     return res.data?.data || res.data;
   },
 };

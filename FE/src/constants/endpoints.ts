@@ -46,6 +46,11 @@ export const API_ENDPOINTS = {
     TODOS: "/todos",
     USERS: "/users",
   },
+  // AI assistant endpoints
+  AI: {
+    CHAT: "/api/v1/ai/chat",
+    RESERVE: "/api/v1/ai/reserve",
+  },
 } as const;
 
 // Helper function để build URL với params
