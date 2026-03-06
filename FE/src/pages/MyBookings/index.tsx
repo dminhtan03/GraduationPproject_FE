@@ -10,26 +10,48 @@ import type { Reservation } from "../../types";
 
 const { Title, Paragraph } = Typography;
 
-const formatDateTime = (value: string) => {
-  if (!value) return "-";
+const parseBookingDateTime = (value?: string) => {
+  if (!value) return null;
   const normalized = value.includes("T") ? value : value.replace(" ", "T");
   const date = new Date(normalized);
-  if (Number.isNaN(date.getTime())) return value;
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatDateTime = (value: string) => {
+  if (!value) return "-";
+  const date = parseBookingDateTime(value);
+  if (!date) return value;
   return date.toLocaleString();
 };
 
 const getStatusColor = (status: string) => {
   const normalized = status.toUpperCase();
-  if (normalized === "APPROVED" || normalized === "COMPLETED") return "green";
   if (normalized === "PENDING") return "gold";
-  if (normalized === "CHECKED_IN") return "blue";
-  if (normalized === "REJECTED" || normalized === "CANCELLED") return "red";
+  if (normalized === "APPROVED") return "green";
+  if (normalized === "IN_USE" || normalized === "CHECKED_IN") return "blue";
+  if (normalized === "COMPLETED") return "cyan";
+  if (normalized === "CANCELLED") return "red";
+  if (normalized === "REJECTED") return "volcano";
   return "default";
 };
 
-const canCheckIn = (status: string) => {
+const isValidDate = (value?: string) => {
+  return parseBookingDateTime(value) !== null;
+};
+
+const canCheckIn = (status: string, startTime?: string, endTime?: string) => {
   const normalized = status.toUpperCase();
-  return normalized === "APPROVED";
+  if (["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(normalized)) {
+    return false;
+  }
+  if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
+
+  const now = new Date();
+  const start = parseBookingDateTime(startTime);
+  const end = parseBookingDateTime(endTime);
+
+  if (!start || !end) return false;
+  return now >= start && now <= end;
 };
 
 const canCancel = (status: string) => {
@@ -72,8 +94,14 @@ const MyBookingsPage: React.FC = () => {
     loadBookings(1, pageSize);
   }, [loadBookings]);
 
-  const handleCheckIn = async (reservationId?: string) => {
+  const handleCheckIn = async (record: Reservation) => {
+    const reservationId = record.id;
     if (!reservationId) return;
+
+    if (!canCheckIn(record.status || "", record.startTime, record.endTime)) {
+      message.warning("Chỉ được check-in trong khoảng thời gian đã đặt phòng.");
+      return;
+    }
 
     setActionLoadingId(reservationId);
     try {
@@ -113,20 +141,27 @@ const MyBookingsPage: React.FC = () => {
       title: "LOCATION CODE",
       dataIndex: "locationCode",
       key: "locationCode",
-      width: "20%",
+      width: "17%",
+      render: (value: string | undefined) => value || "-",
+    },
+    {
+      title: "FLOOR",
+      dataIndex: "floor",
+      key: "floor",
+      width: "10%",
       render: (value: string | undefined) => value || "-",
     },
     {
       title: "ADDRESS",
       dataIndex: "address",
       key: "address",
-      width: "26%",
+      width: "22%",
       render: (value: string | undefined) => value || "-",
     },
     {
       title: "TIME",
       key: "time",
-      width: "34%",
+      width: "24%",
       render: (_: unknown, record: Reservation) => (
         <div className="text-xs">
           <div>From: {formatDateTime(record.startTime || "")}</div>
@@ -138,7 +173,7 @@ const MyBookingsPage: React.FC = () => {
       title: "STATUS",
       dataIndex: "status",
       key: "status",
-      width: "14%",
+      width: "11%",
       render: (status: string | undefined) => (
         <Tag color={getStatusColor(status || "")}>{status || "-"}</Tag>
       ),
@@ -150,22 +185,23 @@ const MyBookingsPage: React.FC = () => {
       render: (_: unknown, record: Reservation) => {
         const status = record.status || "";
         const isLoading = actionLoadingId === record.id;
+        const checkInEnabled = canCheckIn(status, record.startTime, record.endTime);
 
         return (
           <Space>
             <Popconfirm
               title="Xác nhận check-in?"
-              description="Bạn sẽ check-in cho booking này ngay bây giờ."
-              onConfirm={() => handleCheckIn(record.id)}
+              description="Chỉ check-in được trong khoảng thời gian đã đặt phòng."
+              onConfirm={() => handleCheckIn(record)}
               okText="Check-in"
               cancelText="Đóng"
-              disabled={!record.id || !canCheckIn(status)}
+              disabled={!record.id || !checkInEnabled}
             >
               <Button
                 type="primary"
                 size="small"
-                loading={isLoading && canCheckIn(status)}
-                disabled={!record.id || !canCheckIn(status)}
+                loading={isLoading && checkInEnabled}
+                disabled={!record.id || !checkInEnabled}
               >
                 Check-in
               </Button>

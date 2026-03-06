@@ -42,6 +42,12 @@ const normalizeReservation = (item: any): Reservation => {
       item?.roomCode ??
       item?.roomName ??
       undefined,
+    floor:
+      item?.floor ??
+      item?.floorName ??
+      item?.floorInfo ??
+      item?.roomFloor ??
+      undefined,
     address:
       item?.address ??
       item?.buildingAddress ??
@@ -58,13 +64,13 @@ const shouldTryFallback = (error: unknown): boolean => {
   return apiError?.status === 404 || apiError?.status === 405;
 };
 
-const postWithFallback = async (
+const putWithFallback = async (
   primaryUrl: string,
   fallbackUrls: string[],
   payload?: Record<string, any>,
 ) => {
   try {
-    return await api.post(primaryUrl, payload);
+    return await api.put(primaryUrl, payload);
   } catch (error) {
     if (!shouldTryFallback(error)) {
       throw error;
@@ -73,7 +79,7 @@ const postWithFallback = async (
     let lastError = error;
     for (const fallbackUrl of fallbackUrls) {
       try {
-        return await api.post(fallbackUrl, payload);
+        return await api.put(fallbackUrl, payload);
       } catch (fallbackError) {
         lastError = fallbackError;
         if (!shouldTryFallback(fallbackError)) {
@@ -182,11 +188,11 @@ export const reservationService = {
     const normalizedId = String(reservationId);
     const checkInUrl = API_ENDPOINTS.ROOMS.CHECK_IN.replace(":id", normalizedId);
 
-    return postWithFallback(
+    return putWithFallback(
       checkInUrl,
       [
-        `${API_ENDPOINTS.ROOMS.BOOK}/${normalizedId}/check-in`,
         `${API_ENDPOINTS.ROOMS.BOOK}/check-in/${normalizedId}`,
+        `${API_ENDPOINTS.ROOMS.BOOK}/${normalizedId}/check-in`,
       ],
       { reservationId: normalizedId },
     );
@@ -196,11 +202,11 @@ export const reservationService = {
     const normalizedId = String(reservationId);
     const cancelUrl = API_ENDPOINTS.ROOMS.CANCEL_BOOKING.replace(":id", normalizedId);
 
-    return postWithFallback(
+    return putWithFallback(
       cancelUrl,
       [
-        `${API_ENDPOINTS.ROOMS.BOOK}/${normalizedId}/cancel`,
         `${API_ENDPOINTS.ROOMS.BOOK}/cancel/${normalizedId}`,
+        `${API_ENDPOINTS.ROOMS.BOOK}/${normalizedId}/cancel`,
       ],
       { reservationId: normalizedId },
     );

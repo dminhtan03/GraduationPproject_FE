@@ -15,18 +15,43 @@ interface LocationState {
 type BookingStep = "form" | "review";
 
 const pad = (value: number) => value.toString().padStart(2, "0");
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => pad(index));
+const MINUTE_OPTIONS = ["00", "10", "20", "30", "40", "50"];
 
-const formatDateTimeLocal = (date: Date) => {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+const formatDateInput = (date: Date) => {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 
-const addMinutesToDateTimeLocal = (startValue: string, minutesToAdd: number) => {
-  const startDate = new Date(startValue);
-  if (Number.isNaN(startDate.getTime())) return "";
+const roundToTenMinutes = (timeValue: string) => {
+  const [hourRaw, minuteRaw] = timeValue.split(":");
+  let hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
 
-  const endDate = new Date(startDate);
-  endDate.setMinutes(endDate.getMinutes() + minutesToAdd);
-  return formatDateTimeLocal(endDate);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return timeValue;
+  const roundedMinute = Math.round(minute / 10) * 10;
+
+  if (roundedMinute === 60) {
+    hour += 1;
+    if (hour >= 24) hour = 23;
+    return `${pad(hour)}:00`;
+  }
+
+  return `${pad(hour)}:${pad(roundedMinute)}`;
+};
+
+const combineDateTime = (dateValue: string, timeValue: string) => {
+  if (!dateValue || !timeValue) return "";
+  return `${dateValue}T${timeValue}`;
+};
+
+const getClockHour = (clock: string) => {
+  if (!clock.includes(":")) return "";
+  return clock.split(":")[0] || "";
+};
+
+const getClockMinute = (clock: string) => {
+  if (!clock.includes(":")) return "";
+  return clock.split(":")[1] || "";
 };
 
 const BookRoomPage: React.FC = () => {
@@ -36,9 +61,10 @@ const BookRoomPage: React.FC = () => {
 
   const [step, setStep] = useState<BookingStep>("form");
   const [purpose, setPurpose] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [durationMinutes, setDurationMinutes] = useState<30 | 60>(30);
+  const [startDate, setStartDate] = useState("");
+  const [startClock, setStartClock] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [endClock, setEndClock] = useState("");
   const [attendeeCount, setAttendeeCount] = useState<number | "">("");
   const [note, setNote] = useState("");
   const [acceptedRules, setAcceptedRules] = useState(false);
@@ -46,6 +72,17 @@ const BookRoomPage: React.FC = () => {
 
   const room = (state as LocationState | null)?.room;
   const normalizedRoomId = useMemo(() => roomId || room?.id || "", [roomId, room]);
+  const minDate = useMemo(() => formatDateInput(new Date()), []);
+
+  const startTime = useMemo(
+    () => combineDateTime(startDate, roundToTenMinutes(startClock)),
+    [startDate, startClock],
+  );
+
+  const endTime = useMemo(
+    () => combineDateTime(endDate, roundToTenMinutes(endClock)),
+    [endDate, endClock],
+  );
 
   const roomRules = [
     "Sau khi book phòng nếu thay đổi kế hoạch và không có nhu cầu sử dụng cần thao tác hủy phòng trước thời gian đăng ký sử dụng / If plans change and the room is not needed, please cancel the booking before the scheduled time.",
@@ -66,7 +103,16 @@ const BookRoomPage: React.FC = () => {
       return false;
     }
 
-    if (new Date(endTime) <= new Date(startTime)) {
+    const now = new Date();
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    if (start <= now) {
+      message.warning("Start time must be in the future.");
+      return false;
+    }
+
+    if (end <= start) {
       message.warning("End time must be later than start time.");
       return false;
     }
@@ -110,26 +156,6 @@ const BookRoomPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleStartTimeChange = (value: string) => {
-    setStartTime(value);
-    if (!value) {
-      setEndTime("");
-      return;
-    }
-
-    const suggestedEndTime = addMinutesToDateTimeLocal(value, durationMinutes);
-    setEndTime(suggestedEndTime);
-  };
-
-  const handleQuickDuration = (minutes: 30 | 60) => {
-    setDurationMinutes(minutes);
-    if (!startTime) {
-      message.warning("Please pick start time first.");
-      return;
-    }
-    setEndTime(addMinutesToDateTimeLocal(startTime, minutes));
   };
 
   const handleBackToForm = () => {
@@ -186,7 +212,10 @@ const BookRoomPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Purpose</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <span className="text-red-500 mr-1">*</span>
+                Purpose
+              </label>
               <input
                 value={purpose}
                 onChange={(event) => setPurpose(event.target.value)}
@@ -205,58 +234,116 @@ const BookRoomPage: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Start time</label>
-                  <input
-                    type="datetime-local"
-                    value={startTime}
-                    onChange={(event) => handleStartTimeChange(event.target.value)}
-                    step={1800}
-                    className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    disabled={loading}
-                    required
-                  />
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <span className="text-red-500 mr-1">*</span>
+                    Start date & time
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="date"
+                      value={startDate}
+                      min={minDate}
+                      onChange={(event) => setStartDate(event.target.value)}
+                      className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      disabled={loading}
+                      required
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={getClockHour(startClock)}
+                        onChange={(event) => {
+                          const nextHour = event.target.value;
+                          const currentMinute = getClockMinute(startClock) || "00";
+                          setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                        }}
+                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        disabled={loading}
+                        required
+                      >
+                        <option value="">Hour</option>
+                        {HOUR_OPTIONS.map((hour) => (
+                          <option key={hour} value={hour}>
+                            {hour}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={getClockMinute(startClock)}
+                        onChange={(event) => {
+                          const nextMinute = event.target.value;
+                          const currentHour = getClockHour(startClock) || "00";
+                          setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                        }}
+                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        disabled={loading}
+                        required
+                      >
+                        <option value="">Minute</option>
+                        {MINUTE_OPTIONS.map((minute) => (
+                          <option key={minute} value={minute}>
+                            {minute}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Quick end time</label>
-                  <div className="flex gap-2 mb-2">
-                    <button
-                      type="button"
-                      onClick={() => handleQuickDuration(30)}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${
-                        durationMinutes === 30
-                          ? "bg-orange-500 text-white border-orange-500"
-                          : "bg-white text-orange-700 border-orange-200 hover:bg-orange-50"
-                      }`}
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <span className="text-red-500 mr-1">*</span>
+                    End date & time
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="date"
+                      value={endDate}
+                      min={startDate || minDate}
+                      onChange={(event) => setEndDate(event.target.value)}
+                      className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
                       disabled={loading}
-                    >
-                      +30p
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickDuration(60)}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${
-                        durationMinutes === 60
-                          ? "bg-orange-500 text-white border-orange-500"
-                          : "bg-white text-orange-700 border-orange-200 hover:bg-orange-50"
-                      }`}
-                      disabled={loading}
-                    >
-                      +1h
-                    </button>
+                      required
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={getClockHour(endClock)}
+                        onChange={(event) => {
+                          const nextHour = event.target.value;
+                          const currentMinute = getClockMinute(endClock) || "00";
+                          setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                        }}
+                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        disabled={loading}
+                        required
+                      >
+                        <option value="">Hour</option>
+                        {HOUR_OPTIONS.map((hour) => (
+                          <option key={hour} value={hour}>
+                            {hour}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={getClockMinute(endClock)}
+                        onChange={(event) => {
+                          const nextMinute = event.target.value;
+                          const currentHour = getClockHour(endClock) || "00";
+                          setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                        }}
+                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        disabled={loading}
+                        required
+                      >
+                        <option value="">Minute</option>
+                        {MINUTE_OPTIONS.map((minute) => (
+                          <option key={minute} value={minute}>
+                            {minute}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <input
-                    type="datetime-local"
-                    value={endTime}
-                    readOnly
-                    className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-gray-50 text-gray-700"
-                    required
-                  />
                 </div>
               </div>
-
-              <p className="mt-3 text-xs text-orange-700">
-                Select start time in 30-minute slots, then choose +30p or +1h to auto-fill end time quickly.
-              </p>
             </div>
 
             <div>

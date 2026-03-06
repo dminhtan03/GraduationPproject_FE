@@ -7,6 +7,8 @@ export interface GetRoomParams {
   size: number;
   status?: RoomStatus;
   minCapacity?: number;
+  startTime?: string;
+  endTime?: string;
 }
 
 export interface RoomResponse {
@@ -67,6 +69,8 @@ export const roomService = {
         size: params.size,
         status: params.status,
         minCapacity: params.minCapacity,
+        startTime: params.startTime,
+        endTime: params.endTime,
       },
     });
 

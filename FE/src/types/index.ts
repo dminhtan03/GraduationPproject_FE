@@ -96,6 +96,8 @@ export interface CreateReservationRequest {
 export type ReservationStatus =
   | "PENDING"
   | "APPROVED"
+  | "IN_USE"
+  | "CHECKED_IN"
   | "REJECTED"
   | "CANCELLED"
   | "COMPLETED"
@@ -104,6 +106,7 @@ export type ReservationStatus =
 export interface Reservation {
   id?: string;
   locationCode?: string;
+  floor?: string;
   address?: string;
   startTime?: string;
   endTime?: string;
