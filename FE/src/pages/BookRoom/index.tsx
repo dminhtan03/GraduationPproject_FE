@@ -23,26 +23,52 @@ const formatDateInput = (date: Date) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 
-const roundToTenMinutes = (timeValue: string) => {
-  const [hourRaw, minuteRaw] = timeValue.split(":");
-  let hour = Number(hourRaw);
-  const minute = Number(minuteRaw);
-
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return timeValue;
-  const roundedMinute = Math.round(minute / 10) * 10;
-
-  if (roundedMinute === 60) {
-    hour += 1;
-    if (hour >= 24) hour = 23;
-    return `${pad(hour)}:00`;
-  }
-
-  return `${pad(hour)}:${pad(roundedMinute)}`;
-};
-
 const combineDateTime = (dateValue: string, timeValue: string) => {
   if (!dateValue || !timeValue) return "";
   return `${dateValue}T${timeValue}`;
+};
+
+const addMinutesToDateTime = (dateTimeValue: string, minutesToAdd: number) => {
+  if (!dateTimeValue) return "";
+  const baseDate = new Date(dateTimeValue);
+  if (Number.isNaN(baseDate.getTime())) return "";
+
+  const endDate = new Date(baseDate);
+  endDate.setMinutes(endDate.getMinutes() + minutesToAdd);
+
+  return `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}T${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+};
+
+const getMinStartSlot = (selectedDate: string) => {
+  if (!selectedDate) return null;
+  const now = new Date();
+  const today = formatDateInput(now);
+  if (selectedDate !== today) return null;
+
+  const nextMinuteDate = new Date(now);
+  nextMinuteDate.setMinutes(nextMinuteDate.getMinutes() + 1, 0, 0);
+
+  const roundedMinute = Math.ceil(nextMinuteDate.getMinutes() / 10) * 10;
+  if (roundedMinute === 60) {
+    nextMinuteDate.setHours(nextMinuteDate.getHours() + 1, 0, 0, 0);
+  } else {
+    nextMinuteDate.setMinutes(roundedMinute, 0, 0);
+  }
+
+  return {
+    minHour: nextMinuteDate.getHours(),
+    minMinute: nextMinuteDate.getMinutes(),
+  };
+};
+
+const isClockBeforeMinSlot = (clock: string, minSlot: { minHour: number; minMinute: number }) => {
+  const hour = Number(getClockHour(clock));
+  const minute = Number(getClockMinute(clock));
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
+
+  if (hour < minSlot.minHour) return true;
+  if (hour === minSlot.minHour && minute < minSlot.minMinute) return true;
+  return false;
 };
 
 const getClockHour = (clock: string) => {
@@ -55,6 +81,31 @@ const getClockMinute = (clock: string) => {
   return clock.split(":")[1] || "";
 };
 
+const getBookingConflictMessage = (rawMessage: string) => {
+  const normalized = rawMessage.toLowerCase();
+
+  if (
+    normalized.includes("overlap") ||
+    normalized.includes("conflict") ||
+    normalized.includes("same time") ||
+    normalized.includes("time slot")
+  ) {
+    return "Khung giờ này đã bị trùng lịch (overlap). Vui lòng chọn thời gian khác.";
+  }
+
+  if (
+    normalized.includes("1 room") ||
+    normalized.includes("one room") ||
+    normalized.includes("already booked") ||
+    normalized.includes("already have") ||
+    normalized.includes("same period")
+  ) {
+    return "Bạn đã có booking khác trong cùng khoảng thời gian. Mỗi người chỉ được giữ 1 phòng trong cùng khung giờ.";
+  }
+
+  return rawMessage;
+};
+
 const BookRoomPage: React.FC = () => {
   const navigate = useNavigate();
   const { roomId } = useParams();
@@ -64,26 +115,24 @@ const BookRoomPage: React.FC = () => {
   const [purpose, setPurpose] = useState("");
   const [startDate, setStartDate] = useState("");
   const [startClock, setStartClock] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [endClock, setEndClock] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState<30 | 60>(30);
   const [attendeeCount, setAttendeeCount] = useState<number | "">("");
   const [note, setNote] = useState("");
   const [acceptedRules, setAcceptedRules] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitErrorMessage, setSubmitErrorMessage] = useState<string | null>(null);
 
   const room = (state as LocationState | null)?.room;
   const normalizedRoomId = useMemo(() => roomId || room?.id || "", [roomId, room]);
   const minDate = useMemo(() => formatDateInput(new Date()), []);
+  const minStartSlot = useMemo(() => getMinStartSlot(startDate), [startDate]);
 
   const startTime = useMemo(
-    () => combineDateTime(startDate, roundToTenMinutes(startClock)),
+    () => combineDateTime(startDate, startClock),
     [startDate, startClock],
   );
 
-  const endTime = useMemo(
-    () => combineDateTime(endDate, roundToTenMinutes(endClock)),
-    [endDate, endClock],
-  );
+  const endTime = useMemo(() => addMinutesToDateTime(startTime, durationMinutes), [startTime, durationMinutes]);
 
   const roomRules = [
     "Sau khi book phòng nếu thay đổi kế hoạch và không có nhu cầu sử dụng cần thao tác hủy phòng trước thời gian đăng ký sử dụng / If plans change and the room is not needed, please cancel the booking before the scheduled time.",
@@ -123,6 +172,7 @@ const BookRoomPage: React.FC = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setSubmitErrorMessage(null);
 
     if (!validateBookingInput()) {
       return;
@@ -153,7 +203,10 @@ const BookRoomPage: React.FC = () => {
       message.success("Booking created successfully");
       navigate(ROUTES.MY_BOOKINGS);
     } catch (error) {
-      message.error(extractApiMessage(error, "Unable to create booking"));
+      const apiMessage = extractApiMessage(error, "Unable to create booking");
+      const displayMessage = getBookingConflictMessage(apiMessage);
+      setSubmitErrorMessage(displayMessage);
+      message.error(displayMessage);
     } finally {
       setLoading(false);
     }
@@ -186,6 +239,16 @@ const BookRoomPage: React.FC = () => {
         <span className="text-gray-300">→</span>
         <span className={step === "review" ? "text-orange-600" : "text-gray-400"}>2. Rules & confirm</span>
       </div>
+
+      {submitErrorMessage && (
+        <Alert
+          className="mt-4"
+          type="error"
+          showIcon
+          message="Không thể tạo booking"
+          description={submitErrorMessage}
+        />
+      )}
 
       <form
         onSubmit={handleSubmit}
@@ -244,7 +307,15 @@ const BookRoomPage: React.FC = () => {
                       type="date"
                       value={startDate}
                       min={minDate}
-                      onChange={(event) => setStartDate(event.target.value)}
+                      onChange={(event) => {
+                        const nextDate = event.target.value;
+                        setStartDate(nextDate);
+
+                        const nextMinSlot = getMinStartSlot(nextDate);
+                        if (nextMinSlot && startClock && isClockBeforeMinSlot(startClock, nextMinSlot)) {
+                          setStartClock("");
+                        }
+                      }}
                       className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
                       disabled={loading}
                       required
@@ -255,7 +326,21 @@ const BookRoomPage: React.FC = () => {
                         onChange={(event) => {
                           const nextHour = event.target.value;
                           const currentMinute = getClockMinute(startClock) || "00";
-                          setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                          if (!nextHour) {
+                            setStartClock("");
+                            return;
+                          }
+
+                          let nextMinute = currentMinute;
+                          if (
+                            minStartSlot &&
+                            Number(nextHour) === minStartSlot.minHour &&
+                            Number(nextMinute) < minStartSlot.minMinute
+                          ) {
+                            nextMinute = pad(minStartSlot.minMinute);
+                          }
+
+                          setStartClock(`${nextHour}:${nextMinute}`);
                         }}
                         className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
                         disabled={loading}
@@ -263,7 +348,11 @@ const BookRoomPage: React.FC = () => {
                       >
                         <option value="">Hour</option>
                         {HOUR_OPTIONS.map((hour) => (
-                          <option key={hour} value={hour}>
+                          <option
+                            key={hour}
+                            value={hour}
+                            disabled={!!minStartSlot && Number(hour) < minStartSlot.minHour}
+                          >
                             {hour}
                           </option>
                         ))}
@@ -281,7 +370,15 @@ const BookRoomPage: React.FC = () => {
                       >
                         <option value="">Minute</option>
                         {MINUTE_OPTIONS.map((minute) => (
-                          <option key={minute} value={minute}>
+                          <option
+                            key={minute}
+                            value={minute}
+                            disabled={
+                              !!minStartSlot &&
+                              Number(getClockHour(startClock) || "0") === minStartSlot.minHour &&
+                              Number(minute) < minStartSlot.minMinute
+                            }
+                          >
                             {minute}
                           </option>
                         ))}
@@ -292,56 +389,24 @@ const BookRoomPage: React.FC = () => {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     <span className="text-red-500 mr-1">*</span>
-                    End date & time
+                    Duration
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="date"
-                      value={endDate}
-                      min={startDate || minDate}
-                      onChange={(event) => setEndDate(event.target.value)}
+                  <div className="space-y-2">
+                    <select
+                      value={String(durationMinutes)}
+                      onChange={(event) => setDurationMinutes(Number(event.target.value) as 30 | 60)}
                       className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
                       disabled={loading}
                       required
+                    >
+                      <option value="30">30 minutes</option>
+                      <option value="60">1 hour</option>
+                    </select>
+                    <input
+                      value={endTime ? formatDateInput(new Date(endTime)) + " " + (new Date(endTime)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Auto calculated from start time"}
+                      readOnly
+                      className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-gray-50 text-gray-700"
                     />
-                    <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={getClockHour(endClock)}
-                        onChange={(event) => {
-                          const nextHour = event.target.value;
-                          const currentMinute = getClockMinute(endClock) || "00";
-                          setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
-                        }}
-                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                        disabled={loading}
-                        required
-                      >
-                        <option value="">Hour</option>
-                        {HOUR_OPTIONS.map((hour) => (
-                          <option key={hour} value={hour}>
-                            {hour}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={getClockMinute(endClock)}
-                        onChange={(event) => {
-                          const nextMinute = event.target.value;
-                          const currentHour = getClockHour(endClock) || "00";
-                          setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
-                        }}
-                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                        disabled={loading}
-                        required
-                      >
-                        <option value="">Minute</option>
-                        {MINUTE_OPTIONS.map((minute) => (
-                          <option key={minute} value={minute}>
-                            {minute}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
                 </div>
               </div>
