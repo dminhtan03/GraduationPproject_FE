@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "antd";
-import { TagIcon } from "@heroicons/react/24/outline";
-import { roomService, type RoomsMapBuilding } from "../../services/roomService";
+import { TagIcon, FunnelIcon } from "@heroicons/react/24/outline";
+import {
+  roomService,
+  type RoomsMapBuilding,
+  type RoomStatusItem,
+} from "../../services/roomService";
 import { ROUTES } from "../../constants";
 import {
   type MapRoom,
@@ -13,6 +17,19 @@ import {
   getStatusStyles,
   sortFloorsByLevel,
 } from "../../utils";
+
+type RoomDetail = {
+  roomId?: string;
+  locationCode?: string;
+  status?: MapRoomStatus;
+  capacity?: number | null;
+  amenities?: { id: string; name: string }[] | null;
+  images?: { id: string; imageUrl: string }[] | null;
+  score?: number | null;
+  currentUserId?: string | null;
+  currentUserName?: string | null;
+  checkInTime?: string | null;
+};
 
 const RoomMapPage: React.FC = () => {
   const navigate = useNavigate();
@@ -26,6 +43,19 @@ const RoomMapPage: React.FC = () => {
   );
   const [selectedFloorId, setSelectedFloorId] = useState<string | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<SelectedRoom | null>(null);
+  const [roomDetail, setRoomDetail] = useState<RoomDetail | null>(null);
+  const [roomDetailLoading, setRoomDetailLoading] = useState(false);
+  const [roomDetailError, setRoomDetailError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"ALL" | MapRoomStatus>(
+    "ALL",
+  );
+  const [startTime, setStartTime] = useState<string>("");
+  const [endTime, setEndTime] = useState<string>("");
+  const [filterLoading, setFilterLoading] = useState(false);
+  const [filterError, setFilterError] = useState<string | null>(null);
+  const [overrideStatuses, setOverrideStatuses] = useState<
+    Record<string, MapRoomStatus>
+  >({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -78,12 +108,16 @@ const RoomMapPage: React.FC = () => {
     if (!floor) return null;
 
     const rooms: MapRoom[] = Array.isArray(floor.rooms)
-      ? floor.rooms.map((r: any) => ({
-          roomId: r.roomId,
-          locationCode: r.locationCode,
-          status: r.status as MapRoomStatus,
-          score: r.score,
-        }))
+      ? floor.rooms.map((r: any) => {
+          const baseStatus = r.status as MapRoomStatus;
+          const override = overrideStatuses[r.roomId as string];
+          return {
+            roomId: r.roomId,
+            locationCode: r.locationCode,
+            status: override ?? baseStatus,
+            score: r.score,
+          };
+        })
       : [];
 
     return {
@@ -98,18 +132,118 @@ const RoomMapPage: React.FC = () => {
     return floor.rooms.every((r: any) => r.status !== "AVAILABLE");
   };
 
+  const filteredRooms = useMemo(() => {
+    if (!currentFloor) return [] as MapRoom[];
+    if (statusFilter === "ALL") return currentFloor.rooms;
+    return currentFloor.rooms.filter((room) => room.status === statusFilter);
+  }, [currentFloor, statusFilter]);
+
   const { top, left, right, bottom } = useMemo(
-    () => splitRoomsForMap(currentFloor?.rooms || []),
-    [currentFloor],
+    () => splitRoomsForMap(filteredRooms),
+    [filteredRooms],
   );
 
-  const handleRoomClick = (room: MapRoom) => {
+  const buildDateTime = (time: string) => {
+    const [hh, mm] = time.split(":");
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const month = `${now.getMonth() + 1}`.padStart(2, "0");
+    const day = `${now.getDate()}`.padStart(2, "0");
+    const hour = `${Number(hh || 0)}`.padStart(2, "0");
+    const minute = `${Number(mm || 0)}`.padStart(2, "0");
+    return `${yyyy}-${month}-${day}T${hour}:${minute}:00`;
+  };
+
+  const handleApplyFilters = async () => {
+    setFilterError(null);
+    setOverrideStatuses({});
+
+    if (!currentBuilding || !currentFloor) return;
+
+    if (!startTime || !endTime) {
+      setFilterError("Please select both start and end time.");
+      return;
+    }
+
+    const toMinutes = (value: string) => {
+      const [h, m] = value.split(":");
+      return Number(h) * 60 + Number(m || 0);
+    };
+
+    if (toMinutes(endTime) <= toMinutes(startTime)) {
+      setFilterError("End time must be later than start time.");
+      return;
+    }
+
+    setFilterLoading(true);
+    try {
+      const startDateTime = buildDateTime(startTime);
+      const endDateTime = buildDateTime(endTime);
+
+      // BE /api/v1/rooms/search trả về danh sách PHÒNG TRỐNG
+      const availableRooms: RoomStatusItem[] =
+        await roomService.searchAvailableRooms({
+          buildingId: currentBuilding.buildingId,
+          floorId: currentFloor.floorId,
+          startTime: startDateTime,
+          endTime: endDateTime,
+        });
+
+      const availableSet = new Set(
+        availableRooms.map((item) => item.roomId).filter(Boolean),
+      );
+
+      const overrides: Record<string, MapRoomStatus> = {};
+
+      (currentFloor.rooms || []).forEach((room) => {
+        if (room.status === "BROKEN") {
+          overrides[room.roomId] = "BROKEN";
+          return;
+        }
+
+        if (availableSet.has(room.roomId)) {
+          overrides[room.roomId] = "AVAILABLE";
+        } else {
+          overrides[room.roomId] = "UNAVAILABLE";
+        }
+      });
+
+      setOverrideStatuses(overrides);
+    } catch (e: any) {
+      const message =
+        e && typeof e === "object" && typeof e.message === "string"
+          ? e.message
+          : "Unable to apply time filter";
+      setFilterError(message);
+    } finally {
+      setFilterLoading(false);
+    }
+  };
+
+  const handleRoomClick = async (room: MapRoom) => {
     if (!currentBuilding || !currentFloor) return;
     setSelectedRoom({
       ...room,
       buildingName: currentBuilding.buildingName,
       floorName: currentFloor.floorName,
     });
+
+    setRoomDetail(null);
+    setRoomDetailError(null);
+    setRoomDetailLoading(true);
+
+    try {
+      const detail = await roomService.getRoomDetail(room.roomId);
+      setRoomDetail(detail as RoomDetail);
+    } catch (e: any) {
+      const message =
+        e && typeof e === "object" && typeof e.message === "string"
+          ? e.message
+          : "Unable to load room details";
+      setRoomDetailError(message);
+    } finally {
+      setRoomDetailLoading(false);
+    }
   };
 
   const handleBooking = () => {
@@ -178,6 +312,66 @@ const RoomMapPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Filters: Status + Time range */}
+      <div className="mb-5 bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
+          <div>
+            <div className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase mb-1">
+              Status
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as "ALL" | MapRoomStatus)
+              }
+              className="w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+            >
+              <option value="ALL">All</option>
+              <option value="AVAILABLE">Available</option>
+              <option value="UNAVAILABLE">Occupied</option>
+              <option value="BROKEN">Maintenance</option>
+            </select>
+          </div>
+
+          <div>
+            <div className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase mb-1">
+              Time range
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              <span className="text-slate-400 text-xs">-</span>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={handleApplyFilters}
+            disabled={filterLoading || !currentBuilding || !currentFloor}
+            className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FunnelIcon className="w-4 h-4" />
+            <span>Apply filters</span>
+          </button>
+        </div>
+      </div>
+
+      {filterError && (
+        <div className="mb-4 text-xs text-rose-500">{filterError}</div>
+      )}
 
       {error && (
         <div className="mb-4 rounded-lg border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -408,6 +602,69 @@ const RoomMapPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {roomDetailLoading && (
+                <div className="text-xs text-slate-500">
+                  Loading detailed information...
+                </div>
+              )}
+
+              {roomDetailError && !roomDetailLoading && (
+                <div className="text-xs text-rose-500">{roomDetailError}</div>
+              )}
+
+              {roomDetail && !roomDetailLoading && (
+                <>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                      <div className="text-[11px] text-slate-500 mb-0.5">
+                        Capacity
+                      </div>
+                      <div className="text-sm font-semibold text-slate-800">
+                        {roomDetail.capacity != null
+                          ? roomDetail.capacity
+                          : "N/A"}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                      <div className="text-[11px] text-slate-500 mb-0.5">
+                        Current user
+                      </div>
+                      <div className="text-sm font-semibold text-slate-800">
+                        {roomDetail.currentUserName || "No active check-in"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs">
+                    <div className="text-[11px] text-slate-500 mb-0.5">
+                      Check-in time
+                    </div>
+                    <div className="text-sm font-semibold text-slate-800">
+                      {roomDetail.checkInTime || "-"}
+                    </div>
+                  </div>
+
+                  {roomDetail.amenities && roomDetail.amenities.length > 0 && (
+                    <div className="text-xs">
+                      <div className="text-[11px] text-slate-500 mb-1">
+                        Amenities
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {roomDetail.amenities.map((a) => (
+                          <span
+                            key={a.id}
+                            className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700"
+                          >
+                            {a.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
 
               <button
                 type="button"

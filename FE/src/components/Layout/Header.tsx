@@ -21,13 +21,14 @@ import {
 import type { MenuProps } from "antd";
 import { useNavigate } from "react-router-dom";
 import { useAppSelector, selectTheme } from "../../store";
-import { STORAGE_KEYS, ROUTES } from "../../constants";
+import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
-import type { UserProfile } from "../../types";
+import type { Room, UserProfile } from "../../types";
 import { logout } from "../../services/authService";
 import { roomService } from "../../services/roomService";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
+import { useNotifications } from "../../context/NotificationContext";
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
@@ -39,24 +40,32 @@ const Header: React.FC = () => {
   const { mode } = useAppSelector(selectTheme);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
 
   // Search state
   const [searchValue, setSearchValue] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  interface RoomSearchOption {
+    value: string;
+    label: React.ReactNode;
+    room: Room;
+  }
+  const [searchResults, setSearchResults] = useState<RoomSearchOption[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+
+  const { notifications, unreadCount, markAllAsRead } = useNotifications();
 
   useEffect(() => {
     const fetchProfile = async () => {
-      setLoadingProfile(true);
       try {
-        const res = await api.get<any>(API_ENDPOINTS.AUTH.PROFILE);
-        const userData = res.data?.data || res.data;
+        const res = await api.get<UserProfile | { data: UserProfile }>(
+          API_ENDPOINTS.AUTH.PROFILE,
+        );
+        const raw = res.data;
+        const nested = (raw as { data?: UserProfile }).data;
+        const userData: UserProfile | null = nested || (raw as UserProfile);
         setProfile(userData || null);
       } catch {
         setProfile(null);
-      } finally {
-        setLoadingProfile(false);
       }
     };
     fetchProfile();
@@ -98,7 +107,7 @@ const Header: React.FC = () => {
     }
   };
 
-  const handleSelectRoom = (value: string, option: any) => {
+  const handleSelectRoom = (value: string, option: RoomSearchOption) => {
     // Điều hướng tới trang chi tiết/đặt phòng theo roomId
     if (option?.room?.id) {
       navigate(ROUTES.BOOK_ROOM.replace(":roomId", option.room.id));
@@ -125,7 +134,8 @@ const Header: React.FC = () => {
       initials = "U";
       displayName = "User";
     }
-    if ((profile as any).avatar) avatarUrl = (profile as any).avatar;
+    const profileWithAvatar = profile as UserProfile & { avatar?: string };
+    if (profileWithAvatar.avatar) avatarUrl = profileWithAvatar.avatar;
   }
 
   const userMenuItems: MenuProps["items"] = [
@@ -141,9 +151,15 @@ const Header: React.FC = () => {
     if (key === "3") logout().then(() => (window.location.href = "/login"));
   };
 
+  const latestNotifications = notifications.slice(0, 3);
+
+  const handleBellClick = () => {
+    setIsNotificationOpen((prev) => !prev);
+  };
+
   return (
     <AntHeader
-      className={`flex items-center justify-between px-4 gap-4 ${
+      className={`relative flex items-center justify-between px-4 gap-4 ${
         mode === "dark" ? "bg-gray-800" : "bg-white"
       } border-b border-gray-200 shadow-sm`}
       style={{
@@ -188,11 +204,18 @@ const Header: React.FC = () => {
 
       {/* Right: Notifications + User avatar/login button */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <Button
-          type="text"
-          icon={<BellOutlined className="text-lg" />}
-          onClick={() => {}}
-        />
+        <div className="relative">
+          <Button
+            type="text"
+            icon={<BellOutlined className="text-lg" />}
+            onClick={handleBellClick}
+          />
+          {unreadCount > 0 && (
+            <span className="absolute top-0 right-0 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white border border-white shadow-sm px-0.5">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
+        </div>
         {profile ? (
           <div className="flex items-center gap-1">
             <div
@@ -244,6 +267,125 @@ const Header: React.FC = () => {
           </Button>
         )}
       </div>
+
+      {isNotificationOpen && (
+        <div className="absolute right-4 top-16 w-[340px] md:w-[380px] bg-white rounded-2xl shadow-xl border border-gray-200 z-50 flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+            <span className="font-semibold text-gray-900">Notifications</span>
+            {notifications.length > 0 && (
+              <button
+                type="button"
+                onClick={markAllAsRead}
+                className="text-xs text-orange-500 hover:text-orange-600 hover:underline"
+              >
+                Mark all as read
+              </button>
+            )}
+          </div>
+          <div className="max-h-72 overflow-y-auto px-3 py-2 bg-gray-50">
+            {latestNotifications.length === 0 ? (
+              <div className="text-sm text-gray-400 text-center py-5">
+                You have no notifications yet.
+              </div>
+            ) : (
+              latestNotifications.map((n, index) => (
+                <div
+                  key={n.id}
+                  className={
+                    index === 0 && n.category === "batch"
+                      ? "mb-2.5 last:mb-0 rounded-2xl bg-orange-50 border border-orange-100 shadow-sm px-4 py-3"
+                      : "flex items-start gap-3 mb-2.5 last:mb-0 rounded-xl bg-white px-3 py-2.5 shadow-sm border border-gray-100"
+                  }
+                >
+                  {index === 0 && n.category === "batch" ? (
+                    <>
+                      <div className="flex items-start gap-3 mb-2">
+                        <div className="mt-1 w-8 h-8 rounded-full flex items-center justify-center text-xs bg-orange-100 text-orange-500">
+                          ↻
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm">
+                            {n.title}
+                          </p>
+                          <p className="text-xs text-gray-600 truncate">
+                            {n.message}
+                          </p>
+                        </div>
+                      </div>
+                      {typeof n.progress === "number" && (
+                        <div className="mt-1">
+                          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-orange-400"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  Math.max(0, n.progress),
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                          <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500">
+                            <span>{`${Math.min(
+                              100,
+                              Math.max(0, n.progress),
+                            ).toFixed(0)}% Complete`}</span>
+                            {n.statusText && (
+                              <span className="text-orange-500 font-medium">
+                                {n.statusText}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center text-xs ${
+                          n.category === "ai"
+                            ? "bg-blue-100 text-blue-500"
+                            : n.category === "booking"
+                              ? "bg-green-100 text-green-500"
+                              : "bg-gray-100 text-gray-500"
+                        }`}
+                      >
+                        {n.category === "ai" && <span>🤖</span>}
+                        {n.category === "booking" && <span>✓</span>}
+                        {!n.category && <span>•</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 text-sm">
+                          {n.title}
+                        </p>
+                        <p className="text-xs text-gray-600 mb-0.5">
+                          {n.message}
+                        </p>
+                        <span className="text-[11px] text-gray-400">
+                          {new Date(n.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setIsNotificationOpen(false);
+              navigate(ROUTES.NOTIFICATIONS);
+            }}
+            className="px-4 py-2.5 text-center text-sm font-semibold text-orange-500 border-t border-gray-100 hover:bg-orange-50"
+          >
+            See All Notifications
+          </button>
+        </div>
+      )}
     </AntHeader>
   );
 };

@@ -6,11 +6,8 @@ import {
   AppstoreOutlined,
   BankOutlined,
   CalendarOutlined,
-  DesktopOutlined,
-  TeamOutlined,
-  AuditOutlined,
-  FolderOutlined,
 } from "@ant-design/icons";
+import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAppSelector, selectLayout, selectTheme } from "../../store";
 import { ROUTES } from "../../constants";
@@ -30,37 +27,24 @@ const Sidebar: React.FC = () => {
   const menuItems: {
     key: string;
     icon: React.ReactNode;
-    label: string;
-    children?: { key: string; icon: React.ReactNode; label: string }[];
+    label: React.ReactNode;
+    children?: { key: string; icon: React.ReactNode; label: React.ReactNode }[];
   }[] = [
     { key: ROUTES.ROOM_LIST, icon: <BankOutlined />, label: "Room List" },
+    {
+      key: ROUTES.AI_ASSISTANT,
+      icon: <AppstoreOutlined />,
+      label: "AI Assistant",
+    },
     {
       key: ROUTES.MY_BOOKINGS,
       icon: <CalendarOutlined />,
       label: "My Bookings",
     },
-    {
-      key: "categories",
-      icon: <FolderOutlined />,
-      label: "CATEGORIES",
-      children: [
-        { key: "category-tech", icon: <DesktopOutlined />, label: "Tech Labs" },
-        { key: "category-pods", icon: <TeamOutlined />, label: "Study Pods" },
-        {
-          key: "category-auditoriums",
-          icon: <AuditOutlined />,
-          label: "Auditoriums",
-        },
-      ],
-    },
   ];
 
   const handleMenuClick = ({ key }: { key: string }) => {
-    if (key.startsWith("category-")) {
-      navigate(ROUTES.ROOM_LIST, { state: { category: key } });
-      return;
-    }
-    if (key !== "categories") navigate(key);
+    navigate(key);
   };
 
   const path = location.pathname;
@@ -86,9 +70,7 @@ const Sidebar: React.FC = () => {
               className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
               style={{ background: "#ff9500" }}
             >
-              <span className="text-white text-lg" aria-hidden>
-                📚
-              </span>
+              <BookOpenIcon className="w-5 h-5 text-white" aria-hidden />
             </div>
             <Text strong className="text-lg truncate">
               {APP_NAME}

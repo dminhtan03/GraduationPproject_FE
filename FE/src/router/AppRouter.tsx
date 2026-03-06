@@ -17,8 +17,11 @@ const ProfilePage = React.lazy(() => import("../pages/Profile"));
 const EditProfilePage = React.lazy(
   () => import("../pages/Profile/EditProfile"),
 );
+const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
+const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
 
 // Error boundary component cho routes
+// eslint-disable-next-line react-refresh/only-export-components
 const ErrorBoundary: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -37,6 +40,7 @@ const ErrorBoundary: React.FC = () => {
 };
 
 // Loading component cho lazy loading
+// eslint-disable-next-line react-refresh/only-export-components
 const PageLoading: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -49,6 +53,7 @@ const PageLoading: React.FC = () => {
 };
 
 // Wrapper component với Suspense
+// eslint-disable-next-line react-refresh/only-export-components
 const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -141,6 +146,22 @@ export const router = createBrowserRouter([
           </SuspenseWrapper>
         ),
       },
+      {
+        path: ROUTES.AI_ASSISTANT,
+        element: (
+          <SuspenseWrapper>
+            <AIAssistantPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.NOTIFICATIONS,
+        element: (
+          <SuspenseWrapper>
+            <NotificationsPage />
+          </SuspenseWrapper>
+        ),
+      },
     ],
   },
   // Catch all route - redirect to home
@@ -160,7 +181,7 @@ export const routeDefinitions = [
   },
   {
     key: "home",
-    path: ROUTES.HOME,
+    path: ROUTES.ROOM_LIST,
     label: "Trang chủ",
     icon: "home",
   },
@@ -172,7 +193,7 @@ export const routeDefinitions = [
   },
   {
     key: "dashboard",
-    path: ROUTES.DASHBOARD,
+    path: ROUTES.ADMIN_DASHBOARD,
     label: "Dashboard",
     icon: "dashboard",
   },
