@@ -4,7 +4,8 @@ import { Alert, Typography, message } from "antd";
 import { ClockCircleOutlined } from "@ant-design/icons";
 import { reservationService } from "../../services/reservationService";
 import { ROUTES } from "../../constants";
-import type { ApiError, Room } from "../../types";
+import { extractApiMessage } from "../../utils/errorHandlers";
+import type { Room } from "../../types";
 
 const { Title, Text } = Typography;
 
@@ -152,7 +153,7 @@ const BookRoomPage: React.FC = () => {
       message.success("Booking created successfully");
       navigate(ROUTES.MY_BOOKINGS);
     } catch (error) {
-      message.error((error as ApiError).message || "Unable to create booking");
+      message.error(extractApiMessage(error, "Unable to create booking"));
     } finally {
       setLoading(false);
     }

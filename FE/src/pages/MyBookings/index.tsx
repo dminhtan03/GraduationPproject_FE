@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Typography, Empty, Table, Tag, Alert, Button, Popconfirm, Space, message } from "antd";
+import { Typography, Empty, Table, Tag, Alert, Button, Popconfirm, Space, Tooltip, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TablePaginationConfig } from "antd/es/table";
 import { CalendarOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
 import { reservationService } from "../../services/reservationService";
+import { extractApiMessage } from "../../utils/errorHandlers";
 import type { Reservation } from "../../types";
 
 const { Title, Paragraph } = Typography;
@@ -65,6 +66,50 @@ const canCancel = (status: string, startTime?: string, endTime?: string) => {
   return now < start;
 };
 
+const getCheckInDisabledReason = (record: Reservation) => {
+  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
+
+  const status = (record.status || "").toUpperCase();
+  if (["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(status)) {
+    return `Booking đang ở trạng thái ${status || "N/A"} nên không thể check-in.`;
+  }
+
+  const start = parseBookingDateTime(record.startTime);
+  const end = parseBookingDateTime(record.endTime);
+  if (!start || !end) {
+    return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể check-in.";
+  }
+
+  const now = new Date();
+  if (now < start) {
+    return `Chưa đến thời gian check-in. Bắt đầu lúc ${formatDateTime(record.startTime || "")}.`;
+  }
+  if (now > end) {
+    return "Đã quá thời gian booking nên không thể check-in.";
+  }
+  return undefined;
+};
+
+const getCancelDisabledReason = (record: Reservation) => {
+  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
+
+  const status = (record.status || "").toUpperCase();
+  if (["CANCELLED", "COMPLETED", "REJECTED"].includes(status)) {
+    return `Booking đang ở trạng thái ${status || "N/A"} nên không thể hủy.`;
+  }
+
+  const start = parseBookingDateTime(record.startTime);
+  if (!start) {
+    return "Thiếu thời gian bắt đầu từ API nên không thể xác định quyền hủy.";
+  }
+
+  const now = new Date();
+  if (now >= start) {
+    return "Chỉ có thể hủy booking trước khi cuộc họp bắt đầu.";
+  }
+  return undefined;
+};
+
 const MyBookingsPage: React.FC = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState<Reservation[]>([]);
@@ -75,7 +120,7 @@ const MyBookingsPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const loadBookings = useCallback(async (nextPage = page, nextSize = pageSize) => {
+  const loadBookings = useCallback(async (nextPage: number, nextSize: number) => {
     setLoading(true);
     setError(null);
     try {
@@ -85,8 +130,8 @@ const MyBookingsPage: React.FC = () => {
       });
       setBookings(result.items);
       setTotal(result.total);
-      setPage(result.page + 1);
-      setPageSize(result.size);
+      setPage(nextPage);
+      setPageSize(nextSize);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load bookings");
       setBookings([]);
@@ -94,10 +139,10 @@ const MyBookingsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize]);
+  }, []);
 
   useEffect(() => {
-    loadBookings(1, pageSize);
+    loadBookings(1, 5);
   }, [loadBookings]);
 
   const handleCheckIn = async (record: Reservation) => {
@@ -115,7 +160,7 @@ const MyBookingsPage: React.FC = () => {
       message.success("Check-in thành công");
       await loadBookings(page, pageSize);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "Không thể check-in booking");
+      message.error(extractApiMessage(err, "Không thể check-in booking"));
     } finally {
       setActionLoadingId(null);
     }
@@ -136,7 +181,7 @@ const MyBookingsPage: React.FC = () => {
       message.success("Hủy booking thành công");
       await loadBookings(page, pageSize);
     } catch (err) {
-      message.error(err instanceof Error ? err.message : "Không thể hủy booking");
+      message.error(extractApiMessage(err, "Không thể hủy booking"));
     } finally {
       setActionLoadingId(null);
     }
@@ -199,6 +244,8 @@ const MyBookingsPage: React.FC = () => {
         const isLoading = actionLoadingId === record.id;
         const checkInEnabled = canCheckIn(status, record.startTime, record.endTime);
         const cancelEnabled = canCancel(status, record.startTime, record.endTime);
+        const checkInDisabledReason = getCheckInDisabledReason(record);
+        const cancelDisabledReason = getCancelDisabledReason(record);
 
         return (
           <Space>
@@ -210,14 +257,18 @@ const MyBookingsPage: React.FC = () => {
               cancelText="Đóng"
               disabled={!record.id || !checkInEnabled}
             >
-              <Button
-                type="primary"
-                size="small"
-                loading={isLoading && checkInEnabled}
-                disabled={!record.id || !checkInEnabled}
-              >
-                Check-in
-              </Button>
+              <Tooltip title={!checkInEnabled ? checkInDisabledReason : undefined}>
+                <span>
+                  <Button
+                    type="primary"
+                    size="small"
+                    loading={isLoading && checkInEnabled}
+                    disabled={!record.id || !checkInEnabled}
+                  >
+                    Check-in
+                  </Button>
+                </span>
+              </Tooltip>
             </Popconfirm>
 
             <Popconfirm
@@ -229,14 +280,18 @@ const MyBookingsPage: React.FC = () => {
               okButtonProps={{ danger: true }}
               disabled={!record.id || !cancelEnabled}
             >
-              <Button
-                danger
-                size="small"
-                loading={isLoading && cancelEnabled}
-                disabled={!record.id || !cancelEnabled}
-              >
-                Cancel
-              </Button>
+              <Tooltip title={!cancelEnabled ? cancelDisabledReason : undefined}>
+                <span>
+                  <Button
+                    danger
+                    size="small"
+                    loading={isLoading && cancelEnabled}
+                    disabled={!record.id || !cancelEnabled}
+                  >
+                    Cancel
+                  </Button>
+                </span>
+              </Tooltip>
             </Popconfirm>
           </Space>
         );

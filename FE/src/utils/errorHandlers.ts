@@ -59,3 +59,23 @@ export const getErrorMessage = (error: ApiError): string => {
       return error.message;
   }
 };
+
+export const extractApiMessage = (error: unknown, fallback: string): string => {
+  if (error && typeof error === "object") {
+    const apiError = error as Partial<ApiError>;
+    if (typeof apiError.message === "string" && apiError.message.trim()) {
+      return apiError.message;
+    }
+  }
+
+  try {
+    const normalized = handleApiError(error as any);
+    if (normalized.message && normalized.message.trim()) {
+      return normalized.message;
+    }
+  } catch {
+    // ignore and fallback
+  }
+
+  return fallback;
+};

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { roomService } from "../../services/roomService";
 import type { Room, RoomStatus } from "../../types";
 import { ROUTES } from "../../constants";
+import { extractApiMessage } from "../../utils/errorHandlers";
 
 const { Title, Text } = Typography;
 
@@ -36,12 +37,8 @@ const DashboardPage: React.FC = () => {
 
       setRooms(res.items);
       setTotal(res.items.length);
-    } catch (e: any) {
-      const message =
-        e && typeof e === "object" && typeof e.message === "string"
-          ? e.message
-          : "Unable to load room data";
-      setError(message);
+    } catch (e: unknown) {
+      setError(extractApiMessage(e, "Unable to load room data"));
       setRooms([]);
       setTotal(0);
     } finally {
