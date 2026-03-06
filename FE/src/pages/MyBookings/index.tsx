@@ -54,9 +54,15 @@ const canCheckIn = (status: string, startTime?: string, endTime?: string) => {
   return now >= start && now <= end;
 };
 
-const canCancel = (status: string) => {
+const canCancel = (status: string, startTime?: string, endTime?: string) => {
   const normalized = status.toUpperCase();
-  return !["CANCELLED", "COMPLETED", "REJECTED"].includes(normalized);
+  if (["CANCELLED", "COMPLETED", "REJECTED"].includes(normalized)) return false;
+
+  const start = parseBookingDateTime(startTime);
+  if (!start) return false;
+
+  const now = new Date();
+  return now < start;
 };
 
 const MyBookingsPage: React.FC = () => {
@@ -115,8 +121,14 @@ const MyBookingsPage: React.FC = () => {
     }
   };
 
-  const handleCancelBooking = async (reservationId?: string) => {
+  const handleCancelBooking = async (record: Reservation) => {
+    const reservationId = record.id;
     if (!reservationId) return;
+
+    if (!canCancel(record.status || "", record.startTime, record.endTime)) {
+      message.warning("Chỉ có thể hủy booking trước khi cuộc họp bắt đầu.");
+      return;
+    }
 
     setActionLoadingId(reservationId);
     try {
@@ -186,6 +198,7 @@ const MyBookingsPage: React.FC = () => {
         const status = record.status || "";
         const isLoading = actionLoadingId === record.id;
         const checkInEnabled = canCheckIn(status, record.startTime, record.endTime);
+        const cancelEnabled = canCancel(status, record.startTime, record.endTime);
 
         return (
           <Space>
@@ -210,17 +223,17 @@ const MyBookingsPage: React.FC = () => {
             <Popconfirm
               title="Xác nhận hủy booking?"
               description="Thao tác này không thể hoàn tác."
-              onConfirm={() => handleCancelBooking(record.id)}
+              onConfirm={() => handleCancelBooking(record)}
               okText="Hủy booking"
               cancelText="Đóng"
               okButtonProps={{ danger: true }}
-              disabled={!record.id || !canCancel(status)}
+              disabled={!record.id || !cancelEnabled}
             >
               <Button
                 danger
                 size="small"
-                loading={isLoading && canCancel(status)}
-                disabled={!record.id || !canCancel(status)}
+                loading={isLoading && cancelEnabled}
+                disabled={!record.id || !cancelEnabled}
               >
                 Cancel
               </Button>

@@ -28,19 +28,10 @@ const DashboardPage: React.FC = () => {
     setError(null);
     try {
       const res = await roomService.getRooms({
-<<<<<<< HEAD
-        page,
-        size: PAGE_SIZE,
-        status: filter === "available" ? "AVAILABLE" : undefined,
-        minCapacity: filter === "large" ? 20 : undefined,
-        startTime: startTime || undefined,
-        endTime: endTime || undefined,
-=======
         page: 0,
         size: 1000,
         status: undefined,
         minCapacity: undefined,
->>>>>>> a326f92b20d458fd83a0e657bd9890cd6bf37368
       });
 
       setRooms(res.items);
@@ -56,11 +47,7 @@ const DashboardPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-<<<<<<< HEAD
-  }, [page, filter, startTime, endTime]);
-=======
   }, []);
->>>>>>> a326f92b20d458fd83a0e657bd9890cd6bf37368
 
   useEffect(() => {
     loadRooms();
@@ -192,13 +179,8 @@ const DashboardPage: React.FC = () => {
 
       {/* Filter + Search */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-<<<<<<< HEAD
-        <div className="flex flex-wrap gap-3">
-          {["all", "available", "large"].map((f) => (
-=======
         <div className="flex gap-3">
           {["all", "available", "unavailable"].map((f) => (
->>>>>>> a326f92b20d458fd83a0e657bd9890cd6bf37368
             <button
               key={f}
               onClick={() => {
