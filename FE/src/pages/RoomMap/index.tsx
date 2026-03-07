@@ -31,6 +31,88 @@ type RoomDetail = {
   checkInTime?: string | null;
 };
 
+type BuildingLayoutVariant =
+  | "gamma"
+  | "alphaStyle"
+  | "betaStyle"
+  | "deltaStyle"
+  | "epsilonStyle";
+
+type RawMapRoom = {
+  roomId?: string;
+  locationCode?: string;
+  status?: string;
+  score?: number | null;
+};
+
+type RawMapFloor = {
+  floorId: string;
+  floorName: string;
+  rooms?: RawMapRoom[];
+};
+
+type RawMapBuilding = {
+  buildingId: string;
+  buildingName: string;
+  floors?: RawMapFloor[];
+};
+
+const normalizeLocalDateTime = (value: string) => {
+  if (!value) return "";
+  // Keep FE payload aligned with BE LocalDateTime sample: yyyy-MM-ddTHH:mm:ss
+  return value.length === 16 ? `${value}:00` : value;
+};
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
+  value: String(hour).padStart(2, "0"),
+  label: `${String(hour).padStart(2, "0")}h`,
+}));
+
+const MINUTE_OPTIONS = ["10", "20", "30", "40", "50"];
+const ROOM_LAYOUT_STORAGE_KEY = "room-map-layout-order";
+
+const buildDateTime = (date: string, hour: string, minute: string) => {
+  if (!date || !hour || !minute) return "";
+  return `${date}T${hour}:${minute}:00`;
+};
+
+const chunkRooms = <T,>(rooms: T[], size: number) => {
+  const result: T[][] = [];
+  for (let index = 0; index < rooms.length; index += size) {
+    result.push(rooms.slice(index, index + size));
+  }
+  return result;
+};
+
+const resolveLayoutVariant = (
+  currentBuilding: RoomsMapBuilding | null,
+  allBuildings: RoomsMapBuilding[],
+): BuildingLayoutVariant => {
+  if (!currentBuilding) return "gamma";
+
+  const name = (currentBuilding.buildingName || "").toLowerCase();
+  if (name.includes("gamma")) return "gamma";
+
+  const nonGammaBuildings = allBuildings.filter(
+    (building) =>
+      !(building.buildingName || "").toLowerCase().includes("gamma"),
+  );
+
+  const index = nonGammaBuildings.findIndex(
+    (building) => building.buildingId === currentBuilding.buildingId,
+  );
+
+  const variants: BuildingLayoutVariant[] = [
+    "alphaStyle",
+    "betaStyle",
+    "deltaStyle",
+    "epsilonStyle",
+  ];
+
+  if (index < 0) return "alphaStyle";
+  return variants[index % variants.length];
+};
+
 const RoomMapPage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -49,13 +131,46 @@ const RoomMapPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<"ALL" | MapRoomStatus>(
     "ALL",
   );
-  const [startTime, setStartTime] = useState<string>("");
-  const [endTime, setEndTime] = useState<string>("");
+  const [startDate, setStartDate] = useState("");
+  const [startHour, setStartHour] = useState("08");
+  const [startMinute, setStartMinute] = useState("10");
+  const [endDate, setEndDate] = useState("");
+  const [endHour, setEndHour] = useState("09");
+  const [endMinute, setEndMinute] = useState("10");
   const [filterLoading, setFilterLoading] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [overrideStatuses, setOverrideStatuses] = useState<
     Record<string, MapRoomStatus>
   >({});
+  const [roomOrderByFloor, setRoomOrderByFloor] = useState<
+    Record<string, string[]>
+  >({});
+  const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
+  const [dragOverRoomId, setDragOverRoomId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ROOM_LAYOUT_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, string[]>;
+      if (parsed && typeof parsed === "object") {
+        setRoomOrderByFloor(parsed);
+      }
+    } catch {
+      // Ignore invalid localStorage data
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        ROOM_LAYOUT_STORAGE_KEY,
+        JSON.stringify(roomOrderByFloor),
+      );
+    } catch {
+      // Ignore storage errors (quota/privacy mode)
+    }
+  }, [roomOrderByFloor]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -63,11 +178,11 @@ const RoomMapPage: React.FC = () => {
       setError(null);
       try {
         const data = await roomService.getRoomsMap();
-        const list = Array.isArray(data.buildingResponse)
-          ? data.buildingResponse
+        const list: RawMapBuilding[] = Array.isArray(data.buildingResponse)
+          ? (data.buildingResponse as RawMapBuilding[])
           : [];
 
-        const normalizedList = list.map((building: any) => ({
+        const normalizedList = list.map((building) => ({
           ...building,
           floors: sortFloorsByLevel(building.floors),
         }));
@@ -81,10 +196,10 @@ const RoomMapPage: React.FC = () => {
             setSelectedFloorId(firstBuilding.floors[0].floorId);
           }
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         const message =
-          e && typeof e === "object" && typeof e.message === "string"
-            ? e.message
+          e && typeof e === "object" && "message" in e
+            ? String((e as { message?: string }).message || "")
             : "Unable to load room map";
         setError(message);
       } finally {
@@ -108,12 +223,12 @@ const RoomMapPage: React.FC = () => {
     if (!floor) return null;
 
     const rooms: MapRoom[] = Array.isArray(floor.rooms)
-      ? floor.rooms.map((r: any) => {
+      ? floor.rooms.map((r) => {
           const baseStatus = r.status as MapRoomStatus;
-          const override = overrideStatuses[r.roomId as string];
+          const override = overrideStatuses[String(r.roomId || "")];
           return {
-            roomId: r.roomId,
-            locationCode: r.locationCode,
+            roomId: String(r.roomId || ""),
+            locationCode: String(r.locationCode || ""),
             status: override ?? baseStatus,
             score: r.score,
           };
@@ -125,38 +240,122 @@ const RoomMapPage: React.FC = () => {
       floorName: floor.floorName,
       rooms,
     };
-  }, [currentBuilding, selectedFloorId]);
+  }, [currentBuilding, selectedFloorId, overrideStatuses]);
 
-  const isFloorFull = (floor: { rooms: any[] }) => {
+  const isFloorFull = (floor: { rooms: { status?: string }[] }) => {
     if (!floor.rooms || floor.rooms.length === 0) return false;
-    return floor.rooms.every((r: any) => r.status !== "AVAILABLE");
+    return floor.rooms.every((r) => r.status !== "AVAILABLE");
   };
+
+  const currentFloorKey = useMemo(() => {
+    if (!currentBuilding || !currentFloor) return "";
+    return `${currentBuilding.buildingId}|${currentFloor.floorId}`;
+  }, [currentBuilding, currentFloor]);
+
+  const orderedRooms = useMemo(() => {
+    const rooms = currentFloor?.rooms || [];
+    if (!currentFloorKey || rooms.length === 0) return rooms;
+
+    const savedOrder = roomOrderByFloor[currentFloorKey];
+    if (!savedOrder || savedOrder.length === 0) return rooms;
+
+    const roomMap = new Map(rooms.map((room) => [room.roomId, room]));
+    const ordered = savedOrder
+      .map((roomId) => roomMap.get(roomId))
+      .filter((room): room is MapRoom => Boolean(room));
+
+    const missing = rooms.filter((room) => !savedOrder.includes(room.roomId));
+    return [...ordered, ...missing];
+  }, [currentFloor, currentFloorKey, roomOrderByFloor]);
+
+  useEffect(() => {
+    if (!currentFloorKey || orderedRooms.length === 0) return;
+
+    setRoomOrderByFloor((prev) => {
+      if (prev[currentFloorKey]?.length) return prev;
+      return {
+        ...prev,
+        [currentFloorKey]: orderedRooms.map((room) => room.roomId),
+      };
+    });
+  }, [currentFloorKey, orderedRooms]);
 
   const filteredRooms = useMemo(() => {
     if (!currentFloor) return [] as MapRoom[];
-    if (statusFilter === "ALL") return currentFloor.rooms;
-    return currentFloor.rooms.filter((room) => room.status === statusFilter);
-  }, [currentFloor, statusFilter]);
+    if (statusFilter === "ALL") return orderedRooms;
+    return orderedRooms.filter((room) => room.status === statusFilter);
+  }, [currentFloor, orderedRooms, statusFilter]);
 
   const { top, left, right, bottom } = useMemo(
     () => splitRoomsForMap(filteredRooms),
     [filteredRooms],
   );
 
-  const buildDateTime = (time: string) => {
-    const [hh, mm] = time.split(":");
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const month = `${now.getMonth() + 1}`.padStart(2, "0");
-    const day = `${now.getDate()}`.padStart(2, "0");
-    const hour = `${Number(hh || 0)}`.padStart(2, "0");
-    const minute = `${Number(mm || 0)}`.padStart(2, "0");
-    return `${yyyy}-${month}-${day}T${hour}:${minute}:00`;
-  };
+  const layoutVariant = useMemo(
+    () => resolveLayoutVariant(currentBuilding, buildings),
+    [currentBuilding, buildings],
+  );
+
+  const renderRoomTile = (
+    room: MapRoom,
+    className = "h-16",
+    textClassName = "text-[11px] sm:text-xs",
+  ) => (
+    <button
+      key={room.roomId}
+      type="button"
+      onClick={() => handleRoomClick(room)}
+      draggable
+      onDragStart={() => setDraggedRoomId(room.roomId)}
+      onDragEnd={() => {
+        setDraggedRoomId(null);
+        setDragOverRoomId(null);
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragEnter={() => setDragOverRoomId(room.roomId)}
+      onDragLeave={() => {
+        if (dragOverRoomId === room.roomId) {
+          setDragOverRoomId(null);
+        }
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        if (!draggedRoomId || draggedRoomId === room.roomId || !currentFloorKey)
+          return;
+
+        const currentOrder =
+          roomOrderByFloor[currentFloorKey] ||
+          orderedRooms.map((item) => item.roomId);
+        const dragIndex = currentOrder.indexOf(draggedRoomId);
+        const targetIndex = currentOrder.indexOf(room.roomId);
+        if (dragIndex < 0 || targetIndex < 0) return;
+
+        const nextOrder = [...currentOrder];
+        const [draggedId] = nextOrder.splice(dragIndex, 1);
+        nextOrder.splice(targetIndex, 0, draggedId);
+
+        setRoomOrderByFloor((prev) => ({
+          ...prev,
+          [currentFloorKey]: nextOrder,
+        }));
+        setDraggedRoomId(null);
+        setDragOverRoomId(null);
+      }}
+      className={`${className} rounded-xl border ${textClassName} font-medium flex flex-col items-center justify-center text-center cursor-pointer transition hover:shadow-sm hover:-translate-y-0.5 ${getStatusStyles(room.status)} ${dragOverRoomId === room.roomId ? "ring-2 ring-orange-400 ring-offset-2" : ""}`}
+    >
+      <span className="mb-0.5">{room.locationCode}</span>
+      {draggedRoomId === room.roomId && (
+        <span className="text-[10px] opacity-70">Moving...</span>
+      )}
+    </button>
+  );
 
   const handleApplyFilters = async () => {
     setFilterError(null);
     setOverrideStatuses({});
+
+    const startTime = buildDateTime(startDate, startHour, startMinute);
+    const endTime = buildDateTime(endDate, endHour, endMinute);
 
     if (!currentBuilding || !currentFloor) return;
 
@@ -165,20 +364,15 @@ const RoomMapPage: React.FC = () => {
       return;
     }
 
-    const toMinutes = (value: string) => {
-      const [h, m] = value.split(":");
-      return Number(h) * 60 + Number(m || 0);
-    };
-
-    if (toMinutes(endTime) <= toMinutes(startTime)) {
+    if (new Date(endTime) <= new Date(startTime)) {
       setFilterError("End time must be later than start time.");
       return;
     }
 
     setFilterLoading(true);
     try {
-      const startDateTime = buildDateTime(startTime);
-      const endDateTime = buildDateTime(endTime);
+      const startDateTime = normalizeLocalDateTime(startTime);
+      const endDateTime = normalizeLocalDateTime(endTime);
 
       // BE /api/v1/rooms/search trả về danh sách PHÒNG TRỐNG
       const availableRooms: RoomStatusItem[] =
@@ -209,10 +403,10 @@ const RoomMapPage: React.FC = () => {
       });
 
       setOverrideStatuses(overrides);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const message =
-        e && typeof e === "object" && typeof e.message === "string"
-          ? e.message
+        e && typeof e === "object" && "message" in e
+          ? String((e as { message?: string }).message || "")
           : "Unable to apply time filter";
       setFilterError(message);
     } finally {
@@ -235,10 +429,10 @@ const RoomMapPage: React.FC = () => {
     try {
       const detail = await roomService.getRoomDetail(room.roomId);
       setRoomDetail(detail as RoomDetail);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const message =
-        e && typeof e === "object" && typeof e.message === "string"
-          ? e.message
+        e && typeof e === "object" && "message" in e
+          ? String((e as { message?: string }).message || "")
           : "Unable to load room details";
       setRoomDetailError(message);
     } finally {
@@ -338,20 +532,79 @@ const RoomMapPage: React.FC = () => {
             <div className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase mb-1">
               Time range
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
-              <span className="text-slate-400 text-xs">-</span>
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+                <div className="text-[10px] font-semibold tracking-wide uppercase text-slate-500 mb-1.5">
+                  Start
+                </div>
+                <div className="grid grid-cols-[1.25fr_1fr_1fr] gap-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                  <select
+                    value={startHour}
+                    onChange={(e) => setStartHour(e.target.value)}
+                    className="w-full min-w-[84px] border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    {HOUR_OPTIONS.map((hour) => (
+                      <option key={hour.value} value={hour.value}>
+                        {hour.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={startMinute}
+                    onChange={(e) => setStartMinute(e.target.value)}
+                    className="w-full min-w-[84px] border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    {MINUTE_OPTIONS.map((minute) => (
+                      <option key={minute} value={minute}>
+                        {minute}m
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+                <div className="text-[10px] font-semibold tracking-wide uppercase text-slate-500 mb-1.5">
+                  End
+                </div>
+                <div className="grid grid-cols-[1.25fr_1fr_1fr] gap-2">
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                  <select
+                    value={endHour}
+                    onChange={(e) => setEndHour(e.target.value)}
+                    className="w-full min-w-[84px] border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    {HOUR_OPTIONS.map((hour) => (
+                      <option key={hour.value} value={hour.value}>
+                        {hour.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={endMinute}
+                    onChange={(e) => setEndMinute(e.target.value)}
+                    className="w-full min-w-[84px] border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    {MINUTE_OPTIONS.map((minute) => (
+                      <option key={minute} value={minute}>
+                        {minute}m
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -472,73 +725,177 @@ const RoomMapPage: React.FC = () => {
             )}
 
             {!loading && currentFloor && currentFloor.rooms.length > 0 && (
-              <div className="relative w-full max-w-[640px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner flex flex-col">
-                {/* Top row */}
-                <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-b border-slate-100">
-                  {top.map((room) => (
-                    <button
-                      key={room.roomId}
-                      type="button"
-                      onClick={() => handleRoomClick(room)}
-                      className={`h-16 rounded-xl border text-[11px] sm:text-xs font-medium flex flex-col items-center justify-center text-center cursor-pointer transition hover:shadow-sm hover:-translate-y-0.5 ${getStatusStyles(room.status)}`}
-                    >
-                      <span className="mb-0.5">{room.locationCode}</span>
-                    </button>
-                  ))}
-                </div>
+              <>
+                {layoutVariant === "gamma" && (
+                  <div className="relative w-full max-w-[640px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner flex flex-col">
+                    <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-b border-slate-100">
+                      {top.map((room) => renderRoomTile(room, "h-16"))}
+                    </div>
 
-                {/* Middle area with left/right columns */}
-                <div className="flex-1 grid grid-cols-[80px_minmax(0,_1fr)_80px] gap-2 px-3 py-4">
-                  <div className="flex flex-col gap-2">
-                    {left.map((room) => (
-                      <button
-                        key={room.roomId}
-                        type="button"
-                        onClick={() => handleRoomClick(room)}
-                        className={`flex-1 min-h-[52px] rounded-xl border text-[11px] sm:text-xs font-medium flex flex-col items-center justify-center text-center cursor-pointer transition hover:shadow-sm hover:-translate-y-0.5 ${getStatusStyles(room.status)}`}
-                      >
-                        <span className="mb-0.5">{room.locationCode}</span>
-                      </button>
-                    ))}
-                  </div>
+                    <div className="flex-1 grid grid-cols-[80px_minmax(0,_1fr)_80px] gap-2 px-3 py-4">
+                      <div className="flex flex-col gap-2">
+                        {left.map((room) =>
+                          renderRoomTile(room, "flex-1 min-h-[52px]"),
+                        )}
+                      </div>
 
-                  <div className="flex items-center justify-center">
-                    <div className="w-full max-w-xs h-32 sm:h-40 rounded-2xl border border-dashed border-slate-300 bg-sky-50 flex flex-col items-center justify-center text-xs text-sky-800">
-                      <span className="font-semibold mb-1">Common Area</span>
-                      <span className="text-[10px] text-sky-700">
-                        Collaboration & waiting space
-                      </span>
+                      <div className="flex items-center justify-center">
+                        <div className="w-full max-w-xs h-32 sm:h-40 rounded-2xl border border-dashed border-slate-300 bg-sky-50 flex flex-col items-center justify-center text-xs text-sky-800">
+                          <span className="font-semibold mb-1">
+                            Common Area
+                          </span>
+                          <span className="text-[10px] text-sky-700">
+                            Collaboration & waiting space
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        {right.map((room) =>
+                          renderRoomTile(room, "flex-1 min-h-[52px]"),
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-t border-slate-100">
+                      {bottom.map((room) => renderRoomTile(room, "h-16"))}
                     </div>
                   </div>
+                )}
 
-                  <div className="flex flex-col gap-2">
-                    {right.map((room) => (
-                      <button
-                        key={room.roomId}
-                        type="button"
-                        onClick={() => handleRoomClick(room)}
-                        className={`flex-1 min-h-[52px] rounded-xl border text-[11px] sm:text-xs font-medium flex flex-col items-center justify-center text-center cursor-pointer transition hover:shadow-sm hover:-translate-y-0.5 ${getStatusStyles(room.status)}`}
-                      >
-                        <span className="mb-0.5">{room.locationCode}</span>
-                      </button>
-                    ))}
+                {layoutVariant === "alphaStyle" && (
+                  <div className="relative w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-rows-[auto_minmax(0,_1fr)_auto] gap-2">
+                    <div className="grid grid-cols-4 gap-2">
+                      {filteredRooms
+                        .slice(0, 4)
+                        .map((room) => renderRoomTile(room, "h-14"))}
+                    </div>
+
+                    <div className="grid grid-cols-[88px_minmax(0,_1fr)_88px] gap-2">
+                      <div className="flex flex-col gap-2">
+                        {filteredRooms
+                          .slice(4, 8)
+                          .map((room) =>
+                            renderRoomTile(room, "flex-1 min-h-[48px]"),
+                          )}
+                      </div>
+
+                      <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 flex flex-col items-center justify-center text-indigo-700">
+                        <span className="text-xs font-semibold">Atrium</span>
+                        <span className="text-[10px] opacity-80">
+                          Alpha Wing Hub
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        {filteredRooms
+                          .slice(8, 12)
+                          .map((room) =>
+                            renderRoomTile(room, "flex-1 min-h-[48px]"),
+                          )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      {filteredRooms
+                        .slice(12, 16)
+                        .map((room) => renderRoomTile(room, "h-14"))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Bottom row */}
-                <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-t border-slate-100">
-                  {bottom.map((room) => (
-                    <button
-                      key={room.roomId}
-                      type="button"
-                      onClick={() => handleRoomClick(room)}
-                      className={`h-16 rounded-xl border text-[11px] sm:text-xs font-medium flex flex-col items-center justify-center text-center cursor-pointer transition hover:shadow-sm hover:-translate-y-0.5 ${getStatusStyles(room.status)}`}
-                    >
-                      <span className="mb-0.5">{room.locationCode}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+                {layoutVariant === "betaStyle" && (
+                  <div className="relative w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-cols-[1fr_minmax(0,_1.15fr)_1fr] gap-3">
+                    <div className="grid grid-cols-1 gap-2">
+                      {filteredRooms
+                        .filter((_, index) => index % 2 === 0)
+                        .slice(0, 8)
+                        .map((room) => renderRoomTile(room, "h-[46px]"))}
+                    </div>
+
+                    <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/70 p-3">
+                      <div className="text-[11px] font-semibold tracking-wide uppercase text-emerald-700 mb-2">
+                        Main Corridor
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {filteredRooms
+                          .slice(16, 24)
+                          .map((room) =>
+                            renderRoomTile(
+                              room,
+                              "h-[52px]",
+                              "text-[10px] sm:text-[11px]",
+                            ),
+                          )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      {filteredRooms
+                        .filter((_, index) => index % 2 === 1)
+                        .slice(0, 8)
+                        .map((room) => renderRoomTile(room, "h-[46px]"))}
+                    </div>
+                  </div>
+                )}
+
+                {layoutVariant === "deltaStyle" && (
+                  <div className="relative w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {chunkRooms(filteredRooms, 3).map((pod, podIndex) => (
+                        <div
+                          key={`pod-${podIndex}`}
+                          className="rounded-2xl border border-amber-200 bg-amber-50/60 p-2.5"
+                        >
+                          <div className="text-[10px] font-semibold tracking-wide uppercase text-amber-700 mb-1.5">
+                            Cluster {podIndex + 1}
+                          </div>
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {pod.map((room) =>
+                              renderRoomTile(
+                                room,
+                                "h-[44px]",
+                                "text-[10px] sm:text-[11px]",
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {layoutVariant === "epsilonStyle" && (
+                  <div className="relative w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-3 h-full overflow-y-auto">
+                      <div className="text-[11px] font-semibold tracking-wide uppercase text-rose-700 mb-2">
+                        Zigzag Route
+                      </div>
+                      <div className="space-y-2">
+                        {chunkRooms(filteredRooms, 5).map((row, rowIndex) => {
+                          const renderedRow =
+                            rowIndex % 2 === 1 ? [...row].reverse() : row;
+
+                          return (
+                            <div
+                              key={`zigzag-${rowIndex}`}
+                              className="grid grid-cols-5 gap-2"
+                            >
+                              {renderedRow.map((room) =>
+                                renderRoomTile(
+                                  room,
+                                  "h-[46px]",
+                                  "text-[10px] sm:text-[11px]",
+                                ),
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

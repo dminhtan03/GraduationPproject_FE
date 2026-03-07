@@ -59,7 +59,7 @@ const MainLayout: React.FC = () => {
           {/* Page content */}
           <Content
             className={`
-              min-h-[calc(100vh-128px)] p-6 
+              min-h-[calc(100vh-128px)] px-3 py-4 sm:px-4 sm:py-5 lg:px-6 lg:py-6 
               ${mode === "dark" ? "bg-gray-900" : "bg-gray-50"}
             `}
             style={{

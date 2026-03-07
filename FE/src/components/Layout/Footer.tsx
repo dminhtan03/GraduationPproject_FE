@@ -21,11 +21,11 @@ const Footer: React.FC = () => {
         borderTop: "1px solid #e5e7eb",
       }}
     >
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-8 text-left">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 py-6 sm:py-8 text-center sm:text-left">
           {/* Brand */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center justify-center sm:justify-start gap-2 mb-3 sm:mb-4">
               <div
                 className="w-8 h-8 rounded-lg flex items-center justify-center"
                 style={{ background: "#ff9500" }}
@@ -44,7 +44,7 @@ const Footer: React.FC = () => {
           </div>
 
           {/* Links */}
-          <div>
+          <div className="sm:col-span-1">
             <Text strong className="text-base mb-4 block">
               LINKS
             </Text>
@@ -77,7 +77,7 @@ const Footer: React.FC = () => {
           </div>
 
           {/* Contact */}
-          <div>
+          <div className="sm:col-span-2 lg:col-span-1">
             <Text strong className="text-base mb-4 block">
               CONTACT
             </Text>
@@ -88,9 +88,9 @@ const Footer: React.FC = () => {
           </div>
         </div>
 
-        <Divider className="my-4" />
+        <Divider className="my-3 sm:my-4" />
 
-        <div className="py-4">
+        <div className="py-3 sm:py-4">
           <Text className="text-gray-500 text-sm">
             © {new Date().getFullYear()} UniBooking. Meeting room booking
             platform for your campus.

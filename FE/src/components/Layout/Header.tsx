@@ -1,32 +1,29 @@
 // ===== HEADER COMPONENT (UniBooking) =====
 
 import React, { useEffect, useState } from "react";
-import {
-  Layout,
-  Button,
-  Typography,
-  Input,
-  Avatar,
-  Dropdown,
-  AutoComplete,
-  Spin,
-} from "antd";
+import { Layout, Button, Typography, Avatar, Dropdown } from "antd";
 import {
   BellOutlined,
   UserOutlined,
   SettingOutlined,
   LogoutOutlined,
   DownOutlined,
+  MenuOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { useNavigate } from "react-router-dom";
-import { useAppSelector, selectTheme } from "../../store";
+import {
+  useAppDispatch,
+  useAppSelector,
+  selectLayout,
+  selectTheme,
+  toggleSidebar,
+} from "../../store";
 import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
-import type { Room, UserProfile } from "../../types";
+import type { UserProfile } from "../../types";
 import { logout } from "../../services/authService";
-import { roomService } from "../../services/roomService";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNotifications } from "../../context/NotificationContext";
 
@@ -37,19 +34,11 @@ const APP_NAME = "UniBooking";
 
 const Header: React.FC = () => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { mode } = useAppSelector(selectTheme);
+  const { sidebarCollapsed } = useAppSelector(selectLayout);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-
-  // Search state
-  const [searchValue, setSearchValue] = useState("");
-  interface RoomSearchOption {
-    value: string;
-    label: React.ReactNode;
-    room: Room;
-  }
-  const [searchResults, setSearchResults] = useState<RoomSearchOption[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   const { notifications, unreadCount, markAllAsRead } = useNotifications();
@@ -70,51 +59,6 @@ const Header: React.FC = () => {
     };
     fetchProfile();
   }, []);
-
-  // Search handler
-  const handleSearchRoom = async (value: string) => {
-    setSearchValue(value);
-    if (!value || value.trim().length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    setSearchLoading(true);
-    try {
-      // Lấy tất cả phòng, filter theo roomName hoặc building
-      const res = await roomService.getRooms({ page: 0, size: 50 });
-      const keyword = value.trim().toLowerCase();
-      const filtered = res.items.filter(
-        (r) =>
-          r.roomName.toLowerCase().includes(keyword) ||
-          (r.building && r.building.toLowerCase().includes(keyword)),
-      );
-      setSearchResults(
-        filtered.map((r) => ({
-          value: r.roomName + " - " + r.building,
-          label: (
-            <div>
-              <span className="font-semibold">{r.roomName}</span>
-              <span className="text-xs text-gray-500 ml-2">{r.building}</span>
-            </div>
-          ),
-          room: r,
-        })),
-      );
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const handleSelectRoom = (value: string, option: RoomSearchOption) => {
-    // Điều hướng tới trang chi tiết/đặt phòng theo roomId
-    if (option?.room?.id) {
-      navigate(ROUTES.BOOK_ROOM.replace(":roomId", option.room.id));
-    }
-    setSearchValue("");
-    setSearchResults([]);
-  };
 
   let initials = "";
   let displayName = "";
@@ -159,16 +103,22 @@ const Header: React.FC = () => {
 
   return (
     <AntHeader
-      className={`relative flex items-center justify-between px-4 gap-4 ${
+      className={`relative h-auto py-2 px-3 sm:px-4 flex flex-wrap items-center gap-3 ${
         mode === "dark" ? "bg-gray-800" : "bg-white"
       } border-b border-gray-200 shadow-sm`}
       style={{
-        padding: "0 16px",
         background: mode === "dark" ? "#1f2937" : "#ffffff",
       }}
     >
-      {/* Left: Logo */}
+      {/* Left: Mobile menu + Logo */}
       <div className="flex items-center gap-2 flex-shrink-0">
+        <Button
+          type="text"
+          icon={<MenuOutlined className="text-lg" />}
+          onClick={() => dispatch(toggleSidebar())}
+          className="lg:hidden"
+          aria-label={sidebarCollapsed ? "Open sidebar" : "Close sidebar"}
+        />
         <div
           className="w-9 h-9 rounded-lg flex items-center justify-center"
           style={{ background: "#ff9500" }}
@@ -180,30 +130,10 @@ const Header: React.FC = () => {
         </Text>
       </div>
 
-      {/* Center: Search */}
-      <div className="flex-1 max-w-xl mx-4">
-        <AutoComplete
-          value={searchValue}
-          options={searchResults}
-          onSearch={handleSearchRoom}
-          onSelect={handleSelectRoom}
-          allowClear
-          style={{ width: "100%" }}
-          notFoundContent={searchLoading ? <Spin size="small" /> : null}
-        >
-          <Input.Search
-            placeholder="Search rooms by name or building..."
-            enterButton
-            loading={searchLoading}
-            onSearch={handleSearchRoom}
-            className="rounded-lg"
-            style={{ background: mode === "dark" ? "#374151" : "#f3f4f6" }}
-          />
-        </AutoComplete>
-      </div>
+      <div className="flex-1" />
 
       {/* Right: Notifications + User avatar/login button */}
-      <div className="flex items-center gap-1 flex-shrink-0">
+      <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
         <div className="relative">
           <Button
             type="text"
@@ -269,7 +199,7 @@ const Header: React.FC = () => {
       </div>
 
       {isNotificationOpen && (
-        <div className="absolute right-4 top-16 w-[340px] md:w-[380px] bg-white rounded-2xl shadow-xl border border-gray-200 z-50 flex flex-col overflow-hidden">
+        <div className="absolute right-2 sm:right-4 top-14 sm:top-16 w-[calc(100vw-1rem)] sm:w-[340px] md:w-[380px] bg-white rounded-2xl shadow-xl border border-gray-200 z-50 flex flex-col overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
             <span className="font-semibold text-gray-900">Notifications</span>
             {notifications.length > 0 && (
