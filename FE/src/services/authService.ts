@@ -19,12 +19,36 @@ import { ROUTES, STORAGE_KEYS } from "../constants";
 // Max-age cho refresh token trong cookie: 7 ngày (theo BE 604800000 ms)
 const REFRESH_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 604800
 
+const setRefreshTokenCookie = (refreshToken: string) => {
+  const secureFlag =
+    typeof window !== "undefined" && window.location.protocol === "https:"
+      ? "; secure"
+      : "";
+
+  document.cookie = `refresh_token=${encodeURIComponent(
+    refreshToken,
+  )}; path=/; max-age=${REFRESH_TOKEN_MAX_AGE_SECONDS}; samesite=lax${secureFlag}`;
+};
+
+const clearRefreshTokenCookie = () => {
+  const secureFlag =
+    typeof window !== "undefined" && window.location.protocol === "https:"
+      ? "; secure"
+      : "";
+
+  document.cookie = `refresh_token=; path=/; max-age=0; samesite=lax${secureFlag}`;
+};
+
 // Decode JWT để lấy thông tin user (email, fullName...) từ payload
-const decodeJwt = (token: string): any | null => {
+const decodeJwt = (token: string): Record<string, unknown> | null => {
   try {
     const [, payload] = token.split(".");
     const decoded = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(decoded);
+    const parsed: unknown = JSON.parse(decoded);
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -52,8 +76,8 @@ const extractUserFromToken = (accessToken: string | undefined): User | null => {
 
   return {
     id: 0,
-    name: payload.user || payload.fullName || payload.sub || "User",
-    email: payload.sub || "",
+    name: String(payload.user || payload.fullName || payload.sub || "User"),
+    email: String(payload.sub || ""),
     role,
     roles: roles.length ? roles : undefined,
   };
@@ -75,16 +99,12 @@ export const loginWithEmail = async (
   const refreshToken = backendData?.data?.refreshToken;
 
   if (accessToken) {
-    try {
-      localStorage.removeItem("user");
-      localStorage.removeItem("user_data");
-    } catch {}
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_data");
     localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    // Đưa refresh token vào cookies
+    // Save refresh token in cookie for auto-refresh flow
     if (refreshToken) {
-      document.cookie = `refresh_token=${encodeURIComponent(
-        refreshToken,
-      )}; path=/; max-age=${REFRESH_TOKEN_MAX_AGE_SECONDS}; secure`;
+      setRefreshTokenCookie(refreshToken);
     }
   }
 
@@ -113,16 +133,12 @@ export const loginWithGoogle = async (
   const refreshToken = backendData?.data?.refreshToken;
 
   if (accessToken) {
-    try {
-      localStorage.removeItem("user");
-      localStorage.removeItem("user_data");
-    } catch {}
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_data");
     localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    // Đưa refresh token vào cookies giống như login bằng email
+    // Save refresh token in cookie for auto-refresh flow
     if (refreshToken) {
-      document.cookie = `refresh_token=${encodeURIComponent(
-        refreshToken,
-      )}; path=/; max-age=${REFRESH_TOKEN_MAX_AGE_SECONDS}; secure`;
+      setRefreshTokenCookie(refreshToken);
     }
   }
 
@@ -146,17 +162,16 @@ export const logout = async (): Promise<void> => {
     await api.post(API_ENDPOINTS.AUTH.LOGOUT);
   } finally {
     localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
-    try {
-      localStorage.removeItem("user");
-      localStorage.removeItem("user_data");
-    } catch {}
+    clearRefreshTokenCookie();
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_data");
   }
 };
 
 /**
  * Get current user profile
  */
-export const getProfile = async (): Promise<ApiResponse<any>> => {
+export const getProfile = async (): Promise<ApiResponse<unknown>> => {
   return await api.get(API_ENDPOINTS.AUTH.PROFILE);
 };
 

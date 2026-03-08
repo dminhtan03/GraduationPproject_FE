@@ -28,10 +28,11 @@ const createAxiosInstance = (): AxiosInstance => {
   instance.interceptors.request.use(
     (config) => {
       const token = localStorage.getItem(STORAGE_KEYS.USER_TOKEN);
-      // Không thêm Authorization cho login và google-login
+      // Do not attach Authorization for login/google-login/refresh endpoints.
       const isAuthRequest =
         config.url?.includes("/api/v1/auth/doLogin") ||
-        config.url?.includes("/api/v1/auth/google-login");
+        config.url?.includes("/api/v1/auth/google-login") ||
+        config.url?.includes(API_ENDPOINTS.AUTH.REFRESH);
       if (token && !isAuthRequest) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -68,9 +69,15 @@ const createAxiosInstance = (): AxiosInstance => {
       logError(apiError, "Response Interceptor");
 
       const originalRequest: any = error.config || {};
+      const requestUrl = String(originalRequest?.url || "");
+      const isRefreshRequest = requestUrl.includes(API_ENDPOINTS.AUTH.REFRESH);
 
       // Nếu 401 lần đầu tiên, thử gọi refresh token
-      if (apiError.status === 401 && !originalRequest._retry) {
+      if (
+        apiError.status === 401 &&
+        !originalRequest._retry &&
+        !isRefreshRequest
+      ) {
         originalRequest._retry = true;
         try {
           const refreshToken = getRefreshTokenFromCookie();

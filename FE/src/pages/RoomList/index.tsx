@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Typography, Table, Alert } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useNavigate } from "react-router-dom";
+import { ClockIcon } from "@heroicons/react/24/outline";
 import { roomService } from "../../services/roomService";
 import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
+import DatePickerField from "../../components/common/DatePickerField";
 
 const { Title, Text } = Typography;
 
@@ -42,13 +44,37 @@ interface RawMapBuilding {
 }
 
 const PAGE_SIZE = 10;
+const LOCAL_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
   value: String(hour).padStart(2, "0"),
   label: `${String(hour).padStart(2, "0")}h`,
 }));
 
-const MINUTE_OPTIONS = ["10", "20", "30", "40", "50"];
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, minute) =>
+  String(minute).padStart(2, "0"),
+);
+
+const toDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getCurrentTimeRange = () => {
+  const now = new Date();
+  const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+
+  return {
+    startDate: toDateInputValue(now),
+    startHour: String(now.getHours()).padStart(2, "0"),
+    startMinute: String(now.getMinutes()).padStart(2, "0"),
+    endDate: toDateInputValue(oneHourLater),
+    endHour: String(oneHourLater.getHours()).padStart(2, "0"),
+    endMinute: String(oneHourLater.getMinutes()).padStart(2, "0"),
+  };
+};
 
 const normalizeLocalDateTime = (value: string) => {
   if (!value) return "";
@@ -69,6 +95,7 @@ const getStatusBadgeClass = (status: RoomListStatus) => {
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const currentTimeRange = useMemo(() => getCurrentTimeRange(), []);
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,12 +103,12 @@ const DashboardPage: React.FC = () => {
   const [filter, setFilter] = useState<FilterType>("all");
   const [selectedBuildingId, setSelectedBuildingId] = useState("all");
   const [selectedFloorId, setSelectedFloorId] = useState("all");
-  const [startDate, setStartDate] = useState("");
-  const [startHour, setStartHour] = useState("08");
-  const [startMinute, setStartMinute] = useState("10");
-  const [endDate, setEndDate] = useState("");
-  const [endHour, setEndHour] = useState("09");
-  const [endMinute, setEndMinute] = useState("10");
+  const [startDate, setStartDate] = useState(currentTimeRange.startDate);
+  const [startHour, setStartHour] = useState(currentTimeRange.startHour);
+  const [startMinute, setStartMinute] = useState(currentTimeRange.startMinute);
+  const [endDate, setEndDate] = useState(currentTimeRange.endDate);
+  const [endHour, setEndHour] = useState(currentTimeRange.endHour);
+  const [endMinute, setEndMinute] = useState(currentTimeRange.endMinute);
   const [timeFilterActive, setTimeFilterActive] = useState(false);
   const [timeStatusOverrides, setTimeStatusOverrides] = useState<
     Record<string, RoomListStatus>
@@ -284,6 +311,11 @@ const DashboardPage: React.FC = () => {
   const start = totalFiltered === 0 ? 0 : page * PAGE_SIZE + 1;
   const end = Math.min((page + 1) * PAGE_SIZE, totalFiltered);
 
+  const isBackendDateTime = (value: string) => {
+    if (!LOCAL_DATE_TIME_PATTERN.test(value)) return false;
+    return !Number.isNaN(new Date(value).getTime());
+  };
+
   const handleApplyTimeFilter = async () => {
     setError(null);
     setPage(0);
@@ -299,6 +331,11 @@ const DashboardPage: React.FC = () => {
 
     if (!startTime || !endTime) {
       setError("Please select both start time and end time.");
+      return;
+    }
+
+    if (!isBackendDateTime(startTime) || !isBackendDateTime(endTime)) {
+      setError("Invalid date/time format. Expected yyyy-MM-ddTHH:mm:ss.");
       return;
     }
 
@@ -465,15 +502,15 @@ const DashboardPage: React.FC = () => {
               Start time
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setPage(0);
-                }}
-                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
+              <div className="min-w-0">
+                <DatePickerField
+                  value={startDate}
+                  onChange={(nextDate) => {
+                    setStartDate(nextDate);
+                    setPage(0);
+                  }}
+                />
+              </div>
               <select
                 value={startHour}
                 onChange={(e) => {
@@ -510,16 +547,16 @@ const DashboardPage: React.FC = () => {
               End time
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
-              <input
-                type="date"
-                value={endDate}
-                min={startDate || undefined}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setPage(0);
-                }}
-                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
+              <div className="min-w-0">
+                <DatePickerField
+                  value={endDate}
+                  minDate={startDate || undefined}
+                  onChange={(nextDate) => {
+                    setEndDate(nextDate);
+                    setPage(0);
+                  }}
+                />
+              </div>
               <select
                 value={endHour}
                 onChange={(e) => {
@@ -554,20 +591,22 @@ const DashboardPage: React.FC = () => {
           <button
             type="button"
             onClick={handleApplyTimeFilter}
-            className="h-[42px] w-full xl:w-auto px-4 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800"
+            className="h-[42px] w-full xl:w-auto px-4 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 inline-flex items-center justify-center gap-1.5"
           >
+            <ClockIcon className="h-4 w-4" />
             Apply time
           </button>
 
           <button
             type="button"
             onClick={() => {
-              setStartDate("");
-              setEndDate("");
-              setStartHour("08");
-              setStartMinute("10");
-              setEndHour("09");
-              setEndMinute("10");
+              const nextRange = getCurrentTimeRange();
+              setStartDate(nextRange.startDate);
+              setEndDate(nextRange.endDate);
+              setStartHour(nextRange.startHour);
+              setStartMinute(nextRange.startMinute);
+              setEndHour(nextRange.endHour);
+              setEndMinute(nextRange.endMinute);
               setPage(0);
               setTimeFilterActive(false);
               setTimeStatusOverrides({});

@@ -53,6 +53,17 @@ export const API_ENDPOINTS = {
     CHAT: "/api/v1/ai/chat",
     RESERVE: "/api/v1/ai/reserve",
   },
+
+  FEEDBACK: {
+    CREATE: "/api/v1/feedback/add",
+    LIST: "/api/v1/feedback",
+  },
+
+  DASHBOARD: {
+    ALL_USERS: "/api/v1/dashboard/all-users",
+    LOCK_USER: "/api/v1/dashboard/lock-user/:userId",
+    UNLOCK_USER: "/api/v1/dashboard/unlock-user/:userId",
+  },
 } as const;
 
 // Helper function để build URL với params

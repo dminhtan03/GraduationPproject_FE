@@ -19,6 +19,9 @@ const EditProfilePage = React.lazy(
 );
 const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
 const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
+const AdminUserManagementPage = React.lazy(
+  () => import("../pages/AdminUserManagement"),
+);
 
 // Error boundary component cho routes
 // eslint-disable-next-line react-refresh/only-export-components
@@ -76,6 +79,15 @@ export const router = createBrowserRouter([
     element: (
       <SuspenseWrapper>
         <ForgotPasswordPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_DASHBOARD,
+    element: (
+      <SuspenseWrapper>
+        <AdminUserManagementPage />
       </SuspenseWrapper>
     ),
     errorElement: <ErrorBoundary />,

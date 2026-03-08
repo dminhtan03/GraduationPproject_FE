@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert } from "antd";
-import { TagIcon, FunnelIcon } from "@heroicons/react/24/outline";
+import { TagIcon, ClockIcon } from "@heroicons/react/24/outline";
 import {
   roomService,
   type RoomsMapBuilding,
@@ -17,6 +17,8 @@ import {
   getStatusStyles,
   sortFloorsByLevel,
 } from "../../utils";
+import DatePickerField from "../../components/common/DatePickerField";
+import { extractApiMessage } from "../../utils/errorHandlers";
 
 type RoomDetail = {
   roomId?: string;
@@ -57,10 +59,33 @@ type RawMapBuilding = {
   floors?: RawMapFloor[];
 };
 
+const LOCAL_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
+
 const normalizeLocalDateTime = (value: string) => {
   if (!value) return "";
   // Keep FE payload aligned with BE LocalDateTime sample: yyyy-MM-ddTHH:mm:ss
   return value.length === 16 ? `${value}:00` : value;
+};
+
+const formatCheckInDateTime = (value?: string | null) => {
+  if (!value) return "-";
+
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const trimmedFraction = normalized.replace(/\.(\d{3})\d+/, ".$1");
+  const parsed = new Date(trimmedFraction);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  const day = String(parsed.getDate()).padStart(2, "0");
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const year = parsed.getFullYear();
+  const hour = String(parsed.getHours()).padStart(2, "0");
+  const minute = String(parsed.getMinutes()).padStart(2, "0");
+  const second = String(parsed.getSeconds()).padStart(2, "0");
+
+  return `${day}/${month}/${year} ${hour}:${minute}:${second}`;
 };
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
@@ -68,8 +93,31 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
   label: `${String(hour).padStart(2, "0")}h`,
 }));
 
-const MINUTE_OPTIONS = ["10", "20", "30", "40", "50"];
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, minute) =>
+  String(minute).padStart(2, "0"),
+);
 const ROOM_LAYOUT_STORAGE_KEY = "room-map-layout-order";
+
+const toDateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getCurrentTimeRange = () => {
+  const now = new Date();
+  const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+
+  return {
+    startDate: toDateInputValue(now),
+    startHour: String(now.getHours()).padStart(2, "0"),
+    startMinute: String(now.getMinutes()).padStart(2, "0"),
+    endDate: toDateInputValue(oneHourLater),
+    endHour: String(oneHourLater.getHours()).padStart(2, "0"),
+    endMinute: String(oneHourLater.getMinutes()).padStart(2, "0"),
+  };
+};
 
 const buildDateTime = (date: string, hour: string, minute: string) => {
   if (!date || !hour || !minute) return "";
@@ -115,6 +163,7 @@ const resolveLayoutVariant = (
 
 const RoomMapPage: React.FC = () => {
   const navigate = useNavigate();
+  const currentTimeRange = useMemo(() => getCurrentTimeRange(), []);
 
   const [buildings, setBuildings] = useState<RoomsMapBuilding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -131,12 +180,12 @@ const RoomMapPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<"ALL" | MapRoomStatus>(
     "ALL",
   );
-  const [startDate, setStartDate] = useState("");
-  const [startHour, setStartHour] = useState("08");
-  const [startMinute, setStartMinute] = useState("10");
-  const [endDate, setEndDate] = useState("");
-  const [endHour, setEndHour] = useState("09");
-  const [endMinute, setEndMinute] = useState("10");
+  const [startDate, setStartDate] = useState(currentTimeRange.startDate);
+  const [startHour, setStartHour] = useState(currentTimeRange.startHour);
+  const [startMinute, setStartMinute] = useState(currentTimeRange.startMinute);
+  const [endDate, setEndDate] = useState(currentTimeRange.endDate);
+  const [endHour, setEndHour] = useState(currentTimeRange.endHour);
+  const [endMinute, setEndMinute] = useState(currentTimeRange.endMinute);
   const [filterLoading, setFilterLoading] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [overrideStatuses, setOverrideStatuses] = useState<
@@ -364,6 +413,16 @@ const RoomMapPage: React.FC = () => {
       return;
     }
 
+    const isBackendDateTime = (value: string) => {
+      if (!LOCAL_DATE_TIME_PATTERN.test(value)) return false;
+      return !Number.isNaN(new Date(value).getTime());
+    };
+
+    if (!isBackendDateTime(startTime) || !isBackendDateTime(endTime)) {
+      setFilterError("Invalid date/time format. Expected yyyy-MM-ddTHH:mm:ss.");
+      return;
+    }
+
     if (new Date(endTime) <= new Date(startTime)) {
       setFilterError("End time must be later than start time.");
       return;
@@ -404,11 +463,7 @@ const RoomMapPage: React.FC = () => {
 
       setOverrideStatuses(overrides);
     } catch (e: unknown) {
-      const message =
-        e && typeof e === "object" && "message" in e
-          ? String((e as { message?: string }).message || "")
-          : "Unable to apply time filter";
-      setFilterError(message);
+      setFilterError(extractApiMessage(e, "Unable to apply time filter"));
     } finally {
       setFilterLoading(false);
     }
@@ -508,9 +563,9 @@ const RoomMapPage: React.FC = () => {
       </div>
 
       {/* Filters: Status + Time range */}
-      <div className="mb-5 bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-6">
-          <div>
+      <div className="mb-5 bg-white rounded-2xl border border-slate-100 shadow-sm px-4 py-4">
+        <div className="flex w-full flex-col items-center gap-4 lg:flex-row lg:items-end lg:justify-center lg:gap-6">
+          <div className="w-full lg:w-auto lg:-mt-2">
             <div className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase mb-1">
               Status
             </div>
@@ -519,7 +574,7 @@ const RoomMapPage: React.FC = () => {
               onChange={(e) =>
                 setStatusFilter(e.target.value as "ALL" | MapRoomStatus)
               }
-              className="w-full sm:w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              className="w-full max-w-[240px] lg:w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
             >
               <option value="ALL">All</option>
               <option value="AVAILABLE">Available</option>
@@ -528,7 +583,7 @@ const RoomMapPage: React.FC = () => {
             </select>
           </div>
 
-          <div>
+          <div className="w-full lg:w-auto">
             <div className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase mb-1">
               Time range
             </div>
@@ -537,17 +592,17 @@ const RoomMapPage: React.FC = () => {
                 <div className="text-[10px] font-semibold tracking-wide uppercase text-slate-500 mb-1.5">
                   Start
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="col-span-2 sm:col-span-1 w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
+                <div className="grid grid-cols-2 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
+                  <div className="col-span-2 sm:col-span-1 min-w-0">
+                    <DatePickerField
+                      value={startDate}
+                      onChange={setStartDate}
+                    />
+                  </div>
                   <select
                     value={startHour}
                     onChange={(e) => setStartHour(e.target.value)}
-                    className="w-full min-w-[84px] border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                   >
                     {HOUR_OPTIONS.map((hour) => (
                       <option key={hour.value} value={hour.value}>
@@ -558,7 +613,7 @@ const RoomMapPage: React.FC = () => {
                   <select
                     value={startMinute}
                     onChange={(e) => setStartMinute(e.target.value)}
-                    className="w-full min-w-[84px] border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                   >
                     {MINUTE_OPTIONS.map((minute) => (
                       <option key={minute} value={minute}>
@@ -573,18 +628,18 @@ const RoomMapPage: React.FC = () => {
                 <div className="text-[10px] font-semibold tracking-wide uppercase text-slate-500 mb-1.5">
                   End
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
-                  <input
-                    type="date"
-                    value={endDate}
-                    min={startDate || undefined}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="col-span-2 sm:col-span-1 w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
+                <div className="grid grid-cols-2 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
+                  <div className="col-span-2 sm:col-span-1 min-w-0">
+                    <DatePickerField
+                      value={endDate}
+                      minDate={startDate || undefined}
+                      onChange={setEndDate}
+                    />
+                  </div>
                   <select
                     value={endHour}
                     onChange={(e) => setEndHour(e.target.value)}
-                    className="w-full min-w-[84px] border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                   >
                     {HOUR_OPTIONS.map((hour) => (
                       <option key={hour.value} value={hour.value}>
@@ -595,7 +650,7 @@ const RoomMapPage: React.FC = () => {
                   <select
                     value={endMinute}
                     onChange={(e) => setEndMinute(e.target.value)}
-                    className="w-full min-w-[84px] border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                   >
                     {MINUTE_OPTIONS.map((minute) => (
                       <option key={minute} value={minute}>
@@ -607,18 +662,18 @@ const RoomMapPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={handleApplyFilters}
-            disabled={filterLoading || !currentBuilding || !currentFloor}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FunnelIcon className="w-4 h-4" />
-            <span>Apply filters</span>
-          </button>
+          <div className="flex w-full items-center justify-center lg:w-auto lg:-mt-2">
+            <button
+              type="button"
+              onClick={handleApplyFilters}
+              disabled={filterLoading || !currentBuilding || !currentFloor}
+              className="w-full max-w-[240px] sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ClockIcon className="w-4 h-4" />
+              <span>Apply filters</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -999,7 +1054,7 @@ const RoomMapPage: React.FC = () => {
                       Check-in time
                     </div>
                     <div className="text-sm font-semibold text-slate-800">
-                      {roomDetail.checkInTime || "-"}
+                      {formatCheckInDateTime(roomDetail.checkInTime)}
                     </div>
                   </div>
 

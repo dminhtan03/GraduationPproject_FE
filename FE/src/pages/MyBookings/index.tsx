@@ -11,15 +11,25 @@ import {
   Tabs,
   Modal,
   Descriptions,
+  Input,
   InputNumber,
+  Rate,
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TablePaginationConfig } from "antd/es/table";
 import { CalendarOutlined, ClockCircleOutlined } from "@ant-design/icons";
+import {
+  ChatBubbleLeftRightIcon,
+  ClockIcon,
+  MapPinIcon,
+  SparklesIcon,
+  StarIcon,
+} from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
 import { reservationService } from "../../services/reservationService";
+import { feedbackService } from "../../services/feedbackService";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import type { Reservation } from "../../types";
 
@@ -30,6 +40,11 @@ type BookingActionType = "check-in" | "return-room" | "extend" | "cancel";
 
 interface BookingActionModalState {
   type: BookingActionType;
+  booking: Reservation;
+}
+
+interface FeedbackModalState {
+  reservationId: string;
   booking: Reservation;
 }
 
@@ -78,6 +93,50 @@ const formatTimePart = (value?: string) => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
+const extractBackendSuccessMessage = (
+  response: unknown,
+  fallback: string,
+): string => {
+  if (!response || typeof response !== "object") return fallback;
+
+  const wrapped = response as {
+    data?: {
+      meta?: { message?: string };
+      message?: string;
+      data?: unknown;
+    };
+  };
+
+  const payload = wrapped.data;
+  if (!payload) return fallback;
+
+  if (
+    typeof payload.meta?.message === "string" &&
+    payload.meta.message.trim()
+  ) {
+    return payload.meta.message;
+  }
+
+  if (typeof payload.message === "string" && payload.message.trim()) {
+    return payload.message;
+  }
+
+  if (typeof payload.data === "string" && payload.data.trim()) {
+    return payload.data;
+  }
+
+  if (
+    payload.data &&
+    typeof payload.data === "object" &&
+    typeof (payload.data as { message?: string }).message === "string" &&
+    (payload.data as { message?: string }).message?.trim()
+  ) {
+    return (payload.data as { message?: string }).message || fallback;
+  }
+
+  return fallback;
+};
+
 const getStatusColor = (status: string) => {
   const normalized = status.toUpperCase();
   if (normalized === "PENDING") return "gold";
@@ -96,7 +155,11 @@ const isValidDate = (value?: string) => {
 
 const canCheckIn = (status: string, startTime?: string, endTime?: string) => {
   const normalized = status.toUpperCase();
-  if (["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(normalized)) {
+  if (
+    ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(
+      normalized,
+    )
+  ) {
     return false;
   }
   if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
@@ -135,7 +198,7 @@ const canExtend = (status: string, startTime?: string, endTime?: string) => {
   return now >= start && now <= end;
 };
 
-const canCancel = (status: string, startTime?: string, endTime?: string) => {
+const canCancel = (status: string, startTime?: string) => {
   const normalized = status.toUpperCase();
   if (["CANCELLED", "COMPLETED", "REJECTED"].includes(normalized)) return false;
 
@@ -150,7 +213,11 @@ const getCheckInDisabledReason = (record: Reservation) => {
   if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
 
   const status = (record.status || "").toUpperCase();
-  if (["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(status)) {
+  if (
+    ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(
+      status,
+    )
+  ) {
     return `Booking đang ở trạng thái ${status || "N/A"} nên không thể check-in.`;
   }
 
@@ -244,8 +311,15 @@ const MyBookingsPage: React.FC = () => {
   const [pageSize, setPageSize] = useState(5);
   const [total, setTotal] = useState(0);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [actionModal, setActionModal] = useState<BookingActionModalState | null>(null);
+  const [actionModal, setActionModal] =
+    useState<BookingActionModalState | null>(null);
   const [extendHour, setExtendHour] = useState<number>(1);
+  const [feedbackModal, setFeedbackModal] = useState<FeedbackModalState | null>(
+    null,
+  );
+  const [feedbackRating, setFeedbackRating] = useState<number>(5);
+  const [feedbackDescription, setFeedbackDescription] = useState<string>("");
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
   const loadBookings = useCallback(
     async (nextPage: number, nextSize: number, tabKey: BookingTabKey) => {
@@ -298,39 +372,94 @@ const MyBookingsPage: React.FC = () => {
     setActionModal(null);
   };
 
+  const openFeedbackModal = (booking: Reservation) => {
+    if (!booking.id) return;
+    setFeedbackRating(5);
+    setFeedbackDescription("");
+    setFeedbackModal({ reservationId: booking.id, booking });
+  };
+
+  const closeFeedbackModal = () => {
+    if (submittingFeedback) return;
+    setFeedbackModal(null);
+    setFeedbackRating(5);
+    setFeedbackDescription("");
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackModal?.reservationId) return;
+    if (!feedbackDescription.trim()) {
+      message.warning("Please enter your feedback.");
+      return;
+    }
+
+    setSubmittingFeedback(true);
+    try {
+      const response = await feedbackService.createFeedback({
+        reservationId: feedbackModal.reservationId,
+        rating: feedbackRating,
+        description: feedbackDescription.trim(),
+      });
+
+      message.success(
+        extractBackendSuccessMessage(response, "Feedback created successfully"),
+      );
+      closeFeedbackModal();
+      await loadBookings(page, pageSize, activeTab);
+    } catch (err) {
+      message.error(extractApiMessage(err, "Unable to submit feedback"));
+    } finally {
+      setSubmittingFeedback(false);
+    }
+  };
+
   const handleConfirmAction = async () => {
     if (!actionModal?.booking?.id) return;
 
-    const reservationId = actionModal.booking.id;
-    const status = actionModal.booking.status || "";
+    const currentAction = actionModal;
+
+    const reservationId = String(currentAction.booking.id);
+    const status = currentAction.booking.status || "";
 
     if (
-      actionModal.type === "check-in" &&
-      !canCheckIn(status, actionModal.booking.startTime, actionModal.booking.endTime)
+      currentAction.type === "check-in" &&
+      !canCheckIn(
+        status,
+        currentAction.booking.startTime,
+        currentAction.booking.endTime,
+      )
     ) {
       message.warning("Chỉ được check-in trong khoảng thời gian đã đặt phòng.");
       return;
     }
 
     if (
-      actionModal.type === "return-room" &&
-      !canCheckOut(status, actionModal.booking.startTime, actionModal.booking.endTime)
+      currentAction.type === "return-room" &&
+      !canCheckOut(
+        status,
+        currentAction.booking.startTime,
+        currentAction.booking.endTime,
+      )
     ) {
       message.warning("Chỉ có thể trả phòng khi cuộc họp đang diễn ra.");
       return;
     }
 
     if (
-      actionModal.type === "extend" &&
-      !canExtend(status, actionModal.booking.startTime, actionModal.booking.endTime)
+      currentAction.type === "extend" &&
+      !canExtend(
+        status,
+        currentAction.booking.startTime,
+        currentAction.booking.endTime,
+      )
     ) {
       message.warning("Chỉ có thể gia hạn khi cuộc họp đang diễn ra.");
       return;
     }
 
     if (
-      actionModal.type === "cancel" &&
-      !canCancel(status, actionModal.booking.startTime, actionModal.booking.endTime)
+      currentAction.type === "cancel" &&
+      !canCancel(status, currentAction.booking.startTime)
     ) {
       message.warning("Chỉ có thể hủy booking trước khi cuộc họp bắt đầu.");
       return;
@@ -339,31 +468,49 @@ const MyBookingsPage: React.FC = () => {
     setLoading(true);
     setActionLoadingId(reservationId);
     try {
-      if (actionModal.type === "check-in") {
-        await reservationService.checkInBooking(reservationId);
-        message.success("Check-in thành công");
-      } else if (actionModal.type === "return-room") {
-        await reservationService.returnRoomBooking(reservationId);
-        message.success("Trả phòng thành công");
-      } else if (actionModal.type === "extend") {
-        await reservationService.extendRoomBooking(reservationId, extendHour);
-        message.success(`Gia hạn phòng thêm ${extendHour} giờ thành công`);
+      let actionResponse: unknown;
+
+      if (currentAction.type === "check-in") {
+        actionResponse = await reservationService.checkInBooking(reservationId);
+      } else if (currentAction.type === "return-room") {
+        actionResponse =
+          await reservationService.returnRoomBooking(reservationId);
+      } else if (currentAction.type === "extend") {
+        actionResponse = await reservationService.extendRoomBooking(
+          reservationId,
+          extendHour,
+        );
       } else {
-        await reservationService.cancelBooking(reservationId);
-        message.success("Hủy booking thành công");
+        actionResponse = await reservationService.cancelBooking(reservationId);
       }
 
+      const actionSuccessFallback =
+        currentAction.type === "check-in"
+          ? "Check-in completed successfully"
+          : currentAction.type === "return-room"
+            ? "Return room completed successfully"
+            : currentAction.type === "extend"
+              ? "Extend room completed successfully"
+              : "Cancel booking completed successfully";
+
+      message.success(
+        extractBackendSuccessMessage(actionResponse, actionSuccessFallback),
+      );
+
       closeActionModal();
+      if (currentAction.type === "return-room") {
+        openFeedbackModal(currentAction.booking);
+      }
       await loadBookings(page, pageSize, activeTab);
     } catch (err) {
       message.error(
         extractApiMessage(
           err,
-          actionModal.type === "check-in"
+          currentAction.type === "check-in"
             ? "Không thể check-in booking"
-            : actionModal.type === "return-room"
+            : currentAction.type === "return-room"
               ? "Không thể trả phòng"
-              : actionModal.type === "extend"
+              : currentAction.type === "extend"
                 ? "Không thể gia hạn phòng"
                 : "Không thể hủy booking",
         ),
@@ -442,13 +589,17 @@ const MyBookingsPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <ClockCircleOutlined className="text-blue-500" />
             <span className="text-gray-500 min-w-[40px]">Start</span>
-            <span className="font-medium text-gray-700">{formatDatePart(record.startTime)}</span>
+            <span className="font-medium text-gray-700">
+              {formatDatePart(record.startTime)}
+            </span>
             <Tag color="blue">{formatTimePart(record.startTime)}</Tag>
           </div>
           <div className="flex items-center gap-2">
             <ClockCircleOutlined className="text-orange-500" />
             <span className="text-gray-500 min-w-[40px]">End</span>
-            <span className="font-medium text-gray-700">{formatDatePart(record.endTime)}</span>
+            <span className="font-medium text-gray-700">
+              {formatDatePart(record.endTime)}
+            </span>
             <Tag color="orange">{formatTimePart(record.endTime)}</Tag>
           </div>
         </div>
@@ -470,10 +621,22 @@ const MyBookingsPage: React.FC = () => {
       render: (_: unknown, record: Reservation) => {
         const status = record.status || "";
         const isLoading = actionLoadingId === record.id;
-        const checkInEnabled = canCheckIn(status, record.startTime, record.endTime);
-        const returnRoomEnabled = canCheckOut(status, record.startTime, record.endTime);
-        const extendEnabled = canExtend(status, record.startTime, record.endTime);
-        const cancelEnabled = canCancel(status, record.startTime, record.endTime);
+        const checkInEnabled = canCheckIn(
+          status,
+          record.startTime,
+          record.endTime,
+        );
+        const returnRoomEnabled = canCheckOut(
+          status,
+          record.startTime,
+          record.endTime,
+        );
+        const extendEnabled = canExtend(
+          status,
+          record.startTime,
+          record.endTime,
+        );
+        const cancelEnabled = canCancel(status, record.startTime);
         const checkInDisabledReason = getCheckInDisabledReason(record);
         const returnRoomDisabledReason = getCheckOutDisabledReason(record);
         const extendDisabledReason = getExtendDisabledReason(record);
@@ -481,7 +644,9 @@ const MyBookingsPage: React.FC = () => {
 
         return (
           <Space>
-            <Tooltip title={!checkInEnabled ? checkInDisabledReason : undefined}>
+            <Tooltip
+              title={!checkInEnabled ? checkInDisabledReason : undefined}
+            >
               <span>
                 <Button
                   type="primary"
@@ -495,7 +660,9 @@ const MyBookingsPage: React.FC = () => {
               </span>
             </Tooltip>
 
-            <Tooltip title={!returnRoomEnabled ? returnRoomDisabledReason : undefined}>
+            <Tooltip
+              title={!returnRoomEnabled ? returnRoomDisabledReason : undefined}
+            >
               <span>
                 <Button
                   size="small"
@@ -584,7 +751,9 @@ const MyBookingsPage: React.FC = () => {
 
       {bookings.length === 0 && !loading && !error ? (
         <Empty
-          image={<CalendarOutlined style={{ fontSize: 64, color: "#d9d9d9" }} />}
+          image={
+            <CalendarOutlined style={{ fontSize: 64, color: "#d9d9d9" }} />
+          }
           description={
             activeTab === "history"
               ? "No booking history yet."
@@ -637,7 +806,11 @@ const MyBookingsPage: React.FC = () => {
         }
         cancelText="Close"
         onOk={handleConfirmAction}
-        okButtonProps={{ loading: !!actionModal?.booking?.id && actionLoadingId === actionModal.booking.id }}
+        okButtonProps={{
+          loading:
+            !!actionModal?.booking?.id &&
+            actionLoadingId === actionModal.booking.id,
+        }}
       >
         <p className="text-gray-600 mb-4">
           {actionModal?.type === "check-in"
@@ -659,7 +832,9 @@ const MyBookingsPage: React.FC = () => {
               max={4}
               step={1}
               value={extendHour}
-              onChange={(value) => setExtendHour(typeof value === "number" ? value : 1)}
+              onChange={(value) =>
+                setExtendHour(typeof value === "number" ? value : 1)
+              }
             />
           </div>
         )}
@@ -697,7 +872,11 @@ const MyBookingsPage: React.FC = () => {
             {
               key: "status",
               label: "Status",
-              children: <Tag color={getStatusColor(actionModal?.booking.status || "")}>{actionModal?.booking.status || "-"}</Tag>,
+              children: (
+                <Tag color={getStatusColor(actionModal?.booking.status || "")}>
+                  {actionModal?.booking.status || "-"}
+                </Tag>
+              ),
             },
             {
               key: "purpose",
@@ -711,6 +890,100 @@ const MyBookingsPage: React.FC = () => {
             },
           ]}
         />
+      </Modal>
+
+      <Modal
+        open={!!feedbackModal}
+        onCancel={closeFeedbackModal}
+        width={760}
+        title={
+          <div className="flex items-center gap-2">
+            <SparklesIcon className="h-5 w-5 text-sky-600" />
+            <span>Feedback after return room</span>
+          </div>
+        }
+        okText="Submit feedback"
+        cancelText="Skip"
+        onOk={handleSubmitFeedback}
+        okButtonProps={{ loading: submittingFeedback }}
+        cancelButtonProps={{ disabled: submittingFeedback }}
+      >
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-4 md:p-5">
+          <p className="mb-4 text-sm text-slate-600 md:text-base">
+            Share your experience about the meeting room you just used.
+          </p>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+              <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <MapPinIcon className="h-4 w-4 text-sky-600" />
+                Booking details
+              </h4>
+
+              <div className="space-y-2 text-sm">
+                <div className="flex items-start gap-2">
+                  <MapPinIcon className="mt-0.5 h-4 w-4 text-slate-500" />
+                  <div>
+                    <p className="text-xs text-slate-500">Location</p>
+                    <p className="font-medium text-slate-800">
+                      {feedbackModal?.booking.locationCode || "-"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <ClockIcon className="mt-0.5 h-4 w-4 text-slate-500" />
+                  <div>
+                    <p className="text-xs text-slate-500">Start time</p>
+                    <p className="font-medium text-slate-800">
+                      {formatDateTime(feedbackModal?.booking.startTime || "")}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <ClockIcon className="mt-0.5 h-4 w-4 text-slate-500" />
+                  <div>
+                    <p className="text-xs text-slate-500">End time</p>
+                    <p className="font-medium text-slate-800">
+                      {formatDateTime(feedbackModal?.booking.endTime || "")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+              <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <StarIcon className="h-4 w-4 text-amber-500" />
+                Your rating
+              </h4>
+
+              <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+                <Rate value={feedbackRating} onChange={setFeedbackRating} />
+                <p className="mt-2 text-xs text-slate-600">
+                  Satisfaction level:{" "}
+                  <span className="font-semibold">{feedbackRating}/5</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <ChatBubbleLeftRightIcon className="h-4 w-4 text-sky-600" />
+              Feedback description
+            </label>
+            <Input.TextArea
+              rows={4}
+              maxLength={500}
+              showCount
+              placeholder="Enter your feedback"
+              value={feedbackDescription}
+              onChange={(event) => setFeedbackDescription(event.target.value)}
+            />
+          </div>
+        </div>
       </Modal>
     </div>
   );

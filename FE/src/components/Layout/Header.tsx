@@ -40,6 +40,9 @@ const Header: React.FC = () => {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 1024 : false,
+  );
 
   const { notifications, unreadCount, markAllAsRead } = useNotifications();
 
@@ -58,6 +61,16 @@ const Header: React.FC = () => {
       }
     };
     fetchProfile();
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      setIsMobileView(window.innerWidth < 1024);
+    };
+
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   let initials = "";
@@ -112,13 +125,14 @@ const Header: React.FC = () => {
     >
       {/* Left: Mobile menu + Logo */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <Button
-          type="text"
-          icon={<MenuOutlined className="text-lg" />}
-          onClick={() => dispatch(toggleSidebar())}
-          className="lg:hidden"
-          aria-label={sidebarCollapsed ? "Open sidebar" : "Close sidebar"}
-        />
+        {isMobileView && (
+          <Button
+            type="text"
+            icon={<MenuOutlined className="text-lg" />}
+            onClick={() => dispatch(toggleSidebar())}
+            aria-label={sidebarCollapsed ? "Open sidebar" : "Close sidebar"}
+          />
+        )}
         <div
           className="w-9 h-9 rounded-lg flex items-center justify-center"
           style={{ background: "#ff9500" }}
