@@ -488,11 +488,11 @@ const RoomMapPage: React.FC = () => {
             View real-time availability across all university wings.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
+            className="w-full sm:w-auto px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
           >
             List view
           </button>
@@ -500,7 +500,7 @@ const RoomMapPage: React.FC = () => {
             type="button"
             disabled={!selectedRoom}
             onClick={handleBooking}
-            className="px-4 py-2 rounded-full text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            className="w-full sm:w-auto px-4 py-2 rounded-full text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           >
             Book a room
           </button>
@@ -519,7 +519,7 @@ const RoomMapPage: React.FC = () => {
               onChange={(e) =>
                 setStatusFilter(e.target.value as "ALL" | MapRoomStatus)
               }
-              className="w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              className="w-full sm:w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
             >
               <option value="ALL">All</option>
               <option value="AVAILABLE">Available</option>
@@ -532,17 +532,17 @@ const RoomMapPage: React.FC = () => {
             <div className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase mb-1">
               Time range
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
                 <div className="text-[10px] font-semibold tracking-wide uppercase text-slate-500 mb-1.5">
                   Start
                 </div>
-                <div className="grid grid-cols-[1.25fr_1fr_1fr] gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="col-span-2 sm:col-span-1 w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
                   <select
                     value={startHour}
@@ -573,13 +573,13 @@ const RoomMapPage: React.FC = () => {
                 <div className="text-[10px] font-semibold tracking-wide uppercase text-slate-500 mb-1.5">
                   End
                 </div>
-                <div className="grid grid-cols-[1.25fr_1fr_1fr] gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
                   <input
                     type="date"
                     value={endDate}
                     min={startDate || undefined}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="col-span-2 sm:col-span-1 w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
                   <select
                     value={endHour}
@@ -609,12 +609,12 @@ const RoomMapPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center">
+        <div className="flex items-center w-full sm:w-auto">
           <button
             type="button"
             onClick={handleApplyFilters}
             disabled={filterLoading || !currentBuilding || !currentFloor}
-            className="inline-flex items-center gap-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-1 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FunnelIcon className="w-4 h-4" />
             <span>Apply filters</span>
@@ -634,7 +634,7 @@ const RoomMapPage: React.FC = () => {
 
       {/* Building tabs + legend */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {buildings.map((building) => (
             <button
               key={building.buildingId}
@@ -648,7 +648,7 @@ const RoomMapPage: React.FC = () => {
                 setSelectedFloorId(firstFloor ? firstFloor.floorId : null);
                 setSelectedRoom(null);
               }}
-              className={`px-4 py-2 rounded-full text-sm font-medium border transition
+              className={`shrink-0 px-4 py-2 rounded-full text-sm font-medium border transition
 								${
                   building.buildingId === selectedBuildingId
                     ? "bg-orange-500 border-orange-500 text-white shadow-sm"
@@ -679,7 +679,7 @@ const RoomMapPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,_2.2fr)_minmax(0,_1.2fr)] gap-6 items-start">
         {/* Map + floor selector */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 flex flex-col gap-4">
-          <div className="flex justify-between items-center mb-2">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-2">
             <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
               {currentBuilding ? currentBuilding.buildingName : "No building"}
             </div>
@@ -714,7 +714,7 @@ const RoomMapPage: React.FC = () => {
           </div>
 
           {/* Map canvas */}
-          <div className="relative flex-1 min-h-[320px] sm:min-h-[380px] bg-slate-50 rounded-2xl border border-dashed border-slate-200 flex items-center justify-center overflow-hidden">
+          <div className="relative flex-1 min-h-[320px] sm:min-h-[380px] bg-slate-50 rounded-2xl border border-dashed border-slate-200 flex items-center justify-start sm:justify-center overflow-x-auto overflow-y-hidden px-2">
             {loading && (
               <div className="text-sm text-slate-500">Loading map...</div>
             )}
@@ -727,7 +727,7 @@ const RoomMapPage: React.FC = () => {
             {!loading && currentFloor && currentFloor.rooms.length > 0 && (
               <>
                 {layoutVariant === "gamma" && (
-                  <div className="relative w-full max-w-[640px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner flex flex-col">
+                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[640px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner flex flex-col">
                     <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-b border-slate-100">
                       {top.map((room) => renderRoomTile(room, "h-16"))}
                     </div>
@@ -764,7 +764,7 @@ const RoomMapPage: React.FC = () => {
                 )}
 
                 {layoutVariant === "alphaStyle" && (
-                  <div className="relative w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-rows-[auto_minmax(0,_1fr)_auto] gap-2">
+                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-rows-[auto_minmax(0,_1fr)_auto] gap-2">
                     <div className="grid grid-cols-4 gap-2">
                       {filteredRooms
                         .slice(0, 4)
@@ -805,7 +805,7 @@ const RoomMapPage: React.FC = () => {
                 )}
 
                 {layoutVariant === "betaStyle" && (
-                  <div className="relative w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-cols-[1fr_minmax(0,_1.15fr)_1fr] gap-3">
+                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-cols-[1fr_minmax(0,_1.15fr)_1fr] gap-3">
                     <div className="grid grid-cols-1 gap-2">
                       {filteredRooms
                         .filter((_, index) => index % 2 === 0)
@@ -840,7 +840,7 @@ const RoomMapPage: React.FC = () => {
                 )}
 
                 {layoutVariant === "deltaStyle" && (
-                  <div className="relative w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
+                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {chunkRooms(filteredRooms, 3).map((pod, podIndex) => (
                         <div
@@ -866,7 +866,7 @@ const RoomMapPage: React.FC = () => {
                 )}
 
                 {layoutVariant === "epsilonStyle" && (
-                  <div className="relative w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
+                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
                     <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-3 h-full overflow-y-auto">
                       <div className="text-[11px] font-semibold tracking-wide uppercase text-rose-700 mb-2">
                         Zigzag Route
@@ -932,7 +932,7 @@ const RoomMapPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                   <div className="text-[11px] text-slate-500 mb-0.5">
                     Status
@@ -972,7 +972,7 @@ const RoomMapPage: React.FC = () => {
 
               {roomDetail && !roomDetailLoading && (
                 <>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
                       <div className="text-[11px] text-slate-500 mb-0.5">
                         Capacity

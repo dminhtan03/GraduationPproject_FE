@@ -464,7 +464,7 @@ const DashboardPage: React.FC = () => {
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-2">
               Start time
             </div>
-            <div className="grid grid-cols-[1.25fr_1fr_1fr] gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
               <input
                 type="date"
                 value={startDate}
@@ -480,7 +480,7 @@ const DashboardPage: React.FC = () => {
                   setStartHour(e.target.value);
                   setPage(0);
                 }}
-                className="w-full min-w-[88px] border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
                 {HOUR_OPTIONS.map((hour) => (
                   <option key={hour.value} value={hour.value}>
@@ -494,7 +494,7 @@ const DashboardPage: React.FC = () => {
                   setStartMinute(e.target.value);
                   setPage(0);
                 }}
-                className="w-full min-w-[88px] border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
                 {MINUTE_OPTIONS.map((minute) => (
                   <option key={minute} value={minute}>
@@ -509,7 +509,7 @@ const DashboardPage: React.FC = () => {
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-2">
               End time
             </div>
-            <div className="grid grid-cols-[1.25fr_1fr_1fr] gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
               <input
                 type="date"
                 value={endDate}
@@ -526,7 +526,7 @@ const DashboardPage: React.FC = () => {
                   setEndHour(e.target.value);
                   setPage(0);
                 }}
-                className="w-full min-w-[88px] border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
                 {HOUR_OPTIONS.map((hour) => (
                   <option key={hour.value} value={hour.value}>
@@ -540,7 +540,7 @@ const DashboardPage: React.FC = () => {
                   setEndMinute(e.target.value);
                   setPage(0);
                 }}
-                className="w-full min-w-[88px] border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
                 {MINUTE_OPTIONS.map((minute) => (
                   <option key={minute} value={minute}>
