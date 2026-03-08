@@ -11,6 +11,7 @@ import {
   Tabs,
   Modal,
   Descriptions,
+  InputNumber,
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -25,7 +26,7 @@ import type { Reservation } from "../../types";
 const { Title, Paragraph } = Typography;
 
 type BookingTabKey = "history" | "ongoing";
-type BookingActionType = "check-in" | "cancel";
+type BookingActionType = "check-in" | "return-room" | "extend" | "cancel";
 
 interface BookingActionModalState {
   type: BookingActionType;
@@ -34,7 +35,7 @@ interface BookingActionModalState {
 
 const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
   ongoing: ["PENDING", "APPROVED", "IN_USE", "CHECKED_IN"],
-  history: ["COMPLETED", "CANCELLED", "REJECTED"],
+  history: ["COMPLETED", "CANCELLED", "REJECTED", "FAILED"],
 };
 
 const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey) => {
@@ -85,6 +86,7 @@ const getStatusColor = (status: string) => {
   if (normalized === "COMPLETED") return "cyan";
   if (normalized === "CANCELLED") return "red";
   if (normalized === "REJECTED") return "volcano";
+  if (normalized === "FAILED") return "magenta";
   return "default";
 };
 
@@ -104,6 +106,32 @@ const canCheckIn = (status: string, startTime?: string, endTime?: string) => {
   const end = parseBookingDateTime(endTime);
 
   if (!start || !end) return false;
+  return now >= start && now <= end;
+};
+
+const canCheckOut = (status: string, startTime?: string, endTime?: string) => {
+  const normalized = status.toUpperCase();
+  if (!["IN_USE", "CHECKED_IN"].includes(normalized)) return false;
+  if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
+
+  const now = new Date();
+  const start = parseBookingDateTime(startTime);
+  const end = parseBookingDateTime(endTime);
+  if (!start || !end) return false;
+
+  return now >= start && now <= end;
+};
+
+const canExtend = (status: string, startTime?: string, endTime?: string) => {
+  const normalized = status.toUpperCase();
+  if (!["IN_USE", "CHECKED_IN"].includes(normalized)) return false;
+  if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
+
+  const now = new Date();
+  const start = parseBookingDateTime(startTime);
+  const end = parseBookingDateTime(endTime);
+  if (!start || !end) return false;
+
   return now >= start && now <= end;
 };
 
@@ -162,6 +190,50 @@ const getCancelDisabledReason = (record: Reservation) => {
   return undefined;
 };
 
+const getCheckOutDisabledReason = (record: Reservation) => {
+  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
+
+  const status = (record.status || "").toUpperCase();
+  if (!["IN_USE", "CHECKED_IN"].includes(status)) {
+    return `Booking đang ở trạng thái ${status || "N/A"} nên chưa thể trả phòng.`;
+  }
+
+  const start = parseBookingDateTime(record.startTime);
+  const end = parseBookingDateTime(record.endTime);
+  if (!start || !end) {
+    return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể trả phòng.";
+  }
+
+  const now = new Date();
+  if (now < start || now > end) {
+    return "Chỉ có thể trả phòng khi cuộc họp đang diễn ra.";
+  }
+
+  return undefined;
+};
+
+const getExtendDisabledReason = (record: Reservation) => {
+  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
+
+  const status = (record.status || "").toUpperCase();
+  if (!["IN_USE", "CHECKED_IN"].includes(status)) {
+    return `Booking đang ở trạng thái ${status || "N/A"} nên chưa thể gia hạn.`;
+  }
+
+  const start = parseBookingDateTime(record.startTime);
+  const end = parseBookingDateTime(record.endTime);
+  if (!start || !end) {
+    return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể gia hạn.";
+  }
+
+  const now = new Date();
+  if (now < start || now > end) {
+    return "Chỉ có thể gia hạn khi cuộc họp đang diễn ra.";
+  }
+
+  return undefined;
+};
+
 const MyBookingsPage: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<BookingTabKey>("ongoing");
@@ -173,6 +245,7 @@ const MyBookingsPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionModal, setActionModal] = useState<BookingActionModalState | null>(null);
+  const [extendHour, setExtendHour] = useState<number>(1);
 
   const loadBookings = useCallback(
     async (nextPage: number, nextSize: number, tabKey: BookingTabKey) => {
@@ -215,6 +288,9 @@ const MyBookingsPage: React.FC = () => {
   }, [loadBookings]);
 
   const openActionModal = (type: BookingActionType, booking: Reservation) => {
+    if (type === "extend") {
+      setExtendHour(1);
+    }
     setActionModal({ type, booking });
   };
 
@@ -237,6 +313,22 @@ const MyBookingsPage: React.FC = () => {
     }
 
     if (
+      actionModal.type === "return-room" &&
+      !canCheckOut(status, actionModal.booking.startTime, actionModal.booking.endTime)
+    ) {
+      message.warning("Chỉ có thể trả phòng khi cuộc họp đang diễn ra.");
+      return;
+    }
+
+    if (
+      actionModal.type === "extend" &&
+      !canExtend(status, actionModal.booking.startTime, actionModal.booking.endTime)
+    ) {
+      message.warning("Chỉ có thể gia hạn khi cuộc họp đang diễn ra.");
+      return;
+    }
+
+    if (
       actionModal.type === "cancel" &&
       !canCancel(status, actionModal.booking.startTime, actionModal.booking.endTime)
     ) {
@@ -250,6 +342,12 @@ const MyBookingsPage: React.FC = () => {
       if (actionModal.type === "check-in") {
         await reservationService.checkInBooking(reservationId);
         message.success("Check-in thành công");
+      } else if (actionModal.type === "return-room") {
+        await reservationService.returnRoomBooking(reservationId);
+        message.success("Trả phòng thành công");
+      } else if (actionModal.type === "extend") {
+        await reservationService.extendRoomBooking(reservationId, extendHour);
+        message.success(`Gia hạn phòng thêm ${extendHour} giờ thành công`);
       } else {
         await reservationService.cancelBooking(reservationId);
         message.success("Hủy booking thành công");
@@ -263,7 +361,11 @@ const MyBookingsPage: React.FC = () => {
           err,
           actionModal.type === "check-in"
             ? "Không thể check-in booking"
-            : "Không thể hủy booking",
+            : actionModal.type === "return-room"
+              ? "Không thể trả phòng"
+              : actionModal.type === "extend"
+                ? "Không thể gia hạn phòng"
+                : "Không thể hủy booking",
         ),
       );
     } finally {
@@ -311,13 +413,30 @@ const MyBookingsPage: React.FC = () => {
       title: "ADDRESS",
       dataIndex: "address",
       key: "address",
-      width: "22%",
+      width: "17%",
       render: (value: string | undefined) => value || "-",
+    },
+    {
+      title: "DETAILS",
+      key: "details",
+      width: "20%",
+      render: (_: unknown, record: Reservation) => (
+        <div className="text-xs space-y-1">
+          <div>
+            <span className="text-gray-500">Purpose:</span>{" "}
+            <span className="text-gray-700">{record.purpose || "-"}</span>
+          </div>
+          <div className="truncate" title={record.note || ""}>
+            <span className="text-gray-500">Note:</span>{" "}
+            <span className="text-gray-700">{record.note || "-"}</span>
+          </div>
+        </div>
+      ),
     },
     {
       title: "TIME",
       key: "time",
-      width: "28%",
+      width: "22%",
       render: (_: unknown, record: Reservation) => (
         <div className="text-xs space-y-1.5">
           <div className="flex items-center gap-2">
@@ -347,13 +466,17 @@ const MyBookingsPage: React.FC = () => {
     {
       title: "ACTIONS",
       key: "actions",
-      width: "24%",
+      width: "28%",
       render: (_: unknown, record: Reservation) => {
         const status = record.status || "";
         const isLoading = actionLoadingId === record.id;
         const checkInEnabled = canCheckIn(status, record.startTime, record.endTime);
+        const returnRoomEnabled = canCheckOut(status, record.startTime, record.endTime);
+        const extendEnabled = canExtend(status, record.startTime, record.endTime);
         const cancelEnabled = canCancel(status, record.startTime, record.endTime);
         const checkInDisabledReason = getCheckInDisabledReason(record);
+        const returnRoomDisabledReason = getCheckOutDisabledReason(record);
+        const extendDisabledReason = getExtendDisabledReason(record);
         const cancelDisabledReason = getCancelDisabledReason(record);
 
         return (
@@ -368,6 +491,32 @@ const MyBookingsPage: React.FC = () => {
                   onClick={() => openActionModal("check-in", record)}
                 >
                   Check-in
+                </Button>
+              </span>
+            </Tooltip>
+
+            <Tooltip title={!returnRoomEnabled ? returnRoomDisabledReason : undefined}>
+              <span>
+                <Button
+                  size="small"
+                  loading={isLoading && returnRoomEnabled}
+                  disabled={!record.id || !returnRoomEnabled}
+                  onClick={() => openActionModal("return-room", record)}
+                >
+                  Return room
+                </Button>
+              </span>
+            </Tooltip>
+
+            <Tooltip title={!extendEnabled ? extendDisabledReason : undefined}>
+              <span>
+                <Button
+                  size="small"
+                  loading={isLoading && extendEnabled}
+                  disabled={!record.id || !extendEnabled}
+                  onClick={() => openActionModal("extend", record)}
+                >
+                  Extend
                 </Button>
               </span>
             </Tooltip>
@@ -468,8 +617,24 @@ const MyBookingsPage: React.FC = () => {
       <Modal
         open={!!actionModal}
         onCancel={closeActionModal}
-        title={actionModal?.type === "check-in" ? "Check-in meeting" : "Cancel booking"}
-        okText={actionModal?.type === "check-in" ? "Confirm check-in" : "Confirm cancel"}
+        title={
+          actionModal?.type === "check-in"
+            ? "Check-in meeting"
+            : actionModal?.type === "return-room"
+              ? "Return room"
+              : actionModal?.type === "extend"
+                ? "Extend room"
+                : "Cancel booking"
+        }
+        okText={
+          actionModal?.type === "check-in"
+            ? "Confirm check-in"
+            : actionModal?.type === "return-room"
+              ? "Confirm return"
+              : actionModal?.type === "extend"
+                ? "Confirm extend"
+                : "Confirm cancel"
+        }
         cancelText="Close"
         onOk={handleConfirmAction}
         okButtonProps={{ loading: !!actionModal?.booking?.id && actionLoadingId === actionModal.booking.id }}
@@ -477,8 +642,27 @@ const MyBookingsPage: React.FC = () => {
         <p className="text-gray-600 mb-4">
           {actionModal?.type === "check-in"
             ? "Review booking details before check-in."
-            : "Review booking details before canceling this booking."}
+            : actionModal?.type === "return-room"
+              ? "Review booking details before returning the room."
+              : actionModal?.type === "extend"
+                ? "Choose extended hours before confirming."
+                : "Review booking details before canceling this booking."}
         </p>
+
+        {actionModal?.type === "extend" && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Extend hour(s)
+            </label>
+            <InputNumber
+              min={1}
+              max={4}
+              step={1}
+              value={extendHour}
+              onChange={(value) => setExtendHour(typeof value === "number" ? value : 1)}
+            />
+          </div>
+        )}
 
         <Descriptions
           size="small"
@@ -514,6 +698,16 @@ const MyBookingsPage: React.FC = () => {
               key: "status",
               label: "Status",
               children: <Tag color={getStatusColor(actionModal?.booking.status || "")}>{actionModal?.booking.status || "-"}</Tag>,
+            },
+            {
+              key: "purpose",
+              label: "Purpose",
+              children: actionModal?.booking.purpose || "-",
+            },
+            {
+              key: "note",
+              label: "Note",
+              children: actionModal?.booking.note || "-",
             },
           ]}
         />

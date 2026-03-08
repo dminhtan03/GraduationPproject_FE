@@ -28,6 +28,12 @@ const combineDateTime = (dateValue: string, timeValue: string) => {
   return `${dateValue}T${timeValue}`;
 };
 
+const toDate = (dateValue: string, timeValue: string) => {
+  if (!dateValue || !timeValue) return null;
+  const parsed = new Date(`${dateValue}T${timeValue}:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const addMinutesToDateTime = (dateTimeValue: string, minutesToAdd: number) => {
   if (!dateTimeValue) return "";
   const baseDate = new Date(dateTimeValue);
@@ -37,6 +43,45 @@ const addMinutesToDateTime = (dateTimeValue: string, minutesToAdd: number) => {
   endDate.setMinutes(endDate.getMinutes() + minutesToAdd);
 
   return `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}T${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+};
+
+const getDatePart = (dateTimeValue: string) => {
+  if (!dateTimeValue.includes("T")) return "";
+  return dateTimeValue.split("T")[0] || "";
+};
+
+const getTimePart = (dateTimeValue: string) => {
+  if (!dateTimeValue.includes("T")) return "";
+  return dateTimeValue.split("T")[1]?.slice(0, 5) || "";
+};
+
+const buildEndFromPreset = (
+  startDate: string,
+  startClock: string,
+  presetMinutes: 30 | 60,
+) => {
+  const startTime = combineDateTime(startDate, startClock);
+  const nextEnd = addMinutesToDateTime(startTime, presetMinutes);
+  if (!nextEnd) {
+    return { endDate: "", endClock: "" };
+  }
+
+  return {
+    endDate: getDatePart(nextEnd),
+    endClock: getTimePart(nextEnd),
+  };
+};
+
+const getMinEndSlot = (startDate: string, startClock: string, endDate: string) => {
+  const start = toDate(startDate, startClock);
+  if (!start || !endDate || endDate !== startDate) return null;
+
+  const minEnd = new Date(start);
+  minEnd.setMinutes(minEnd.getMinutes() + 10);
+  return {
+    minHour: minEnd.getHours(),
+    minMinute: minEnd.getMinutes(),
+  };
 };
 
 const getMinStartSlot = (selectedDate: string) => {
@@ -85,6 +130,16 @@ const getBookingConflictMessage = (rawMessage: string) => {
   const normalized = rawMessage.toLowerCase();
 
   if (
+    normalized.includes("check in") ||
+    normalized.includes("check-in") ||
+    normalized.includes("to check in") ||
+    normalized.includes("đến giờ check in") ||
+    normalized.includes("den gio check in")
+  ) {
+    return "Bạn đang có booking đã đến giờ check-in. Vui lòng check-in/trả phòng hiện tại trước khi tạo booking mới.";
+  }
+
+  if (
     normalized.includes("overlap") ||
     normalized.includes("conflict") ||
     normalized.includes("same time") ||
@@ -98,9 +153,12 @@ const getBookingConflictMessage = (rawMessage: string) => {
     normalized.includes("one room") ||
     normalized.includes("already booked") ||
     normalized.includes("already have") ||
-    normalized.includes("same period")
+    normalized.includes("same period") ||
+    normalized.includes("not checkout") ||
+    normalized.includes("chua tra phong") ||
+    normalized.includes("chưa trả phòng")
   ) {
-    return "Bạn đã có booking khác trong cùng khoảng thời gian. Mỗi người chỉ được giữ 1 phòng trong cùng khung giờ.";
+    return "Bạn đang có phòng chưa trả hoặc đã có booking khác trong cùng khoảng thời gian. Vui lòng hoàn tất booking hiện tại trước.";
   }
 
   return rawMessage;
@@ -115,7 +173,9 @@ const BookRoomPage: React.FC = () => {
   const [purpose, setPurpose] = useState("");
   const [startDate, setStartDate] = useState("");
   const [startClock, setStartClock] = useState("");
-  const [durationMinutes, setDurationMinutes] = useState<30 | 60>(30);
+  const [endDate, setEndDate] = useState("");
+  const [endClock, setEndClock] = useState("");
+  const [durationPreset, setDurationPreset] = useState<30 | 60>(60);
   const [attendeeCount, setAttendeeCount] = useState<number | "">("");
   const [note, setNote] = useState("");
   const [acceptedRules, setAcceptedRules] = useState(false);
@@ -126,13 +186,17 @@ const BookRoomPage: React.FC = () => {
   const normalizedRoomId = useMemo(() => roomId || room?.id || "", [roomId, room]);
   const minDate = useMemo(() => formatDateInput(new Date()), []);
   const minStartSlot = useMemo(() => getMinStartSlot(startDate), [startDate]);
+  const minEndSlot = useMemo(
+    () => getMinEndSlot(startDate, startClock, endDate),
+    [startDate, startClock, endDate],
+  );
 
   const startTime = useMemo(
     () => combineDateTime(startDate, startClock),
     [startDate, startClock],
   );
 
-  const endTime = useMemo(() => addMinutesToDateTime(startTime, durationMinutes), [startTime, durationMinutes]);
+  const endTime = useMemo(() => combineDateTime(endDate, endClock), [endDate, endClock]);
 
   const roomRules = [
     "Sau khi book phòng nếu thay đổi kế hoạch và không có nhu cầu sử dụng cần thao tác hủy phòng trước thời gian đăng ký sử dụng / If plans change and the room is not needed, please cancel the booking before the scheduled time.",
@@ -314,6 +378,15 @@ const BookRoomPage: React.FC = () => {
                         const nextMinSlot = getMinStartSlot(nextDate);
                         if (nextMinSlot && startClock && isClockBeforeMinSlot(startClock, nextMinSlot)) {
                           setStartClock("");
+                          setEndDate("");
+                          setEndClock("");
+                          return;
+                        }
+
+                        if (startClock) {
+                          const autoEnd = buildEndFromPreset(nextDate, startClock, durationPreset);
+                          setEndDate(autoEnd.endDate);
+                          setEndClock(autoEnd.endClock);
                         }
                       }}
                       className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
@@ -341,6 +414,9 @@ const BookRoomPage: React.FC = () => {
                           }
 
                           setStartClock(`${nextHour}:${nextMinute}`);
+                          const autoEnd = buildEndFromPreset(startDate, `${nextHour}:${nextMinute}`, durationPreset);
+                          setEndDate(autoEnd.endDate);
+                          setEndClock(autoEnd.endClock);
                         }}
                         className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
                         disabled={loading}
@@ -362,7 +438,14 @@ const BookRoomPage: React.FC = () => {
                         onChange={(event) => {
                           const nextMinute = event.target.value;
                           const currentHour = getClockHour(startClock) || "00";
-                          setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                          const nextClock = nextMinute ? `${currentHour}:${nextMinute}` : "";
+                          setStartClock(nextClock);
+
+                          if (nextClock && startDate) {
+                            const autoEnd = buildEndFromPreset(startDate, nextClock, durationPreset);
+                            setEndDate(autoEnd.endDate);
+                            setEndClock(autoEnd.endClock);
+                          }
                         }}
                         className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
                         disabled={loading}
@@ -393,20 +476,85 @@ const BookRoomPage: React.FC = () => {
                   </label>
                   <div className="space-y-2">
                     <select
-                      value={String(durationMinutes)}
-                      onChange={(event) => setDurationMinutes(Number(event.target.value) as 30 | 60)}
+                      value={String(durationPreset)}
+                      onChange={(event) => {
+                        const nextPreset = Number(event.target.value) as 30 | 60;
+                        setDurationPreset(nextPreset);
+
+                        if (startDate && startClock) {
+                          const autoEnd = buildEndFromPreset(startDate, startClock, nextPreset);
+                          setEndDate(autoEnd.endDate);
+                          setEndClock(autoEnd.endClock);
+                        }
+                      }}
                       className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
                       disabled={loading}
                       required
                     >
-                      <option value="30">30 minutes</option>
                       <option value="60">1 hour</option>
+                      <option value="30">30 minutes</option>
                     </select>
-                    <input
-                      value={endTime ? formatDateInput(new Date(endTime)) + " " + (new Date(endTime)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Auto calculated from start time"}
-                      readOnly
-                      className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-gray-50 text-gray-700"
-                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="date"
+                        value={endDate}
+                        min={startDate || minDate}
+                        onChange={(event) => setEndDate(event.target.value)}
+                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        disabled={loading}
+                        required
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          value={getClockHour(endClock)}
+                          onChange={(event) => {
+                            const nextHour = event.target.value;
+                            const currentMinute = getClockMinute(endClock) || "00";
+                            setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                          }}
+                          className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                          disabled={loading}
+                          required
+                        >
+                          <option value="">Hour</option>
+                          {HOUR_OPTIONS.map((hour) => (
+                            <option
+                              key={hour}
+                              value={hour}
+                              disabled={!!minEndSlot && Number(hour) < minEndSlot.minHour}
+                            >
+                              {hour}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={getClockMinute(endClock)}
+                          onChange={(event) => {
+                            const nextMinute = event.target.value;
+                            const currentHour = getClockHour(endClock) || "00";
+                            setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                          }}
+                          className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                          disabled={loading}
+                          required
+                        >
+                          <option value="">Minute</option>
+                          {MINUTE_OPTIONS.map((minute) => (
+                            <option
+                              key={minute}
+                              value={minute}
+                              disabled={
+                                !!minEndSlot &&
+                                Number(getClockHour(endClock) || "0") === minEndSlot.minHour &&
+                                Number(minute) < minEndSlot.minMinute
+                              }
+                            >
+                              {minute}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

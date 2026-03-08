@@ -53,6 +53,8 @@ const normalizeReservation = (item: any): Reservation => {
       item?.buildingAddress ??
       item?.buildingName ??
       undefined,
+    purpose: item?.purpose ?? item?.bookingPurpose ?? item?.title ?? undefined,
+    note: item?.note ?? item?.description ?? item?.message ?? undefined,
     startTime: item?.startTime ?? item?.startDateTime ?? item?.fromTime ?? undefined,
     endTime: item?.endTime ?? item?.endDateTime ?? item?.toTime ?? undefined,
     status: resolvedStatus != null ? String(resolvedStatus) : undefined,
@@ -196,6 +198,37 @@ export const reservationService = {
       ],
       { reservationId: normalizedId },
     );
+  },
+
+  async returnRoomBooking(reservationId: string) {
+    const normalizedId = String(reservationId);
+    const returnRoomUrl = API_ENDPOINTS.ROOMS.RETURN_ROOM.replace(":id", normalizedId);
+
+    return putWithFallback(
+      returnRoomUrl,
+      [
+        `${API_ENDPOINTS.ROOMS.BOOK}/return-room/${normalizedId}`,
+        `${API_ENDPOINTS.ROOMS.BOOK}/${normalizedId}/return-room`,
+      ],
+      { reservationId: normalizedId },
+    );
+  },
+
+  async extendRoomBooking(reservationId: string, hour: number) {
+    const normalizedId = String(reservationId);
+    const extendUrl = API_ENDPOINTS.ROOMS.EXTEND_ROOM.replace(":id", normalizedId);
+
+    try {
+      return await api.put(extendUrl, undefined, { params: { hour } });
+    } catch (error) {
+      if (!shouldTryFallback(error)) {
+        throw error;
+      }
+
+      return api.put(`${API_ENDPOINTS.ROOMS.BOOK}/extend/${normalizedId}`, undefined, {
+        params: { hour },
+      });
+    }
   },
 
   async cancelBooking(reservationId: string) {

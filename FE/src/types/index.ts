@@ -130,6 +130,8 @@ export interface Reservation {
   locationCode?: string;
   floor?: string;
   address?: string;
+  purpose?: string;
+  note?: string;
   startTime?: string;
   endTime?: string;
   status?: ReservationStatus;
