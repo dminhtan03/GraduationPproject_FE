@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { Alert, Typography, message } from "antd";
+import { Alert, Select, Typography, message } from "antd";
 import { ClockCircleOutlined } from "@ant-design/icons";
 import { reservationService } from "../../services/reservationService";
 import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import type { Room } from "../../types";
+import DatePickerField from "../../components/common/DatePickerField";
 
 const { Title, Text } = Typography;
 
@@ -16,8 +17,15 @@ interface LocationState {
 type BookingStep = "form" | "review";
 
 const pad = (value: number) => value.toString().padStart(2, "0");
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => pad(index));
+const ALL_HOURS = Array.from({ length: 24 }, (_, index) => pad(index));
 const MINUTE_OPTIONS = ["00", "10", "20", "30", "40", "50"];
+
+const getScrollableHourOptions = (anchorHour: number) => {
+  const safeAnchor = Math.min(23, Math.max(0, anchorHour));
+  const head = ALL_HOURS.slice(safeAnchor);
+  const tail = ALL_HOURS.slice(0, safeAnchor);
+  return [...head, ...tail];
+};
 
 const formatDateInput = (date: Date) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -55,13 +63,9 @@ const getTimePart = (dateTimeValue: string) => {
   return dateTimeValue.split("T")[1]?.slice(0, 5) || "";
 };
 
-const buildEndFromPreset = (
-  startDate: string,
-  startClock: string,
-  presetMinutes: 30 | 60,
-) => {
+const buildEndFromStart = (startDate: string, startClock: string) => {
   const startTime = combineDateTime(startDate, startClock);
-  const nextEnd = addMinutesToDateTime(startTime, presetMinutes);
+  const nextEnd = addMinutesToDateTime(startTime, 60);
   if (!nextEnd) {
     return { endDate: "", endClock: "" };
   }
@@ -73,14 +77,33 @@ const buildEndFromPreset = (
 };
 
 const getMinEndSlot = (startDate: string, startClock: string, endDate: string) => {
-  const start = toDate(startDate, startClock);
-  if (!start || !endDate || endDate !== startDate) return null;
+  if (!endDate) return null;
 
-  const minEnd = new Date(start);
-  minEnd.setMinutes(minEnd.getMinutes() + 10);
+  let minBoundary: Date | null = null;
+
+  const start = toDate(startDate, startClock);
+  if (start && endDate === startDate) {
+    const startPlusOneMinute = new Date(start);
+    startPlusOneMinute.setMinutes(startPlusOneMinute.getMinutes() + 1);
+    minBoundary = startPlusOneMinute;
+  }
+
+  const minFutureSlot = getMinStartSlot(endDate);
+  if (minFutureSlot) {
+    const nowBoundary = new Date(
+      `${endDate}T${pad(minFutureSlot.minHour)}:${pad(minFutureSlot.minMinute)}:00`,
+    );
+
+    if (!minBoundary || nowBoundary > minBoundary) {
+      minBoundary = nowBoundary;
+    }
+  }
+
+  if (!minBoundary) return null;
+
   return {
-    minHour: minEnd.getHours(),
-    minMinute: minEnd.getMinutes(),
+    minHour: minBoundary.getHours(),
+    minMinute: minBoundary.getMinutes(),
   };
 };
 
@@ -106,6 +129,33 @@ const getMinStartSlot = (selectedDate: string) => {
   };
 };
 
+const getRoundedCurrentSlot = () => {
+  const now = new Date();
+  const rounded = new Date(now);
+
+  const roundedMinute = Math.round(rounded.getMinutes() / 10) * 10;
+  if (roundedMinute === 60) {
+    rounded.setHours(rounded.getHours() + 1, 0, 0, 0);
+  } else {
+    rounded.setMinutes(roundedMinute, 0, 0);
+  }
+
+  return {
+    hour: rounded.getHours(),
+    minute: rounded.getMinutes(),
+  };
+};
+
+const getSuggestedStartClock = (selectedDate: string, minDate: string) => {
+  const minSlot = getMinStartSlot(selectedDate);
+  if (selectedDate === minDate && minSlot) {
+    return `${pad(minSlot.minHour)}:${pad(minSlot.minMinute)}`;
+  }
+
+  const rounded = getRoundedCurrentSlot();
+  return `${pad(rounded.hour)}:${pad(rounded.minute)}`;
+};
+
 const isClockBeforeMinSlot = (clock: string, minSlot: { minHour: number; minMinute: number }) => {
   const hour = Number(getClockHour(clock));
   const minute = Number(getClockMinute(clock));
@@ -124,6 +174,11 @@ const getClockHour = (clock: string) => {
 const getClockMinute = (clock: string) => {
   if (!clock.includes(":")) return "";
   return clock.split(":")[1] || "";
+};
+
+const isDateBefore = (leftDate: string, rightDate: string) => {
+  if (!leftDate || !rightDate) return false;
+  return leftDate < rightDate;
 };
 
 const getBookingConflictMessage = (rawMessage: string) => {
@@ -175,7 +230,6 @@ const BookRoomPage: React.FC = () => {
   const [startClock, setStartClock] = useState("");
   const [endDate, setEndDate] = useState("");
   const [endClock, setEndClock] = useState("");
-  const [durationPreset, setDurationPreset] = useState<30 | 60>(60);
   const [attendeeCount, setAttendeeCount] = useState<number | "">("");
   const [note, setNote] = useState("");
   const [acceptedRules, setAcceptedRules] = useState(false);
@@ -185,6 +239,8 @@ const BookRoomPage: React.FC = () => {
   const room = (state as LocationState | null)?.room;
   const normalizedRoomId = useMemo(() => roomId || room?.id || "", [roomId, room]);
   const minDate = useMemo(() => formatDateInput(new Date()), []);
+  const nowHour = useMemo(() => new Date().getHours(), []);
+  const isStartDateToday = useMemo(() => startDate === minDate, [startDate, minDate]);
   const minStartSlot = useMemo(() => getMinStartSlot(startDate), [startDate]);
   const minEndSlot = useMemo(
     () => getMinEndSlot(startDate, startClock, endDate),
@@ -197,6 +253,20 @@ const BookRoomPage: React.FC = () => {
   );
 
   const endTime = useMemo(() => combineDateTime(endDate, endClock), [endDate, endClock]);
+
+  const startHourOptions = useMemo(() => {
+    const selectedHour = Number(getClockHour(startClock));
+    const anchor = Number.isFinite(selectedHour) && selectedHour >= 0 ? selectedHour : nowHour;
+    return getScrollableHourOptions(anchor);
+  }, [nowHour, startClock]);
+
+  const endHourOptions = useMemo(() => {
+    const selectedHour = Number(getClockHour(endClock));
+    const startHour = Number(getClockHour(startClock));
+    const fallbackAnchor = Number.isFinite(startHour) && startHour >= 0 ? Math.min(23, startHour + 1) : nowHour;
+    const anchor = Number.isFinite(selectedHour) && selectedHour >= 0 ? selectedHour : fallbackAnchor;
+    return getScrollableHourOptions(anchor);
+  }, [endClock, nowHour, startClock]);
 
   const roomRules = [
     "Sau khi book phòng nếu thay đổi kế hoạch và không có nhu cầu sử dụng cần thao tác hủy phòng trước thời gian đăng ký sử dụng / If plans change and the room is not needed, please cancel the booking before the scheduled time.",
@@ -223,6 +293,11 @@ const BookRoomPage: React.FC = () => {
 
     if (start <= now) {
       message.warning("Start time must be in the future.");
+      return false;
+    }
+
+    if (end <= now) {
+      message.warning("End time must be in the future.");
       return false;
     }
 
@@ -354,11 +429,14 @@ const BookRoomPage: React.FC = () => {
               />
             </div>
 
-            <div className="rounded-xl border border-orange-100 bg-orange-50/40 p-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
               <div className="flex items-center gap-2 mb-3">
                 <ClockCircleOutlined className="text-orange-500" />
-                <span className="text-sm font-semibold text-orange-700">Meeting Time</span>
+                <span className="text-sm font-semibold text-slate-700">Meeting Time</span>
               </div>
+              <p className="mb-3 text-xs text-slate-500">
+                Note: Start/End time cannot be selected in the past.
+              </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -367,37 +445,29 @@ const BookRoomPage: React.FC = () => {
                     Start date & time
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="date"
+                    <DatePickerField
                       value={startDate}
-                      min={minDate}
-                      onChange={(event) => {
-                        const nextDate = event.target.value;
-                        setStartDate(nextDate);
-
-                        const nextMinSlot = getMinStartSlot(nextDate);
-                        if (nextMinSlot && startClock && isClockBeforeMinSlot(startClock, nextMinSlot)) {
-                          setStartClock("");
-                          setEndDate("");
-                          setEndClock("");
+                      minDate={minDate}
+                      onChange={(nextDate) => {
+                        if (isDateBefore(nextDate, minDate)) {
+                          message.warning("Start date cannot be in the past.");
                           return;
                         }
 
-                        if (startClock) {
-                          const autoEnd = buildEndFromPreset(nextDate, startClock, durationPreset);
-                          setEndDate(autoEnd.endDate);
-                          setEndClock(autoEnd.endClock);
-                        }
+                        setStartDate(nextDate);
+
+                        const suggestedStartClock = getSuggestedStartClock(nextDate, minDate);
+                        setStartClock(suggestedStartClock);
+
+                        const autoEnd = buildEndFromStart(nextDate, suggestedStartClock);
+                        setEndDate(autoEnd.endDate);
+                        setEndClock(autoEnd.endClock);
                       }}
-                      className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                      disabled={loading}
-                      required
                     />
                     <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={getClockHour(startClock)}
-                        onChange={(event) => {
-                          const nextHour = event.target.value;
+                      <Select
+                        value={getClockHour(startClock) || undefined}
+                        onChange={(nextHour) => {
                           const currentMinute = getClockMinute(startClock) || "00";
                           if (!nextHour) {
                             setStartClock("");
@@ -414,25 +484,20 @@ const BookRoomPage: React.FC = () => {
                           }
 
                           setStartClock(`${nextHour}:${nextMinute}`);
-                          const autoEnd = buildEndFromPreset(startDate, `${nextHour}:${nextMinute}`, durationPreset);
+                          const autoEnd = buildEndFromStart(startDate, `${nextHour}:${nextMinute}`);
                           setEndDate(autoEnd.endDate);
                           setEndClock(autoEnd.endClock);
                         }}
-                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        placeholder="Hour"
+                        listHeight={160}
+                        className="w-full"
                         disabled={loading}
-                        required
-                      >
-                        <option value="">Hour</option>
-                        {HOUR_OPTIONS.map((hour) => (
-                          <option
-                            key={hour}
-                            value={hour}
-                            disabled={!!minStartSlot && Number(hour) < minStartSlot.minHour}
-                          >
-                            {hour}
-                          </option>
-                        ))}
-                      </select>
+                        options={startHourOptions.map((hour) => ({
+                          value: hour,
+                          label: hour,
+                          disabled: !!minStartSlot && Number(hour) < minStartSlot.minHour,
+                        }))}
+                      />
                       <select
                         value={getClockMinute(startClock)}
                         onChange={(event) => {
@@ -442,12 +507,12 @@ const BookRoomPage: React.FC = () => {
                           setStartClock(nextClock);
 
                           if (nextClock && startDate) {
-                            const autoEnd = buildEndFromPreset(startDate, nextClock, durationPreset);
+                            const autoEnd = buildEndFromStart(startDate, nextClock);
                             setEndDate(autoEnd.endDate);
                             setEndClock(autoEnd.endClock);
                           }
                         }}
-                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                        className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                         disabled={loading}
                         required
                       >
@@ -457,6 +522,7 @@ const BookRoomPage: React.FC = () => {
                             key={minute}
                             value={minute}
                             disabled={
+                              isStartDateToday &&
                               !!minStartSlot &&
                               Number(getClockHour(startClock) || "0") === minStartSlot.minHour &&
                               Number(minute) < minStartSlot.minMinute
@@ -472,88 +538,69 @@ const BookRoomPage: React.FC = () => {
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     <span className="text-red-500 mr-1">*</span>
-                    Duration
+                    End date & time
                   </label>
-                  <div className="space-y-2">
-                    <select
-                      value={String(durationPreset)}
-                      onChange={(event) => {
-                        const nextPreset = Number(event.target.value) as 30 | 60;
-                        setDurationPreset(nextPreset);
-
-                        if (startDate && startClock) {
-                          const autoEnd = buildEndFromPreset(startDate, startClock, nextPreset);
-                          setEndDate(autoEnd.endDate);
-                          setEndClock(autoEnd.endClock);
+                  <div className="grid grid-cols-2 gap-2">
+                    <DatePickerField
+                      value={endDate}
+                      minDate={startDate || minDate}
+                      onChange={(nextDate) => {
+                        if (isDateBefore(nextDate, minDate)) {
+                          message.warning("End date cannot be in the past.");
+                          return;
                         }
+
+                        if (startDate && isDateBefore(nextDate, startDate)) {
+                          message.warning("End date cannot be earlier than start date.");
+                          return;
+                        }
+
+                        setEndDate(nextDate);
                       }}
-                      className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                      disabled={loading}
-                      required
-                    >
-                      <option value="60">1 hour</option>
-                      <option value="30">30 minutes</option>
-                    </select>
+                    />
                     <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="date"
-                        value={endDate}
-                        min={startDate || minDate}
-                        onChange={(event) => setEndDate(event.target.value)}
-                        className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      <Select
+                        value={getClockHour(endClock) || undefined}
+                        onChange={(nextHour) => {
+                          const currentMinute = getClockMinute(endClock) || "00";
+                          setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                        }}
+                        placeholder="Hour"
+                        listHeight={160}
+                        className="w-full"
+                        disabled={loading}
+                        options={endHourOptions.map((hour) => ({
+                          value: hour,
+                          label: hour,
+                          disabled: !!minEndSlot && Number(hour) < minEndSlot.minHour,
+                        }))}
+                      />
+                      <select
+                        value={getClockMinute(endClock)}
+                        onChange={(event) => {
+                          const nextMinute = event.target.value;
+                          const currentHour = getClockHour(endClock) || "00";
+                          setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                        }}
+                        className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                         disabled={loading}
                         required
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={getClockHour(endClock)}
-                          onChange={(event) => {
-                            const nextHour = event.target.value;
-                            const currentMinute = getClockMinute(endClock) || "00";
-                            setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
-                          }}
-                          className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                          disabled={loading}
-                          required
-                        >
-                          <option value="">Hour</option>
-                          {HOUR_OPTIONS.map((hour) => (
-                            <option
-                              key={hour}
-                              value={hour}
-                              disabled={!!minEndSlot && Number(hour) < minEndSlot.minHour}
-                            >
-                              {hour}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={getClockMinute(endClock)}
-                          onChange={(event) => {
-                            const nextMinute = event.target.value;
-                            const currentHour = getClockHour(endClock) || "00";
-                            setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
-                          }}
-                          className="w-full border border-orange-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
-                          disabled={loading}
-                          required
-                        >
-                          <option value="">Minute</option>
-                          {MINUTE_OPTIONS.map((minute) => (
-                            <option
-                              key={minute}
-                              value={minute}
-                              disabled={
-                                !!minEndSlot &&
-                                Number(getClockHour(endClock) || "0") === minEndSlot.minHour &&
-                                Number(minute) < minEndSlot.minMinute
-                              }
-                            >
-                              {minute}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      >
+                        <option value="">Minute</option>
+                        {MINUTE_OPTIONS.map((minute) => (
+                          <option
+                            key={minute}
+                            value={minute}
+                            disabled={
+                              !!minEndSlot &&
+                              Number(getClockHour(endClock) || "0") === minEndSlot.minHour &&
+                              Number(minute) < minEndSlot.minMinute
+                            }
+                          >
+                            {minute}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>

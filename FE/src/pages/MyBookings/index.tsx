@@ -137,6 +137,77 @@ const extractBackendSuccessMessage = (
   return fallback;
 };
 
+const extractBackendFailureMessage = (response: unknown): string | null => {
+  if (!response || typeof response !== "object") return null;
+
+  const wrapped = response as {
+    success?: boolean;
+    data?: {
+      success?: boolean;
+      meta?: { message?: string; status?: number };
+      message?: string;
+      status?: number;
+      data?: { success?: boolean; message?: string; status?: number } | string;
+    };
+  };
+
+  const payload = wrapped.data;
+  const hardFailed =
+    wrapped.success === false ||
+    payload?.success === false ||
+    (payload?.data && typeof payload.data === "object" && payload.data.success === false);
+
+  const hasErrorStatus =
+    (typeof payload?.status === "number" && payload.status >= 400) ||
+    (typeof payload?.meta?.status === "number" && payload.meta.status >= 400) ||
+    (payload?.data && typeof payload.data === "object" && typeof payload.data.status === "number" && payload.data.status >= 400);
+
+  const candidateMessages: string[] = [];
+  if (typeof payload?.meta?.message === "string" && payload.meta.message.trim()) {
+    candidateMessages.push(payload.meta.message.trim());
+  }
+  if (typeof payload?.message === "string" && payload.message.trim()) {
+    candidateMessages.push(payload.message.trim());
+  }
+  if (typeof payload?.data === "string" && payload.data.trim()) {
+    candidateMessages.push(payload.data.trim());
+  }
+  if (
+    payload?.data &&
+    typeof payload.data === "object" &&
+    typeof payload.data.message === "string" &&
+    payload.data.message.trim()
+  ) {
+    candidateMessages.push(payload.data.message.trim());
+  }
+
+  const hasFailureKeyword = candidateMessages.some((msg) => {
+    const normalized = msg.toLowerCase();
+    return (
+      normalized.includes("fail") ||
+      normalized.includes("error") ||
+      normalized.includes("cannot") ||
+      normalized.includes("can't") ||
+      normalized.includes("not allowed") ||
+      normalized.includes("already") ||
+      normalized.includes("overlap") ||
+      normalized.includes("booked") ||
+      normalized.includes("khong") ||
+      normalized.includes("không") ||
+      normalized.includes("khong the") ||
+      normalized.includes("không thể") ||
+      normalized.includes("trung") ||
+      normalized.includes("trùng")
+    );
+  });
+
+  if (!hardFailed && !hasErrorStatus && !hasFailureKeyword) return null;
+
+  if (candidateMessages.length > 0) return candidateMessages[0];
+
+  return "Không thể gia hạn phòng";
+};
+
 const getStatusColor = (status: string) => {
   const normalized = status.toUpperCase();
   if (normalized === "PENDING") return "gold";
@@ -313,6 +384,7 @@ const MyBookingsPage: React.FC = () => {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [actionModal, setActionModal] =
     useState<BookingActionModalState | null>(null);
+  const [actionModalError, setActionModalError] = useState<string | null>(null);
   const [extendHour, setExtendHour] = useState<number>(1);
   const [feedbackModal, setFeedbackModal] = useState<FeedbackModalState | null>(
     null,
@@ -362,6 +434,7 @@ const MyBookingsPage: React.FC = () => {
   }, [loadBookings]);
 
   const openActionModal = (type: BookingActionType, booking: Reservation) => {
+    setActionModalError(null);
     if (type === "extend") {
       setExtendHour(1);
     }
@@ -369,6 +442,7 @@ const MyBookingsPage: React.FC = () => {
   };
 
   const closeActionModal = () => {
+    setActionModalError(null);
     setActionModal(null);
   };
 
@@ -415,6 +489,8 @@ const MyBookingsPage: React.FC = () => {
 
   const handleConfirmAction = async () => {
     if (!actionModal?.booking?.id) return;
+
+    setActionModalError(null);
 
     const currentAction = actionModal;
 
@@ -480,6 +556,11 @@ const MyBookingsPage: React.FC = () => {
           reservationId,
           extendHour,
         );
+
+        const extendFailure = extractBackendFailureMessage(actionResponse);
+        if (extendFailure) {
+          throw { message: extendFailure, status: 400 };
+        }
       } else {
         actionResponse = await reservationService.cancelBooking(reservationId);
       }
@@ -503,18 +584,18 @@ const MyBookingsPage: React.FC = () => {
       }
       await loadBookings(page, pageSize, activeTab);
     } catch (err) {
-      message.error(
-        extractApiMessage(
-          err,
-          currentAction.type === "check-in"
-            ? "Không thể check-in booking"
-            : currentAction.type === "return-room"
-              ? "Không thể trả phòng"
-              : currentAction.type === "extend"
-                ? "Không thể gia hạn phòng"
-                : "Không thể hủy booking",
-        ),
+      const actionErrorMessage = extractApiMessage(
+        err,
+        currentAction.type === "check-in"
+          ? "Không thể check-in booking"
+          : currentAction.type === "return-room"
+            ? "Không thể trả phòng"
+            : currentAction.type === "extend"
+              ? "Không thể gia hạn phòng"
+              : "Không thể hủy booking",
       );
+      setActionModalError(actionErrorMessage);
+      message.error(actionErrorMessage);
     } finally {
       setLoading(false);
       setActionLoadingId(null);
@@ -821,6 +902,16 @@ const MyBookingsPage: React.FC = () => {
                 ? "Choose extended hours before confirming."
                 : "Review booking details before canceling this booking."}
         </p>
+
+        {actionModalError && (
+          <Alert
+            className="mb-4"
+            type="error"
+            showIcon
+            message="Action failed"
+            description={actionModalError}
+          />
+        )}
 
         {actionModal?.type === "extend" && (
           <div className="mb-4">
