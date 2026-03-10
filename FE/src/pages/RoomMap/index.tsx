@@ -596,6 +596,7 @@ const RoomMapPage: React.FC = () => {
                   <div className="col-span-2 sm:col-span-1 min-w-0">
                     <DatePickerField
                       value={startDate}
+                      minDate={currentTimeRange.startDate}
                       onChange={setStartDate}
                     />
                   </div>
@@ -632,7 +633,7 @@ const RoomMapPage: React.FC = () => {
                   <div className="col-span-2 sm:col-span-1 min-w-0">
                     <DatePickerField
                       value={endDate}
-                      minDate={startDate || undefined}
+                      minDate={startDate || currentTimeRange.startDate}
                       onChange={setEndDate}
                     />
                   </div>

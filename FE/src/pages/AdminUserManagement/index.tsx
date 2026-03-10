@@ -4,8 +4,15 @@ import {
   MagnifyingGlassIcon,
   LockClosedIcon,
   LockOpenIcon,
+  ArrowUpTrayIcon,
+  PlusIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { adminService, type AdminUser } from "../../services/adminService";
+import {
+  adminService,
+  type AdminUser,
+  type RegisterUserPayload,
+} from "../../services/adminService";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
 import { logout } from "../../services/authService";
@@ -13,6 +20,9 @@ import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
 import { extractApiMessage } from "../../utils/errorHandlers";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
 
 type ProfilePayload = {
   firstName?: string;
@@ -22,7 +32,77 @@ type ProfilePayload = {
 
 type StatusFilter = "ALL" | "ACTIVE" | "LOCKED";
 
+type ApiFieldError = {
+  field?: string;
+  description?: string;
+};
+
 const PAGE_SIZE = 10;
+
+const SHEET_COLUMNS = [
+  "firstName",
+  "lastName",
+  "phoneNumber",
+  "address",
+  "department",
+  "email",
+  "gender",
+  "password",
+  "role",
+] as const;
+
+const normalizeRole = (value?: string) => {
+  const raw = String(value || "")
+    .trim()
+    .toUpperCase();
+  if (!raw) return "USER";
+  return raw.startsWith("ROLE_") ? raw.replace("ROLE_", "") : raw;
+};
+
+const parseCsvLine = (line: string): string[] => {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  result.push(current.trim());
+  return result;
+};
+
+const toRegisterPayload = (
+  row: Record<string, string>,
+): RegisterUserPayload => ({
+  firstName: row.firstName || "",
+  lastName: row.lastName || "",
+  phoneNumber: row.phoneNumber || "",
+  address: row.address || "",
+  department: row.department || "",
+  email: row.email || "",
+  gender: row.gender || "",
+  password: row.password || "",
+  role: normalizeRole(row.role),
+});
 
 const AdminUserManagementPage: React.FC = () => {
   const navigate = useNavigate();
@@ -38,11 +118,37 @@ const AdminUserManagementPage: React.FC = () => {
 
   const [adminName, setAdminName] = useState("Admin User");
   const [adminEmail, setAdminEmail] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [addingUser, setAddingUser] = useState(false);
+  const [addUserFieldErrors, setAddUserFieldErrors] = useState<
+    Record<string, string>
+  >({});
+  const [toastPopup, setToastPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
+  const [addUserForm, setAddUserForm] = useState<RegisterUserPayload>({
+    firstName: "",
+    lastName: "",
+    phoneNumber: "",
+    address: "",
+    department: "",
+    email: "",
+    gender: "MALE",
+    password: "",
+    role: "USER",
+  });
 
   const loadAdminProfile = async () => {
     try {
-      const res = await api.get<any>(API_ENDPOINTS.AUTH.PROFILE);
-      const data = (res.data?.data || res.data || {}) as ProfilePayload;
+      const res = await api.get<ProfilePayload | { data: ProfilePayload }>(
+        API_ENDPOINTS.AUTH.PROFILE,
+      );
+      const raw = res.data;
+      const nested = (raw as { data?: ProfilePayload }).data;
+      const data = (nested || raw || {}) as ProfilePayload;
       const fullName = [data.firstName, data.lastName]
         .filter(Boolean)
         .join(" ");
@@ -127,6 +233,199 @@ const AdminUserManagementPage: React.FC = () => {
     navigate(ROUTES.LOGIN);
   };
 
+  const handleImportSheet = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    setImportResult(null);
+    setError(null);
+
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setError("Please upload a .csv file exported from Excel sheet.");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const content = await file.text();
+      const lines = content
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      if (lines.length < 2) {
+        setError("CSV file is empty or missing data rows.");
+        return;
+      }
+
+      const headers = parseCsvLine(lines[0]).map((header) => header.trim());
+      const missingColumns = SHEET_COLUMNS.filter(
+        (column) => !headers.includes(column),
+      );
+
+      if (missingColumns.length) {
+        setError(
+          `Missing columns: ${missingColumns.join(", ")}. Required columns: ${SHEET_COLUMNS.join(", ")}`,
+        );
+        return;
+      }
+
+      const rows = lines.slice(1).map((line) => {
+        const values = parseCsvLine(line);
+        const item: Record<string, string> = {};
+        headers.forEach((header, index) => {
+          item[header] = (values[index] || "").trim();
+        });
+        return item;
+      });
+
+      let successCount = 0;
+      const failedRows: Array<{ row: number; reason: string }> = [];
+
+      for (let index = 0; index < rows.length; index += 1) {
+        const payload = toRegisterPayload(rows[index]);
+        try {
+          await adminService.registerUser(payload);
+          successCount += 1;
+        } catch (e: unknown) {
+          failedRows.push({
+            row: index + 2,
+            reason: extractApiMessage(e, "Register failed"),
+          });
+        }
+      }
+
+      const failCount = failedRows.length;
+      const summary = `Imported ${successCount}/${rows.length} users successfully.${
+        failCount
+          ? ` Failed: ${failCount} row(s) (${failedRows
+              .slice(0, 3)
+              .map((item) => `row ${item.row}: ${item.reason}`)
+              .join(" | ")})`
+          : ""
+      }`;
+
+      setImportResult(summary);
+      await loadUsers();
+    } catch (e: unknown) {
+      setError(extractApiMessage(e, "Unable to import users from sheet"));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const resetAddUserForm = () => {
+    setAddUserForm({
+      firstName: "",
+      lastName: "",
+      phoneNumber: "",
+      address: "",
+      department: "",
+      email: "",
+      gender: "MALE",
+      password: "",
+      role: "USER",
+    });
+  };
+
+  const handleAddUserField = (
+    field: keyof RegisterUserPayload,
+    value: string,
+  ) => {
+    setAddUserForm((prev) => ({ ...prev, [field]: value }));
+    setAddUserFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const showToast = (type: MessageType, nextMessage: string) => {
+    setToastPopup({ type, message: nextMessage });
+    window.setTimeout(() => {
+      setToastPopup((current) =>
+        current && current.message === nextMessage ? null : current,
+      );
+    }, 3000);
+  };
+
+  const extractRegisterFieldErrors = (error: unknown) => {
+    const payload = error as {
+      response?: { data?: { meta?: { errors?: ApiFieldError[] } } };
+      data?: { meta?: { errors?: ApiFieldError[] } };
+    };
+
+    const errors =
+      payload?.response?.data?.meta?.errors || payload?.data?.meta?.errors;
+    if (!Array.isArray(errors)) return {} as Record<string, string>;
+
+    return errors.reduce<Record<string, string>>((acc, item) => {
+      const field = String(item?.field || "").trim();
+      const description = String(item?.description || "").trim();
+      if (field && description && !acc[field]) {
+        acc[field] = description;
+      }
+      return acc;
+    }, {});
+  };
+
+  const handleAddSingleUser = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    setError(null);
+    setImportResult(null);
+    setAddUserFieldErrors({});
+
+    const requiredFields: Array<keyof RegisterUserPayload> = [
+      "firstName",
+      "lastName",
+      "phoneNumber",
+      "address",
+      "department",
+      "email",
+      "gender",
+      "password",
+      "role",
+    ];
+
+    const missingField = requiredFields.find(
+      (field) => !String(addUserForm[field] || "").trim(),
+    );
+    if (missingField) {
+      setAddUserFieldErrors({ [missingField]: "This field is required" });
+      return;
+    }
+
+    setAddingUser(true);
+    try {
+      await adminService.registerUser({
+        ...addUserForm,
+        email: addUserForm.email.trim(),
+        role: normalizeRole(addUserForm.role),
+      });
+      setImportResult("Added 1 user successfully.");
+      showToast("success", "Create user successfully");
+      setShowAddUserModal(false);
+      resetAddUserForm();
+      await loadUsers();
+    } catch (e: unknown) {
+      const fieldErrors = extractRegisterFieldErrors(e);
+      if (Object.keys(fieldErrors).length > 0) {
+        setAddUserFieldErrors(fieldErrors);
+      } else {
+        setError(extractApiMessage(e, "Unable to add user"));
+      }
+    } finally {
+      setAddingUser(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#e2e8f0_0%,#f8fafc_40%,#f8fafc_100%)]">
       <AdminSidebar
@@ -156,11 +455,209 @@ const AdminUserManagementPage: React.FC = () => {
               Manage account status and search users quickly.
             </p>
           </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAddUserModal(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Add User
+            </button>
+
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+              <ArrowUpTrayIcon className="h-4 w-4" />
+              {importing ? "Importing..." : "Import CSV Sheet"}
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={handleImportSheet}
+                disabled={importing}
+              />
+            </label>
+          </div>
         </div>
+
+        {showAddUserModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Add 1 User
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddUserModal(false);
+                    resetAddUserForm();
+                    setAddUserFieldErrors({});
+                  }}
+                  className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+                  aria-label="Close add user modal"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form
+                onSubmit={handleAddSingleUser}
+                className="grid grid-cols-1 gap-3 md:grid-cols-2"
+              >
+                <input
+                  placeholder="First name"
+                  value={addUserForm.firstName}
+                  onChange={(e) =>
+                    handleAddUserField("firstName", e.target.value)
+                  }
+                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
+                />
+                {addUserFieldErrors.firstName && (
+                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
+                    {addUserFieldErrors.firstName}
+                  </p>
+                )}
+                <input
+                  placeholder="Last name"
+                  value={addUserForm.lastName}
+                  onChange={(e) =>
+                    handleAddUserField("lastName", e.target.value)
+                  }
+                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
+                />
+                {addUserFieldErrors.lastName && (
+                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
+                    {addUserFieldErrors.lastName}
+                  </p>
+                )}
+                <input
+                  placeholder="Phone number"
+                  value={addUserForm.phoneNumber}
+                  onChange={(e) =>
+                    handleAddUserField("phoneNumber", e.target.value)
+                  }
+                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
+                />
+                {addUserFieldErrors.phoneNumber && (
+                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
+                    {addUserFieldErrors.phoneNumber}
+                  </p>
+                )}
+                <input
+                  placeholder="Department"
+                  value={addUserForm.department}
+                  onChange={(e) =>
+                    handleAddUserField("department", e.target.value)
+                  }
+                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
+                />
+                {addUserFieldErrors.department && (
+                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
+                    {addUserFieldErrors.department}
+                  </p>
+                )}
+                <input
+                  placeholder="Email"
+                  type="email"
+                  value={addUserForm.email}
+                  onChange={(e) => handleAddUserField("email", e.target.value)}
+                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400 md:col-span-2"
+                />
+                {addUserFieldErrors.email && (
+                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
+                    {addUserFieldErrors.email}
+                  </p>
+                )}
+                <input
+                  placeholder="Address"
+                  value={addUserForm.address}
+                  onChange={(e) =>
+                    handleAddUserField("address", e.target.value)
+                  }
+                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400 md:col-span-2"
+                />
+                {addUserFieldErrors.address && (
+                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
+                    {addUserFieldErrors.address}
+                  </p>
+                )}
+                <input
+                  placeholder="Password"
+                  type="password"
+                  value={addUserForm.password}
+                  onChange={(e) =>
+                    handleAddUserField("password", e.target.value)
+                  }
+                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
+                />
+                {addUserFieldErrors.password && (
+                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
+                    {addUserFieldErrors.password}
+                  </p>
+                )}
+                <select
+                  value={addUserForm.gender}
+                  onChange={(e) => handleAddUserField("gender", e.target.value)}
+                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
+                >
+                  <option value="MALE">MALE</option>
+                  <option value="FEMALE">FEMALE</option>
+                  <option value="OTHER">OTHER</option>
+                </select>
+                {addUserFieldErrors.gender && (
+                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
+                    {addUserFieldErrors.gender}
+                  </p>
+                )}
+                <select
+                  value={addUserForm.role}
+                  onChange={(e) => handleAddUserField("role", e.target.value)}
+                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400 md:col-span-2"
+                >
+                  <option value="USER">USER</option>
+                  <option value="ADMIN">ADMIN</option>
+                </select>
+                {addUserFieldErrors.role && (
+                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
+                    {addUserFieldErrors.role}
+                  </p>
+                )}
+
+                <div className="mt-2 flex items-center justify-end gap-2 md:col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddUserModal(false);
+                      resetAddUserForm();
+                      setAddUserFieldErrors({});
+                    }}
+                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addingUser}
+                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  >
+                    {addingUser ? "Adding..." : "Add User"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
+          </div>
+        )}
+
+        {importResult && (
+          <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {importResult}
           </div>
         )}
 
@@ -385,6 +882,14 @@ const AdminUserManagementPage: React.FC = () => {
           </div>
         </section>
       </main>
+
+      {toastPopup && (
+        <CustomMessage
+          type={toastPopup.type}
+          message={toastPopup.message}
+          onClose={() => setToastPopup(null)}
+        />
+      )}
     </div>
   );
 };

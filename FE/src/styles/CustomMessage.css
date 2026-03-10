@@ -1,23 +1,30 @@
 .custom-message {
   position: fixed;
-  top: 24px;
-  right: 24px;
+  top: max(16px, env(safe-area-inset-top));
+  right: 16px;
   z-index: 9999;
 
   display: flex;
   align-items: center;
   gap: 12px;
 
-  min-width: 320px;
-  max-width: 420px;
+  min-width: 280px;
+  width: min(420px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
   padding: 14px 18px;
   border-radius: 8px;
 
   font-size: 15px;
   font-weight: 500;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  word-break: break-word;
 
   animation: slide-in-right 0.35s ease-out;
+}
+
+.custom-message-text {
+  flex: 1;
+  line-height: 1.4;
 }
 
 /* Icon */
@@ -32,6 +39,8 @@
   font-size: 18px;
   cursor: pointer;
   color: inherit;
+  line-height: 1;
+  padding: 0 2px;
 }
 
 /* Types */
@@ -63,5 +72,18 @@
   to {
     transform: translateX(0);
     opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .custom-message {
+    top: max(12px, env(safe-area-inset-top));
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    font-size: 14px;
+    padding: 12px 14px;
   }
 }

@@ -31,7 +31,11 @@ import { ROUTES } from "../../constants";
 import { reservationService } from "../../services/reservationService";
 import { feedbackService } from "../../services/feedbackService";
 import { extractApiMessage } from "../../utils/errorHandlers";
-import type { Reservation } from "../../types";
+import type { Reservation, WebSocketMessage } from "../../types";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
+import { useWebSocket } from "../../hooks/useWebSocket";
 
 const { Title, Paragraph } = Typography;
 
@@ -46,6 +50,11 @@ interface BookingActionModalState {
 interface FeedbackModalState {
   reservationId: string;
   booking: Reservation;
+}
+
+interface ReservationRealtimePayload {
+  reservationId: string;
+  newStatus: string;
 }
 
 const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
@@ -155,15 +164,23 @@ const extractBackendFailureMessage = (response: unknown): string | null => {
   const hardFailed =
     wrapped.success === false ||
     payload?.success === false ||
-    (payload?.data && typeof payload.data === "object" && payload.data.success === false);
+    (payload?.data &&
+      typeof payload.data === "object" &&
+      payload.data.success === false);
 
   const hasErrorStatus =
     (typeof payload?.status === "number" && payload.status >= 400) ||
     (typeof payload?.meta?.status === "number" && payload.meta.status >= 400) ||
-    (payload?.data && typeof payload.data === "object" && typeof payload.data.status === "number" && payload.data.status >= 400);
+    (payload?.data &&
+      typeof payload.data === "object" &&
+      typeof payload.data.status === "number" &&
+      payload.data.status >= 400);
 
   const candidateMessages: string[] = [];
-  if (typeof payload?.meta?.message === "string" && payload.meta.message.trim()) {
+  if (
+    typeof payload?.meta?.message === "string" &&
+    payload.meta.message.trim()
+  ) {
     candidateMessages.push(payload.meta.message.trim());
   }
   if (typeof payload?.message === "string" && payload.message.trim()) {
@@ -372,8 +389,32 @@ const getExtendDisabledReason = (record: Reservation) => {
   return undefined;
 };
 
+const getReservationRealtimePayload = (
+  message: WebSocketMessage | null,
+): ReservationRealtimePayload | null => {
+  if (!message || message.type !== "update") {
+    return null;
+  }
+
+  const raw = message.data;
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const payload = raw as Record<string, unknown>;
+  const reservationId = String(payload.reservationId || "").trim();
+  const newStatus = String(payload.newStatus || "").trim();
+
+  if (!reservationId || !newStatus) {
+    return null;
+  }
+
+  return { reservationId, newStatus };
+};
+
 const MyBookingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { lastMessage } = useWebSocket();
   const [activeTab, setActiveTab] = useState<BookingTabKey>("ongoing");
   const [bookings, setBookings] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -392,6 +433,19 @@ const MyBookingsPage: React.FC = () => {
   const [feedbackRating, setFeedbackRating] = useState<number>(5);
   const [feedbackDescription, setFeedbackDescription] = useState<string>("");
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [toastPopup, setToastPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: MessageType, nextMessage: string) => {
+    setToastPopup({ type, message: nextMessage });
+    window.setTimeout(() => {
+      setToastPopup((current) =>
+        current && current.message === nextMessage ? null : current,
+      );
+    }, 3000);
+  };
 
   const loadBookings = useCallback(
     async (nextPage: number, nextSize: number, tabKey: BookingTabKey) => {
@@ -432,6 +486,58 @@ const MyBookingsPage: React.FC = () => {
   useEffect(() => {
     loadBookings(1, 5, "ongoing");
   }, [loadBookings]);
+
+  useEffect(() => {
+    const realtimePayload = getReservationRealtimePayload(lastMessage);
+    if (!realtimePayload) {
+      return;
+    }
+
+    const normalizedStatus = realtimePayload.newStatus.toUpperCase();
+
+    console.log("[MyBookings] Realtime reservation update received:", {
+      rawMessage: lastMessage,
+      reservationId: realtimePayload.reservationId,
+      newStatus: normalizedStatus,
+      activeTab,
+      currentPage: page,
+      currentPageSize: pageSize,
+    });
+
+    setBookings((prev) => {
+      const hasUpdatedBooking = prev.some(
+        (item) => String(item.id || "") === realtimePayload.reservationId,
+      );
+
+      console.log("[MyBookings] Reservation exists in current table:", {
+        reservationId: realtimePayload.reservationId,
+        hasUpdatedBooking,
+        currentBookingIds: prev.map((item) => item.id),
+      });
+
+      if (!hasUpdatedBooking) {
+        return prev;
+      }
+
+      const updatedItems = prev.map((item) =>
+        String(item.id || "") === realtimePayload.reservationId
+          ? { ...item, status: normalizedStatus }
+          : item,
+      );
+
+      console.log(
+        "[MyBookings] Bookings after local status patch:",
+        updatedItems,
+      );
+
+      return filterItemsByTab(updatedItems, activeTab);
+    });
+
+    console.log(
+      "[MyBookings] Triggering background reload after realtime update",
+    );
+    void loadBookings(page, pageSize, activeTab);
+  }, [activeTab, lastMessage, loadBookings, page, pageSize]);
 
   const openActionModal = (type: BookingActionType, booking: Reservation) => {
     setActionModalError(null);
@@ -475,9 +581,11 @@ const MyBookingsPage: React.FC = () => {
         description: feedbackDescription.trim(),
       });
 
-      message.success(
-        extractBackendSuccessMessage(response, "Feedback created successfully"),
+      const successMessage = extractBackendSuccessMessage(
+        response,
+        "Feedback created successfully",
       );
+      showToast("success", successMessage);
       closeFeedbackModal();
       await loadBookings(page, pageSize, activeTab);
     } catch (err) {
@@ -1076,6 +1184,14 @@ const MyBookingsPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {toastPopup && (
+        <CustomMessage
+          type={toastPopup.type}
+          message={toastPopup.message}
+          onClose={() => setToastPopup(null)}
+        />
+      )}
     </div>
   );
 };

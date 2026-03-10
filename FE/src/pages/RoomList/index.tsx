@@ -505,6 +505,7 @@ const DashboardPage: React.FC = () => {
               <div className="min-w-0">
                 <DatePickerField
                   value={startDate}
+                  minDate={currentTimeRange.startDate}
                   onChange={(nextDate) => {
                     setStartDate(nextDate);
                     setPage(0);
@@ -550,7 +551,7 @@ const DashboardPage: React.FC = () => {
               <div className="min-w-0">
                 <DatePickerField
                   value={endDate}
-                  minDate={startDate || undefined}
+                  minDate={startDate || currentTimeRange.startDate}
                   onChange={(nextDate) => {
                     setEndDate(nextDate);
                     setPage(0);

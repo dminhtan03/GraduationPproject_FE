@@ -32,7 +32,12 @@ const CustomMessage: React.FC<CustomMessageProps> = ({
       <span className="custom-message-icon">{iconMap[type]}</span>
       <span className="custom-message-text">{message}</span>
       {onClose && (
-        <button className="custom-message-close" onClick={onClose}>
+        <button
+          type="button"
+          aria-label="Close message"
+          className="custom-message-close"
+          onClick={onClose}
+        >
           ×
         </button>
       )}

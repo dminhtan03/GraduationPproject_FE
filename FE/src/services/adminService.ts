@@ -11,6 +11,18 @@ export type AdminUser = {
   locked: boolean;
 };
 
+export type RegisterUserPayload = {
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  address: string;
+  department: string;
+  email: string;
+  gender: string;
+  password: string;
+  role: string;
+};
+
 type BackendPage<T> = {
   content?: T[];
   totalElements?: number;
@@ -112,5 +124,9 @@ export const adminService = {
 
   async unlockUser(userId: string): Promise<void> {
     await api.put(buildUrl(API_ENDPOINTS.DASHBOARD.UNLOCK_USER, { userId }));
+  },
+
+  async registerUser(payload: RegisterUserPayload): Promise<void> {
+    await api.post(API_ENDPOINTS.USERS.REGISTER, payload);
   },
 };

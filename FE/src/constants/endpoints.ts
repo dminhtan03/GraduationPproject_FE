@@ -33,6 +33,7 @@ export const API_ENDPOINTS = {
     CREATE: "/users",
     UPDATE: "/users/:id",
     DELETE: "/users/:id",
+    REGISTER: "/api/v1/user/register",
     UPDATE_INFO: "/api/v1/user/update-info",
     CHANGE_PASSWORD: "/api/v1/user/change-password",
     FORGOT_PASSWORD_REQUEST: "/api/v1/user/forgot-password",

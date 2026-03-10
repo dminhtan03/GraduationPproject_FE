@@ -8,12 +8,16 @@ import { fileURLToPath, URL } from "node:url";
 export default defineConfig({
   plugins: [react()],
 
+  define: {
+    global: "globalThis",
+  },
+
   // Path aliases
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
       "@components": fileURLToPath(
-        new URL("./src/components", import.meta.url)
+        new URL("./src/components", import.meta.url),
       ),
       "@pages": fileURLToPath(new URL("./src/pages", import.meta.url)),
       "@hooks": fileURLToPath(new URL("./src/hooks", import.meta.url)),
@@ -30,6 +34,14 @@ export default defineConfig({
     port: 5173,
     open: true,
     cors: true,
+  },
+
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: "globalThis",
+      },
+    },
   },
 
   // Build optimization

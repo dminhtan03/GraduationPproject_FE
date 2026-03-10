@@ -44,6 +44,10 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
 
   const selectedDate = useMemo(() => parseDateOnly(value), [value]);
   const fromDate = useMemo(() => parseDateOnly(minDate), [minDate]);
+  const disabledDays = useMemo(
+    () => (fromDate ? { before: fromDate } : undefined),
+    [fromDate],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -86,6 +90,7 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
             mode="single"
             selected={selectedDate}
             fromDate={fromDate}
+            disabled={disabledDays}
             onSelect={(date) => {
               if (!date) return;
               onChange(toDateInputValue(date));
@@ -114,7 +119,8 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
               day_selected: "!bg-orange-500 !text-white hover:!bg-orange-600",
               day_today: "border border-orange-300 text-orange-600",
               day_outside: "text-slate-300",
-              day_disabled: "text-slate-300 line-through",
+              day_disabled:
+                "text-slate-300 opacity-45 cursor-not-allowed pointer-events-none",
             }}
           />
         </div>
