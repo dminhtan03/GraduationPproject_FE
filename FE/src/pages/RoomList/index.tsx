@@ -7,6 +7,19 @@ import { roomService } from "../../services/roomService";
 import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import DatePickerField from "../../components/common/DatePickerField";
+import { useRealtimeClock } from "../../hooks";
+import {
+  HOUR_OPTIONS,
+  MINUTE_OPTIONS,
+  LOCAL_DATE_TIME_PATTERN,
+  buildDateTime,
+  clampToRange,
+  getCurrentTimeRange,
+  getTimeOptionStyle,
+  normalizeLocalDateTime,
+  toDateInputValue,
+  toTotalMinutes,
+} from "../../utils";
 
 const { Title, Text } = Typography;
 
@@ -44,48 +57,6 @@ interface RawMapBuilding {
 }
 
 const PAGE_SIZE = 10;
-const LOCAL_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
-
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
-  value: String(hour).padStart(2, "0"),
-  label: `${String(hour).padStart(2, "0")}h`,
-}));
-
-const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, minute) =>
-  String(minute).padStart(2, "0"),
-);
-
-const toDateInputValue = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const getCurrentTimeRange = () => {
-  const now = new Date();
-  const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
-
-  return {
-    startDate: toDateInputValue(now),
-    startHour: String(now.getHours()).padStart(2, "0"),
-    startMinute: String(now.getMinutes()).padStart(2, "0"),
-    endDate: toDateInputValue(oneHourLater),
-    endHour: String(oneHourLater.getHours()).padStart(2, "0"),
-    endMinute: String(oneHourLater.getMinutes()).padStart(2, "0"),
-  };
-};
-
-const normalizeLocalDateTime = (value: string) => {
-  if (!value) return "";
-  // Align with BE LocalDateTime format used by /api/v1/rooms/search
-  return value.length === 16 ? `${value}:00` : value;
-};
-
-const buildDateTime = (date: string, hour: string, minute: string) => {
-  if (!date || !hour || !minute) return "";
-  return `${date}T${hour}:${minute}:00`;
-};
 
 const getStatusBadgeClass = (status: RoomListStatus) => {
   if (status === "AVAILABLE") return "bg-green-100 text-green-700";
@@ -96,6 +67,7 @@ const getStatusBadgeClass = (status: RoomListStatus) => {
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const currentTimeRange = useMemo(() => getCurrentTimeRange(), []);
+  const clockTick = useRealtimeClock();
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +85,98 @@ const DashboardPage: React.FC = () => {
   const [timeStatusOverrides, setTimeStatusOverrides] = useState<
     Record<string, RoomListStatus>
   >({});
+  const nowParts = useMemo(() => {
+    const now = new Date(clockTick);
+    return {
+      date: toDateInputValue(now),
+      hour: String(now.getHours()).padStart(2, "0"),
+      minute: String(now.getMinutes()).padStart(2, "0"),
+    };
+  }, [clockTick]);
+
+  const minStartMinutes = useMemo(
+    () => toTotalMinutes(nowParts.hour, nowParts.minute),
+    [nowParts.hour, nowParts.minute],
+  );
+
+  const minEndDate = useMemo(
+    () => (startDate > nowParts.date ? startDate : nowParts.date),
+    [nowParts.date, startDate],
+  );
+
+  const minEndMinutes = useMemo(() => {
+    const nowMinutes = toTotalMinutes(nowParts.hour, nowParts.minute);
+    const startMinutes = toTotalMinutes(startHour, startMinute);
+
+    if (startDate === nowParts.date && minEndDate === nowParts.date) {
+      return Math.max(nowMinutes, startMinutes);
+    }
+
+    if (minEndDate === nowParts.date) {
+      return nowMinutes;
+    }
+
+    if (minEndDate === startDate) {
+      return startMinutes;
+    }
+
+    return 0;
+  }, [
+    minEndDate,
+    nowParts.date,
+    nowParts.hour,
+    nowParts.minute,
+    startDate,
+    startHour,
+    startMinute,
+  ]);
+
+  useEffect(() => {
+    if (startDate < nowParts.date) {
+      setStartDate(nowParts.date);
+      setStartHour(nowParts.hour);
+      setStartMinute(nowParts.minute);
+      return;
+    }
+
+    if (startDate === nowParts.date) {
+      const startMinutes = toTotalMinutes(startHour, startMinute);
+      if (startMinutes < minStartMinutes) {
+        const safeMinutes = clampToRange(minStartMinutes, 0, 23 * 60 + 59);
+        const nextHour = String(Math.floor(safeMinutes / 60)).padStart(2, "0");
+        const nextMinute = String(safeMinutes % 60).padStart(2, "0");
+        setStartHour(nextHour);
+        setStartMinute(nextMinute);
+      }
+    }
+  }, [
+    minStartMinutes,
+    nowParts.date,
+    nowParts.hour,
+    nowParts.minute,
+    startDate,
+    startHour,
+    startMinute,
+  ]);
+
+  useEffect(() => {
+    if (endDate < minEndDate) {
+      setEndDate(minEndDate);
+      const safeMinutes = clampToRange(minEndMinutes, 0, 23 * 60 + 59);
+      setEndHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
+      setEndMinute(String(safeMinutes % 60).padStart(2, "0"));
+      return;
+    }
+
+    if (endDate === minEndDate) {
+      const endMinutes = toTotalMinutes(endHour, endMinute);
+      if (endMinutes < minEndMinutes) {
+        const safeMinutes = clampToRange(minEndMinutes, 0, 23 * 60 + 59);
+        setEndHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
+        setEndMinute(String(safeMinutes % 60).padStart(2, "0"));
+      }
+    }
+  }, [endDate, endHour, endMinute, minEndDate, minEndMinutes]);
 
   const loadRooms = useCallback(async () => {
     setLoading(true);
@@ -505,7 +569,7 @@ const DashboardPage: React.FC = () => {
               <div className="min-w-0">
                 <DatePickerField
                   value={startDate}
-                  minDate={currentTimeRange.startDate}
+                  minDate={nowParts.date}
                   onChange={(nextDate) => {
                     setStartDate(nextDate);
                     setPage(0);
@@ -520,11 +584,22 @@ const DashboardPage: React.FC = () => {
                 }}
                 className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
-                {HOUR_OPTIONS.map((hour) => (
-                  <option key={hour.value} value={hour.value}>
-                    {hour.label}
-                  </option>
-                ))}
+                {HOUR_OPTIONS.map((hour) => {
+                  const isDisabled =
+                    startDate === nowParts.date &&
+                    Number(hour.value) * 60 < minStartMinutes;
+
+                  return (
+                    <option
+                      key={hour.value}
+                      value={hour.value}
+                      disabled={isDisabled}
+                      style={getTimeOptionStyle(isDisabled)}
+                    >
+                      {hour.label}
+                    </option>
+                  );
+                })}
               </select>
               <select
                 value={startMinute}
@@ -534,11 +609,23 @@ const DashboardPage: React.FC = () => {
                 }}
                 className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
-                {MINUTE_OPTIONS.map((minute) => (
-                  <option key={minute} value={minute}>
-                    {minute}m
-                  </option>
-                ))}
+                {MINUTE_OPTIONS.map((minute) => {
+                  const isDisabled =
+                    startDate === nowParts.date &&
+                    startHour === nowParts.hour &&
+                    Number(minute) < Number(nowParts.minute);
+
+                  return (
+                    <option
+                      key={minute}
+                      value={minute}
+                      disabled={isDisabled}
+                      style={getTimeOptionStyle(isDisabled)}
+                    >
+                      {minute}m
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -551,7 +638,7 @@ const DashboardPage: React.FC = () => {
               <div className="min-w-0">
                 <DatePickerField
                   value={endDate}
-                  minDate={startDate || currentTimeRange.startDate}
+                  minDate={minEndDate}
                   onChange={(nextDate) => {
                     setEndDate(nextDate);
                     setPage(0);
@@ -566,11 +653,22 @@ const DashboardPage: React.FC = () => {
                 }}
                 className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
-                {HOUR_OPTIONS.map((hour) => (
-                  <option key={hour.value} value={hour.value}>
-                    {hour.label}
-                  </option>
-                ))}
+                {HOUR_OPTIONS.map((hour) => {
+                  const isDisabled =
+                    endDate === minEndDate &&
+                    Number(hour.value) * 60 < minEndMinutes;
+
+                  return (
+                    <option
+                      key={hour.value}
+                      value={hour.value}
+                      disabled={isDisabled}
+                      style={getTimeOptionStyle(isDisabled)}
+                    >
+                      {hour.label}
+                    </option>
+                  );
+                })}
               </select>
               <select
                 value={endMinute}
@@ -580,11 +678,24 @@ const DashboardPage: React.FC = () => {
                 }}
                 className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
-                {MINUTE_OPTIONS.map((minute) => (
-                  <option key={minute} value={minute}>
-                    {minute}m
-                  </option>
-                ))}
+                {MINUTE_OPTIONS.map((minute) => {
+                  const isDisabled =
+                    endDate === minEndDate &&
+                    endHour ===
+                      String(Math.floor(minEndMinutes / 60)).padStart(2, "0") &&
+                    Number(minute) < minEndMinutes % 60;
+
+                  return (
+                    <option
+                      key={minute}
+                      value={minute}
+                      disabled={isDisabled}
+                      style={getTimeOptionStyle(isDisabled)}
+                    >
+                      {minute}m
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>

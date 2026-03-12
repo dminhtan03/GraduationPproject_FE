@@ -1,12 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert } from "antd";
+import { Alert, Pagination, Rate } from "antd";
 import { TagIcon, ClockIcon } from "@heroicons/react/24/outline";
 import {
   roomService,
   type RoomsMapBuilding,
   type RoomStatusItem,
 } from "../../services/roomService";
+import {
+  feedbackService,
+  type RoomFeedbackItem,
+} from "../../services/feedbackService";
 import { ROUTES } from "../../constants";
 import {
   type MapRoom,
@@ -16,9 +20,20 @@ import {
   splitRoomsForMap,
   getStatusStyles,
   sortFloorsByLevel,
+  HOUR_OPTIONS,
+  MINUTE_OPTIONS,
+  LOCAL_DATE_TIME_PATTERN,
+  buildDateTime,
+  clampToRange,
+  getCurrentTimeRange,
+  getTimeOptionStyle,
+  normalizeLocalDateTime,
+  toDateInputValue,
+  toTotalMinutes,
 } from "../../utils";
 import DatePickerField from "../../components/common/DatePickerField";
 import { extractApiMessage } from "../../utils/errorHandlers";
+import { useRealtimeClock, useRoomStatusWebSocket } from "../../hooks";
 
 type RoomDetail = {
   roomId?: string;
@@ -31,6 +46,11 @@ type RoomDetail = {
   currentUserId?: string | null;
   currentUserName?: string | null;
   checkInTime?: string | null;
+};
+
+const formatFeedbackName = (name?: string | null) => {
+  const trimmed = String(name || "").trim();
+  return trimmed || "Anonymous user";
 };
 
 type BuildingLayoutVariant =
@@ -59,14 +79,6 @@ type RawMapBuilding = {
   floors?: RawMapFloor[];
 };
 
-const LOCAL_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
-
-const normalizeLocalDateTime = (value: string) => {
-  if (!value) return "";
-  // Keep FE payload aligned with BE LocalDateTime sample: yyyy-MM-ddTHH:mm:ss
-  return value.length === 16 ? `${value}:00` : value;
-};
-
 const formatCheckInDateTime = (value?: string | null) => {
   if (!value) return "-";
 
@@ -88,41 +100,8 @@ const formatCheckInDateTime = (value?: string | null) => {
   return `${day}/${month}/${year} ${hour}:${minute}:${second}`;
 };
 
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
-  value: String(hour).padStart(2, "0"),
-  label: `${String(hour).padStart(2, "0")}h`,
-}));
-
-const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, minute) =>
-  String(minute).padStart(2, "0"),
-);
 const ROOM_LAYOUT_STORAGE_KEY = "room-map-layout-order";
-
-const toDateInputValue = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const getCurrentTimeRange = () => {
-  const now = new Date();
-  const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
-
-  return {
-    startDate: toDateInputValue(now),
-    startHour: String(now.getHours()).padStart(2, "0"),
-    startMinute: String(now.getMinutes()).padStart(2, "0"),
-    endDate: toDateInputValue(oneHourLater),
-    endHour: String(oneHourLater.getHours()).padStart(2, "0"),
-    endMinute: String(oneHourLater.getMinutes()).padStart(2, "0"),
-  };
-};
-
-const buildDateTime = (date: string, hour: string, minute: string) => {
-  if (!date || !hour || !minute) return "";
-  return `${date}T${hour}:${minute}:00`;
-};
+const FEEDBACK_PAGE_SIZE = 5;
 
 const chunkRooms = <T,>(rooms: T[], size: number) => {
   const result: T[][] = [];
@@ -164,6 +143,7 @@ const resolveLayoutVariant = (
 const RoomMapPage: React.FC = () => {
   const navigate = useNavigate();
   const currentTimeRange = useMemo(() => getCurrentTimeRange(), []);
+  const clockTick = useRealtimeClock();
 
   const [buildings, setBuildings] = useState<RoomsMapBuilding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -177,6 +157,13 @@ const RoomMapPage: React.FC = () => {
   const [roomDetail, setRoomDetail] = useState<RoomDetail | null>(null);
   const [roomDetailLoading, setRoomDetailLoading] = useState(false);
   const [roomDetailError, setRoomDetailError] = useState<string | null>(null);
+  const [roomFeedbacks, setRoomFeedbacks] = useState<RoomFeedbackItem[]>([]);
+  const [roomFeedbackTotal, setRoomFeedbackTotal] = useState(0);
+  const [roomFeedbackPage, setRoomFeedbackPage] = useState(1);
+  const [roomFeedbackLoading, setRoomFeedbackLoading] = useState(false);
+  const [roomFeedbackError, setRoomFeedbackError] = useState<string | null>(
+    null,
+  );
   const [statusFilter, setStatusFilter] = useState<"ALL" | MapRoomStatus>(
     "ALL",
   );
@@ -196,6 +183,142 @@ const RoomMapPage: React.FC = () => {
   >({});
   const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
   const [dragOverRoomId, setDragOverRoomId] = useState<string | null>(null);
+
+  useRoomStatusWebSocket({
+    floorId: selectedFloorId,
+    onStatusChange: (roomId, nextStatus) => {
+      setBuildings((prev) =>
+        prev.map((building) => ({
+          ...building,
+          floors: (building.floors || []).map((floor) => ({
+            ...floor,
+            rooms: (floor.rooms || []).map((room) =>
+              String(room.roomId || "") === roomId
+                ? {
+                    ...room,
+                    status: nextStatus,
+                  }
+                : room,
+            ),
+          })),
+        })),
+      );
+
+      setOverrideStatuses((prev) => ({
+        ...prev,
+        [roomId]: nextStatus,
+      }));
+
+      setSelectedRoom((prev) =>
+        prev && prev.roomId === roomId
+          ? {
+              ...prev,
+              status: nextStatus,
+            }
+          : prev,
+      );
+
+      setRoomDetail((prev) =>
+        prev && prev.roomId === roomId
+          ? {
+              ...prev,
+              status: nextStatus,
+            }
+          : prev,
+      );
+    },
+  });
+
+  const nowParts = useMemo(() => {
+    const now = new Date(clockTick);
+    return {
+      date: toDateInputValue(now),
+      hour: String(now.getHours()).padStart(2, "0"),
+      minute: String(now.getMinutes()).padStart(2, "0"),
+    };
+  }, [clockTick]);
+
+  const minStartMinutes = useMemo(
+    () => toTotalMinutes(nowParts.hour, nowParts.minute),
+    [nowParts.hour, nowParts.minute],
+  );
+
+  const minEndDate = useMemo(
+    () => (startDate > nowParts.date ? startDate : nowParts.date),
+    [nowParts.date, startDate],
+  );
+
+  const minEndMinutes = useMemo(() => {
+    const nowMinutes = toTotalMinutes(nowParts.hour, nowParts.minute);
+    const startMinutes = toTotalMinutes(startHour, startMinute);
+
+    if (startDate === nowParts.date && minEndDate === nowParts.date) {
+      return Math.max(nowMinutes, startMinutes);
+    }
+
+    if (minEndDate === nowParts.date) {
+      return nowMinutes;
+    }
+
+    if (minEndDate === startDate) {
+      return startMinutes;
+    }
+
+    return 0;
+  }, [
+    minEndDate,
+    nowParts.date,
+    nowParts.hour,
+    nowParts.minute,
+    startDate,
+    startHour,
+    startMinute,
+  ]);
+
+  useEffect(() => {
+    if (startDate < nowParts.date) {
+      setStartDate(nowParts.date);
+      setStartHour(nowParts.hour);
+      setStartMinute(nowParts.minute);
+      return;
+    }
+
+    if (startDate === nowParts.date) {
+      const startMinutes = toTotalMinutes(startHour, startMinute);
+      if (startMinutes < minStartMinutes) {
+        const safeMinutes = clampToRange(minStartMinutes, 0, 23 * 60 + 59);
+        setStartHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
+        setStartMinute(String(safeMinutes % 60).padStart(2, "0"));
+      }
+    }
+  }, [
+    minStartMinutes,
+    nowParts.date,
+    nowParts.hour,
+    nowParts.minute,
+    startDate,
+    startHour,
+    startMinute,
+  ]);
+
+  useEffect(() => {
+    if (endDate < minEndDate) {
+      setEndDate(minEndDate);
+      const safeMinutes = clampToRange(minEndMinutes, 0, 23 * 60 + 59);
+      setEndHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
+      setEndMinute(String(safeMinutes % 60).padStart(2, "0"));
+      return;
+    }
+
+    if (endDate === minEndDate) {
+      const endMinutes = toTotalMinutes(endHour, endMinute);
+      if (endMinutes < minEndMinutes) {
+        const safeMinutes = clampToRange(minEndMinutes, 0, 23 * 60 + 59);
+        setEndHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
+        setEndMinute(String(safeMinutes % 60).padStart(2, "0"));
+      }
+    }
+  }, [endDate, endHour, endMinute, minEndDate, minEndMinutes]);
 
   useEffect(() => {
     try {
@@ -480,6 +603,10 @@ const RoomMapPage: React.FC = () => {
     setRoomDetail(null);
     setRoomDetailError(null);
     setRoomDetailLoading(true);
+    setRoomFeedbacks([]);
+    setRoomFeedbackTotal(0);
+    setRoomFeedbackPage(1);
+    setRoomFeedbackError(null);
 
     try {
       const detail = await roomService.getRoomDetail(room.roomId);
@@ -494,6 +621,42 @@ const RoomMapPage: React.FC = () => {
       setRoomDetailLoading(false);
     }
   };
+
+  useEffect(() => {
+    const roomId = selectedRoom?.roomId;
+
+    if (!roomId) {
+      setRoomFeedbacks([]);
+      setRoomFeedbackTotal(0);
+      setRoomFeedbackError(null);
+      setRoomFeedbackLoading(false);
+      return;
+    }
+
+    const loadRoomFeedbacks = async () => {
+      setRoomFeedbackLoading(true);
+      setRoomFeedbackError(null);
+
+      try {
+        const feedbackResult = await feedbackService.getRoomFeedbacks(
+          roomId,
+          roomFeedbackPage - 1,
+          FEEDBACK_PAGE_SIZE,
+        );
+
+        setRoomFeedbacks(feedbackResult.items);
+        setRoomFeedbackTotal(feedbackResult.total);
+      } catch (e: unknown) {
+        setRoomFeedbackError(extractApiMessage(e, "Unable to load feedback"));
+        setRoomFeedbacks([]);
+        setRoomFeedbackTotal(0);
+      } finally {
+        setRoomFeedbackLoading(false);
+      }
+    };
+
+    loadRoomFeedbacks();
+  }, [selectedRoom?.roomId, roomFeedbackPage]);
 
   const handleBooking = () => {
     if (!selectedRoom) return;
@@ -578,7 +741,7 @@ const RoomMapPage: React.FC = () => {
             >
               <option value="ALL">All</option>
               <option value="AVAILABLE">Available</option>
-              <option value="UNAVAILABLE">Occupied</option>
+              <option value="UNAVAILABLE">In Use</option>
               <option value="BROKEN">Maintenance</option>
             </select>
           </div>
@@ -596,7 +759,7 @@ const RoomMapPage: React.FC = () => {
                   <div className="col-span-2 sm:col-span-1 min-w-0">
                     <DatePickerField
                       value={startDate}
-                      minDate={currentTimeRange.startDate}
+                      minDate={nowParts.date}
                       onChange={setStartDate}
                     />
                   </div>
@@ -605,22 +768,45 @@ const RoomMapPage: React.FC = () => {
                     onChange={(e) => setStartHour(e.target.value)}
                     className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                   >
-                    {HOUR_OPTIONS.map((hour) => (
-                      <option key={hour.value} value={hour.value}>
-                        {hour.label}
-                      </option>
-                    ))}
+                    {HOUR_OPTIONS.map((hour) => {
+                      const isDisabled =
+                        startDate === nowParts.date &&
+                        Number(hour.value) * 60 < minStartMinutes;
+
+                      return (
+                        <option
+                          key={hour.value}
+                          value={hour.value}
+                          disabled={isDisabled}
+                          style={getTimeOptionStyle(isDisabled)}
+                        >
+                          {hour.label}
+                        </option>
+                      );
+                    })}
                   </select>
                   <select
                     value={startMinute}
                     onChange={(e) => setStartMinute(e.target.value)}
                     className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                   >
-                    {MINUTE_OPTIONS.map((minute) => (
-                      <option key={minute} value={minute}>
-                        {minute}m
-                      </option>
-                    ))}
+                    {MINUTE_OPTIONS.map((minute) => {
+                      const isDisabled =
+                        startDate === nowParts.date &&
+                        startHour === nowParts.hour &&
+                        Number(minute) < Number(nowParts.minute);
+
+                      return (
+                        <option
+                          key={minute}
+                          value={minute}
+                          disabled={isDisabled}
+                          style={getTimeOptionStyle(isDisabled)}
+                        >
+                          {minute}m
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -633,7 +819,7 @@ const RoomMapPage: React.FC = () => {
                   <div className="col-span-2 sm:col-span-1 min-w-0">
                     <DatePickerField
                       value={endDate}
-                      minDate={startDate || currentTimeRange.startDate}
+                      minDate={minEndDate}
                       onChange={setEndDate}
                     />
                   </div>
@@ -642,22 +828,49 @@ const RoomMapPage: React.FC = () => {
                     onChange={(e) => setEndHour(e.target.value)}
                     className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                   >
-                    {HOUR_OPTIONS.map((hour) => (
-                      <option key={hour.value} value={hour.value}>
-                        {hour.label}
-                      </option>
-                    ))}
+                    {HOUR_OPTIONS.map((hour) => {
+                      const isDisabled =
+                        endDate === minEndDate &&
+                        Number(hour.value) * 60 < minEndMinutes;
+
+                      return (
+                        <option
+                          key={hour.value}
+                          value={hour.value}
+                          disabled={isDisabled}
+                          style={getTimeOptionStyle(isDisabled)}
+                        >
+                          {hour.label}
+                        </option>
+                      );
+                    })}
                   </select>
                   <select
                     value={endMinute}
                     onChange={(e) => setEndMinute(e.target.value)}
                     className="w-full min-w-0 border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
                   >
-                    {MINUTE_OPTIONS.map((minute) => (
-                      <option key={minute} value={minute}>
-                        {minute}m
-                      </option>
-                    ))}
+                    {MINUTE_OPTIONS.map((minute) => {
+                      const isDisabled =
+                        endDate === minEndDate &&
+                        endHour ===
+                          String(Math.floor(minEndMinutes / 60)).padStart(
+                            2,
+                            "0",
+                          ) &&
+                        Number(minute) < minEndMinutes % 60;
+
+                      return (
+                        <option
+                          key={minute}
+                          value={minute}
+                          disabled={isDisabled}
+                          style={getTimeOptionStyle(isDisabled)}
+                        >
+                          {minute}m
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -723,7 +936,7 @@ const RoomMapPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-1.5 text-amber-700">
             <span className="w-3 h-3 rounded-full bg-amber-400" />
-            <span>Occupied</span>
+            <span>In Use</span>
           </div>
           <div className="flex items-center gap-1.5 text-slate-600">
             <span className="w-3 h-3 rounded-full bg-slate-300" />
@@ -999,7 +1212,7 @@ const RoomMapPage: React.FC = () => {
                     {selectedRoom.status === "AVAILABLE"
                       ? "Available"
                       : selectedRoom.status === "UNAVAILABLE"
-                        ? "Occupied"
+                        ? "In Use"
                         : "Maintenance"}
                   </div>
                 </div>
@@ -1076,6 +1289,87 @@ const RoomMapPage: React.FC = () => {
                       </div>
                     </div>
                   )}
+
+                  <div className="text-xs">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="text-[11px] text-slate-500">
+                        Feedback from users
+                      </div>
+                      <div className="text-[11px] font-medium text-slate-400">
+                        {roomFeedbackTotal} review
+                        {roomFeedbackTotal === 1 ? "" : "s"}
+                      </div>
+                    </div>
+
+                    {roomFeedbackLoading && (
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-4 text-slate-500">
+                        Loading feedback...
+                      </div>
+                    )}
+
+                    {roomFeedbackError && !roomFeedbackLoading && (
+                      <div className="rounded-2xl border border-rose-100 bg-rose-50 px-3 py-4 text-rose-600">
+                        {roomFeedbackError}
+                      </div>
+                    )}
+
+                    {!roomFeedbackLoading &&
+                      !roomFeedbackError &&
+                      roomFeedbacks.length === 0 && (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-slate-500">
+                          No feedback yet for this room.
+                        </div>
+                      )}
+
+                    {!roomFeedbackLoading &&
+                      !roomFeedbackError &&
+                      roomFeedbacks.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                            {roomFeedbacks.map((feedback) => (
+                              <div
+                                key={feedback.id}
+                                className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3"
+                              >
+                                <div className="mb-1 flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="text-sm font-semibold text-slate-800">
+                                      {formatFeedbackName(feedback.userName)}
+                                    </div>
+                                    <Rate
+                                      disabled
+                                      value={feedback.rating}
+                                      className="text-xs"
+                                    />
+                                  </div>
+                                  <div className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-orange-600">
+                                    {feedback.rating}/5
+                                  </div>
+                                </div>
+
+                                <p className="text-xs leading-5 text-slate-600">
+                                  {feedback.description ||
+                                    "No detailed feedback provided."}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {roomFeedbackTotal > FEEDBACK_PAGE_SIZE && (
+                            <div className="flex justify-end">
+                              <Pagination
+                                current={roomFeedbackPage}
+                                pageSize={FEEDBACK_PAGE_SIZE}
+                                total={roomFeedbackTotal}
+                                size="small"
+                                showSizeChanger={false}
+                                onChange={(page) => setRoomFeedbackPage(page)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                  </div>
                 </>
               )}
 

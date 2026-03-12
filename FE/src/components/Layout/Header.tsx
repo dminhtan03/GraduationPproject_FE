@@ -5,7 +5,7 @@ import { Layout, Button, Typography, Avatar, Dropdown } from "antd";
 import {
   BellOutlined,
   UserOutlined,
-  SettingOutlined,
+  LockOutlined,
   LogoutOutlined,
   DownOutlined,
   MenuOutlined,
@@ -97,14 +97,14 @@ const Header: React.FC = () => {
 
   const userMenuItems: MenuProps["items"] = [
     { key: "1", label: "My Profile", icon: <UserOutlined /> },
-    { key: "2", label: "Settings", icon: <SettingOutlined /> },
+    { key: "2", label: "Change Password", icon: <LockOutlined /> },
     { type: "divider" },
     { key: "3", label: "Logout", icon: <LogoutOutlined />, danger: true },
   ];
 
   const handleUserMenuClick = ({ key }: { key: string }) => {
     if (key === "1") navigate(ROUTES.PROFILE);
-    if (key === "2") navigate(ROUTES.PROFILE_EDIT);
+    if (key === "2") navigate(ROUTES.CHANGE_PASSWORD);
     if (key === "3") logout().then(() => (window.location.href = "/login"));
   };
 

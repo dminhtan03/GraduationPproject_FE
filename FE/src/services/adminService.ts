@@ -47,6 +47,30 @@ type BackendUser = {
   isLocked?: boolean;
 };
 
+const extractSuccessMessage = (payload: unknown, fallback: string): string => {
+  if (!payload || typeof payload !== "object") return fallback;
+
+  const data = payload as {
+    message?: unknown;
+    meta?: { message?: unknown };
+    data?: unknown;
+  };
+
+  if (typeof data.meta?.message === "string" && data.meta.message.trim()) {
+    return data.meta.message;
+  }
+
+  if (typeof data.message === "string" && data.message.trim()) {
+    return data.message;
+  }
+
+  if (typeof data.data === "string" && data.data.trim()) {
+    return data.data;
+  }
+
+  return fallback;
+};
+
 const normalizeUser = (user: BackendUser): AdminUser => ({
   id: String(user.id || ""),
   fullName: String(user.fullName || ""),
@@ -118,12 +142,18 @@ export const adminService = {
     };
   },
 
-  async lockUser(userId: string): Promise<void> {
-    await api.put(buildUrl(API_ENDPOINTS.DASHBOARD.LOCK_USER, { userId }));
+  async lockUser(userId: string): Promise<string> {
+    const res = await api.put(
+      buildUrl(API_ENDPOINTS.DASHBOARD.LOCK_USER, { userId }),
+    );
+    return extractSuccessMessage(res.data, "User locked successfully");
   },
 
-  async unlockUser(userId: string): Promise<void> {
-    await api.put(buildUrl(API_ENDPOINTS.DASHBOARD.UNLOCK_USER, { userId }));
+  async unlockUser(userId: string): Promise<string> {
+    const res = await api.put(
+      buildUrl(API_ENDPOINTS.DASHBOARD.UNLOCK_USER, { userId }),
+    );
+    return extractSuccessMessage(res.data, "User unlocked successfully");
   },
 
   async registerUser(payload: RegisterUserPayload): Promise<void> {

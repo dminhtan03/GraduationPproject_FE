@@ -23,6 +23,7 @@ export const ROUTES = {
   NOTIFICATIONS: "/notifications",
   PROFILE: "/profile",
   PROFILE_EDIT: "/profile/edit",
+  CHANGE_PASSWORD: "/profile/change-password",
   LOG_OUT: "/logout",
 } as const;
 

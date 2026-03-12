@@ -17,6 +17,9 @@ const ProfilePage = React.lazy(() => import("../pages/Profile"));
 const EditProfilePage = React.lazy(
   () => import("../pages/Profile/EditProfile"),
 );
+const ChangePasswordPage = React.lazy(
+  () => import("../pages/Profile/ChangePassword"),
+);
 const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
 const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
 const AdminUserManagementPage = React.lazy(
@@ -147,6 +150,14 @@ export const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <EditProfilePage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.CHANGE_PASSWORD,
+        element: (
+          <SuspenseWrapper>
+            <ChangePasswordPage />
           </SuspenseWrapper>
         ),
       },

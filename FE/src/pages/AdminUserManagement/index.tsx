@@ -129,6 +129,9 @@ const AdminUserManagementPage: React.FC = () => {
     type: MessageType;
     message: string;
   } | null>(null);
+  const [confirmActionUser, setConfirmActionUser] = useState<AdminUser | null>(
+    null,
+  );
   const [addUserForm, setAddUserForm] = useState<RegisterUserPayload>({
     firstName: "",
     lastName: "",
@@ -215,17 +218,35 @@ const AdminUserManagementPage: React.FC = () => {
     setActionLoadingId(user.id);
     setError(null);
     try {
+      let successMessage = "User status updated successfully";
       if (user.locked) {
-        await adminService.unlockUser(user.id);
+        successMessage = await adminService.unlockUser(user.id);
       } else {
-        await adminService.lockUser(user.id);
+        successMessage = await adminService.lockUser(user.id);
       }
+      showToast("success", successMessage);
       await loadUsers();
     } catch (e: unknown) {
       setError(extractApiMessage(e, "Unable to update user status"));
     } finally {
       setActionLoadingId(null);
     }
+  };
+
+  const requestToggleLockConfirm = (user: AdminUser) => {
+    setConfirmActionUser(user);
+  };
+
+  const closeConfirmModal = () => {
+    if (!actionLoadingId) {
+      setConfirmActionUser(null);
+    }
+  };
+
+  const handleConfirmToggleLock = async () => {
+    if (!confirmActionUser) return;
+    await handleToggleLock(confirmActionUser);
+    setConfirmActionUser(null);
   };
 
   const handleLogout = async () => {
@@ -753,7 +774,7 @@ const AdminUserManagementPage: React.FC = () => {
                     <td className="px-4 py-3">
                       <button
                         type="button"
-                        onClick={() => handleToggleLock(user)}
+                        onClick={() => requestToggleLockConfirm(user)}
                         disabled={actionLoadingId === user.id}
                         className={[
                           "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
@@ -811,7 +832,7 @@ const AdminUserManagementPage: React.FC = () => {
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleToggleLock(user)}
+                    onClick={() => requestToggleLockConfirm(user)}
                     disabled={actionLoadingId === user.id}
                     className={[
                       "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
@@ -882,6 +903,51 @@ const AdminUserManagementPage: React.FC = () => {
           </div>
         </section>
       </main>
+
+      {confirmActionUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">
+              {confirmActionUser.locked
+                ? "Confirm unlock user"
+                : "Confirm lock user"}
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              {confirmActionUser.locked
+                ? `Are you sure you want to unlock ${confirmActionUser.fullName || "this user"}?`
+                : `Are you sure you want to lock ${confirmActionUser.fullName || "this user"}?`}
+            </p>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeConfirmModal}
+                disabled={actionLoadingId === confirmActionUser.id}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmToggleLock}
+                disabled={actionLoadingId === confirmActionUser.id}
+                className={[
+                  "rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60",
+                  confirmActionUser.locked
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-amber-600 hover:bg-amber-700",
+                ].join(" ")}
+              >
+                {actionLoadingId === confirmActionUser.id
+                  ? "Processing..."
+                  : confirmActionUser.locked
+                    ? "Confirm Unlock"
+                    : "Confirm Lock"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toastPopup && (
         <CustomMessage
