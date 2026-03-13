@@ -106,6 +106,10 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
+        element: <Navigate to={ROUTES.LOGIN} replace />,
+      },
+      {
+        path: ROUTES.ROOM_LIST,
         element: (
           <SuspenseWrapper>
             <DashboardPage />
@@ -190,7 +194,7 @@ export const router = createBrowserRouter([
   // Catch all route - redirect to home
   {
     path: "*",
-    element: <Navigate to={ROUTES.ROOM_LIST} replace />,
+    element: <Navigate to={ROUTES.LOGIN} replace />,
   },
 ]);
 

@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   loginWithEmail,
   loginWithGoogle,
   getDefaultRouteByRole,
+  restoreSession,
 } from "../../services/authService";
 import { ROUTES } from "../../constants";
 import type { ApiError } from "../../types";
@@ -24,6 +25,7 @@ declare global {
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const restoredRef = useRef(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -109,6 +111,27 @@ const LoginPage: React.FC = () => {
       showPopup("error", "Login with Google failed");
     }
   };
+
+  React.useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+
+    let isMounted = true;
+
+    const tryRestoreSession = async () => {
+      const user = await restoreSession();
+      if (!isMounted || !user) return;
+
+      const target = getDefaultRouteByRole(user);
+      navigate(target, { replace: true });
+    };
+
+    tryRestoreSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [navigate]);
 
   /* ===== Load Google ===== */
   React.useEffect(() => {

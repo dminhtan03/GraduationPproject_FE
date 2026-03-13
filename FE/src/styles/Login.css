@@ -12,10 +12,14 @@
   --success-color: #388e3c;
 }
 
-.login-container,
-.login-container * {
+.login-container {
   margin: 0;
-  padding: 0;
+  box-sizing: border-box;
+}
+
+.login-container *,
+.login-container *::before,
+.login-container *::after {
   box-sizing: border-box;
 }
 

@@ -14,7 +14,7 @@ export const ROUTES = {
   FORGOT_PASSWORD: "/forgot-password",
   ABOUT: "/about",
   ADMIN_DASHBOARD: "/admin/dashboard",
-  ROOM_LIST: "/",
+  ROOM_LIST: "/room-list",
   ROOM_MAP: "/room-map",
   ROOM_DETAIL: "/rooms/:roomId",
   BOOK_ROOM: "/book-room/:roomId",

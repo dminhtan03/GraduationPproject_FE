@@ -39,6 +39,12 @@ const clearRefreshTokenCookie = () => {
   document.cookie = `refresh_token=; path=/; max-age=0; samesite=lax${secureFlag}`;
 };
 
+const getRefreshTokenFromCookie = (): string | null => {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|; )refresh_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
 // Decode JWT để lấy thông tin user (email, fullName...) từ payload
 const decodeJwt = (token: string): Record<string, unknown> | null => {
   try {
@@ -185,6 +191,58 @@ export const getDefaultRouteByRole = (user: User | null): string => {
     return ROUTES.ADMIN_DASHBOARD;
   }
   return ROUTES.ROOM_LIST;
+};
+
+/**
+ * Khôi phục phiên đăng nhập khi reload app:
+ * - Ưu tiên access token trong localStorage
+ * - Nếu không có access token nhưng còn refresh cookie, gọi refresh để lấy token mới
+ */
+export const restoreSession = async (): Promise<User | null> => {
+  const storedAccessToken = localStorage.getItem(STORAGE_KEYS.USER_TOKEN);
+  const userFromStoredToken = extractUserFromToken(
+    storedAccessToken || undefined,
+  );
+  if (userFromStoredToken) {
+    return userFromStoredToken;
+  }
+
+  const refreshToken = getRefreshTokenFromCookie();
+  if (!refreshToken) {
+    return null;
+  }
+
+  try {
+    const refreshResponse = await api.post<BackendResponse<BackendAuthData>>(
+      `${API_ENDPOINTS.AUTH.REFRESH}?refreshToken=${encodeURIComponent(
+        refreshToken,
+      )}`,
+    );
+
+    const accessToken =
+      refreshResponse.data?.data?.accessToken ||
+      (refreshResponse.data as unknown as { accessToken?: string })
+        ?.accessToken;
+
+    const newRefreshToken =
+      refreshResponse.data?.data?.refreshToken ||
+      (refreshResponse.data as unknown as { refreshToken?: string })
+        ?.refreshToken;
+
+    if (!accessToken) {
+      return null;
+    }
+
+    localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
+    if (newRefreshToken) {
+      setRefreshTokenCookie(newRefreshToken);
+    }
+
+    return extractUserFromToken(accessToken);
+  } catch {
+    localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
+    return null;
+  }
 };
 
 const extractMessage = (
