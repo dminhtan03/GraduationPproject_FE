@@ -58,7 +58,7 @@ interface ReservationRealtimePayload {
 }
 
 const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
-  ongoing: ["PENDING", "APPROVED", "IN_USE", "CHECKED_IN"],
+  ongoing: ["PENDING", "RESERVED", "IN_USE", "CHECKED_IN"],
   history: ["COMPLETED", "CANCELLED", "REJECTED", "FAILED"],
 };
 
