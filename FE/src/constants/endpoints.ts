@@ -39,6 +39,10 @@ export const API_ENDPOINTS = {
     FORGOT_PASSWORD_REQUEST: "/api/v1/user/forgot-password",
     FORGOT_PASSWORD_VERIFY: "/api/v1/user/verify-forgot-password",
     RESEND_OTP: "/api/v1/user/resend-otp",
+    // start add admin endpoints
+    ADMIN_ADD: "/api/v1/user/admin/add",
+    ADMIN_IMPORT_EXCEL: "/api/v1/user/admin/import-excel",
+    // end add admin endpoints
   },
   // Demo data endpoints (sử dụng JSONPlaceholder)
   DEMO: {

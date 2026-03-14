@@ -159,4 +159,20 @@ export const adminService = {
   async registerUser(payload: RegisterUserPayload): Promise<void> {
     await api.post(API_ENDPOINTS.USERS.REGISTER, payload);
   },
+
+  // start add admin api calls
+  async adminAddUser(payload: RegisterUserPayload): Promise<void> {
+    await api.post(API_ENDPOINTS.USERS.ADMIN_ADD, payload);
+  },
+
+  async importUsersExcel(file: File): Promise<void> {
+    const formData = new FormData();
+    formData.append("file", file);
+    await api.post(API_ENDPOINTS.USERS.ADMIN_IMPORT_EXCEL, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+  // end add admin api calls
 };

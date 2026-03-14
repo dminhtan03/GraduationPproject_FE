@@ -425,11 +425,13 @@ const AdminUserManagementPage: React.FC = () => {
 
     setAddingUser(true);
     try {
-      await adminService.registerUser({
+      // start update handleAddSingleUser to use adminAddUser
+      await adminService.adminAddUser({
         ...addUserForm,
         email: addUserForm.email.trim(),
         role: normalizeRole(addUserForm.role),
       });
+      // end update handleAddSingleUser to use adminAddUser
       setImportResult("Added 1 user successfully.");
       showToast("success", "Create user successfully");
       setShowAddUserModal(false);
@@ -446,6 +448,38 @@ const AdminUserManagementPage: React.FC = () => {
       setAddingUser(false);
     }
   };
+
+  // start add handleImportExcel
+  const handleImportExcel = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    setImportResult(null);
+    setError(null);
+
+    const ext = file.name.toLowerCase();
+    if (!ext.endsWith(".xlsx") && !ext.endsWith(".xls")) {
+      setError("Please upload a .xlsx or .xls file.");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      await adminService.importUsersExcel(file);
+      setImportResult("Imported users from Excel successfully.");
+      showToast("success", "Import users successfully");
+      await loadUsers();
+    } catch (e: unknown) {
+      setError(extractApiMessage(e, "Unable to import users from Excel"));
+    } finally {
+      setImporting(false);
+    }
+  };
+  // end add handleImportExcel
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#e2e8f0_0%,#f8fafc_40%,#f8fafc_100%)]">
@@ -487,17 +521,19 @@ const AdminUserManagementPage: React.FC = () => {
               Add User
             </button>
 
+            {/* start update import excel UI */}
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
               <ArrowUpTrayIcon className="h-4 w-4" />
-              {importing ? "Importing..." : "Import CSV Sheet"}
+              {importing ? "Importing..." : "Import Excel"}
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".xlsx, .xls"
                 className="hidden"
-                onChange={handleImportSheet}
+                onChange={handleImportExcel}
                 disabled={importing}
               />
             </label>
+            {/* end update import excel UI */}
           </div>
         </div>
 

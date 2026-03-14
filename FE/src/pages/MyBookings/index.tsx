@@ -859,7 +859,7 @@ const MyBookingsPage: React.FC = () => {
                   disabled={!record.id || !returnRoomEnabled}
                   onClick={() => openActionModal("return-room", record)}
                 >
-                  Return room
+                  Check Out
                 </Button>
               </span>
             </Tooltip>
