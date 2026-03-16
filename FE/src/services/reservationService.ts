@@ -29,6 +29,17 @@ const normalizeReservation = (item: any): Reservation => {
     item?.statusName ??
     (Array.isArray(item?.statuses) ? item.statuses[0] : undefined);
 
+  const rawFeedbackSubmitted =
+    item?.feedbackSubmitted ??
+    item?.isFeedbackSubmitted ??
+    item?.hasFeedback ??
+    item?.hasSubmittedFeedback ??
+    item?.rated ??
+    item?.isRated;
+
+  const feedbackIdValue =
+    item?.feedbackId ?? item?.feedback?.id ?? item?.feedback?.feedbackId;
+
   return {
     id:
       item?.id != null
@@ -58,6 +69,14 @@ const normalizeReservation = (item: any): Reservation => {
     startTime: item?.startTime ?? item?.startDateTime ?? item?.fromTime ?? undefined,
     endTime: item?.endTime ?? item?.endDateTime ?? item?.toTime ?? undefined,
     status: resolvedStatus != null ? String(resolvedStatus) : undefined,
+    feedbackId:
+      feedbackIdValue != null && String(feedbackIdValue).trim()
+        ? String(feedbackIdValue)
+        : undefined,
+    feedbackSubmitted:
+      typeof rawFeedbackSubmitted === "boolean"
+        ? rawFeedbackSubmitted
+        : feedbackIdValue != null,
   };
 };
 

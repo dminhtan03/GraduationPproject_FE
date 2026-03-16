@@ -7,6 +7,9 @@ import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import type { Room } from "../../types";
 import DatePickerField from "../../components/common/DatePickerField";
+import CustomMessage, {
+  MessageType,
+} from "../../components/common/CustomMessage";
 
 const { Title, Text } = Typography;
 
@@ -181,44 +184,6 @@ const isDateBefore = (leftDate: string, rightDate: string) => {
   return leftDate < rightDate;
 };
 
-const getBookingConflictMessage = (rawMessage: string) => {
-  const normalized = rawMessage.toLowerCase();
-
-  if (
-    normalized.includes("check in") ||
-    normalized.includes("check-in") ||
-    normalized.includes("to check in") ||
-    normalized.includes("đến giờ check in") ||
-    normalized.includes("den gio check in")
-  ) {
-    return "Bạn đang có booking đã đến giờ check-in. Vui lòng check-in/trả phòng hiện tại trước khi tạo booking mới.";
-  }
-
-  if (
-    normalized.includes("overlap") ||
-    normalized.includes("conflict") ||
-    normalized.includes("same time") ||
-    normalized.includes("time slot")
-  ) {
-    return "Khung giờ này đã bị trùng lịch (overlap). Vui lòng chọn thời gian khác.";
-  }
-
-  if (
-    normalized.includes("1 room") ||
-    normalized.includes("one room") ||
-    normalized.includes("already booked") ||
-    normalized.includes("already have") ||
-    normalized.includes("same period") ||
-    normalized.includes("not checkout") ||
-    normalized.includes("chua tra phong") ||
-    normalized.includes("chưa trả phòng")
-  ) {
-    return "Bạn đang có phòng chưa trả hoặc đã có booking khác trong cùng khoảng thời gian. Vui lòng hoàn tất booking hiện tại trước.";
-  }
-
-  return rawMessage;
-};
-
 const BookRoomPage: React.FC = () => {
   const navigate = useNavigate();
   const { roomId } = useParams();
@@ -234,7 +199,19 @@ const BookRoomPage: React.FC = () => {
   const [note, setNote] = useState("");
   const [acceptedRules, setAcceptedRules] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [submitErrorMessage, setSubmitErrorMessage] = useState<string | null>(null);
+  const [popup, setPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
+
+  const showPopup = (type: MessageType, nextMessage: string) => {
+    setPopup({ type, message: nextMessage });
+    window.setTimeout(() => {
+      setPopup((current) =>
+        current && current.message === nextMessage ? null : current,
+      );
+    }, 3000);
+  };
 
   const room = (state as LocationState | null)?.room;
   const normalizedRoomId = useMemo(() => roomId || room?.id || "", [roomId, room]);
@@ -311,7 +288,6 @@ const BookRoomPage: React.FC = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setSubmitErrorMessage(null);
 
     if (!validateBookingInput()) {
       return;
@@ -339,13 +315,11 @@ const BookRoomPage: React.FC = () => {
         note: note.trim() || undefined,
       });
 
-      message.success("Booking created successfully");
-      navigate(ROUTES.MY_BOOKINGS);
+      showPopup("success", "Booking created successfully");
+      window.setTimeout(() => navigate(ROUTES.MY_BOOKINGS), 800);
     } catch (error) {
       const apiMessage = extractApiMessage(error, "Unable to create booking");
-      const displayMessage = getBookingConflictMessage(apiMessage);
-      setSubmitErrorMessage(displayMessage);
-      message.error(displayMessage);
+      showPopup("error", apiMessage);
     } finally {
       setLoading(false);
     }
@@ -378,16 +352,6 @@ const BookRoomPage: React.FC = () => {
         <span className="text-gray-300">→</span>
         <span className={step === "review" ? "text-orange-600" : "text-gray-400"}>2. Rules & confirm</span>
       </div>
-
-      {submitErrorMessage && (
-        <Alert
-          className="mt-4"
-          type="error"
-          showIcon
-          message="Không thể tạo booking"
-          description={submitErrorMessage}
-        />
-      )}
 
       <form
         onSubmit={handleSubmit}
@@ -698,6 +662,14 @@ const BookRoomPage: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {popup && (
+        <CustomMessage
+          type={popup.type}
+          message={popup.message}
+          onClose={() => setPopup(null)}
+        />
+      )}
     </div>
   );
 };

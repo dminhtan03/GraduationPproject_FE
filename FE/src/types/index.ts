@@ -135,6 +135,8 @@ export interface Reservation {
   startTime?: string;
   endTime?: string;
   status?: ReservationStatus;
+  feedbackId?: string;
+  feedbackSubmitted?: boolean;
 }
 
 export interface ReservationStatusQuery {
