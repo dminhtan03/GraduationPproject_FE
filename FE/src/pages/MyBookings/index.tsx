@@ -231,8 +231,8 @@ const extractBackendFailureMessage = (response: unknown): string | null => {
 
 const getStatusColor = (status: string) => {
   const normalized = status.toUpperCase();
-  if (normalized === "PENDING") return "gold";
-  if (normalized === "APPROVED") return "green";
+  // if (normalized === "PENDING") return "gold";
+  if (normalized === "RESERVED") return "green";
   if (normalized === "IN_USE" || normalized === "CHECKED_IN") return "blue";
   if (normalized === "COMPLETED") return "cyan";
   if (normalized === "CANCELLED") return "red";
@@ -245,7 +245,8 @@ const isValidDate = (value?: string) => {
   return parseBookingDateTime(value) !== null;
 };
 
-const canCheckIn = (status: string, startTime?: string, endTime?: string) => {
+// start update helper functions to accept now parameter
+const canCheckIn = (status: string, startTime?: string, endTime?: string, now: Date = new Date()) => {
   const normalized = status.toUpperCase();
   if (
     ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(
@@ -256,7 +257,6 @@ const canCheckIn = (status: string, startTime?: string, endTime?: string) => {
   }
   if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
 
-  const now = new Date();
   const start = parseBookingDateTime(startTime);
   const end = parseBookingDateTime(endTime);
 
@@ -264,12 +264,11 @@ const canCheckIn = (status: string, startTime?: string, endTime?: string) => {
   return now >= start && now <= end;
 };
 
-const canCheckOut = (status: string, startTime?: string, endTime?: string) => {
+const canCheckOut = (status: string, startTime?: string, endTime?: string, now: Date = new Date()) => {
   const normalized = status.toUpperCase();
   if (!["IN_USE", "CHECKED_IN"].includes(normalized)) return false;
   if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
 
-  const now = new Date();
   const start = parseBookingDateTime(startTime);
   const end = parseBookingDateTime(endTime);
   if (!start || !end) return false;
@@ -277,12 +276,11 @@ const canCheckOut = (status: string, startTime?: string, endTime?: string) => {
   return now >= start && now <= end;
 };
 
-const canExtend = (status: string, startTime?: string, endTime?: string) => {
+const canExtend = (status: string, startTime?: string, endTime?: string, now: Date = new Date()) => {
   const normalized = status.toUpperCase();
   if (!["IN_USE", "CHECKED_IN"].includes(normalized)) return false;
   if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
 
-  const now = new Date();
   const start = parseBookingDateTime(startTime);
   const end = parseBookingDateTime(endTime);
   if (!start || !end) return false;
@@ -290,18 +288,17 @@ const canExtend = (status: string, startTime?: string, endTime?: string) => {
   return now >= start && now <= end;
 };
 
-const canCancel = (status: string, startTime?: string) => {
+const canCancel = (status: string, startTime?: string, now: Date = new Date()) => {
   const normalized = status.toUpperCase();
   if (["CANCELLED", "COMPLETED", "REJECTED"].includes(normalized)) return false;
 
   const start = parseBookingDateTime(startTime);
   if (!start) return false;
 
-  const now = new Date();
   return now < start;
 };
 
-const getCheckInDisabledReason = (record: Reservation) => {
+const getCheckInDisabledReason = (record: Reservation, now: Date = new Date()) => {
   if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
 
   const status = (record.status || "").toUpperCase();
@@ -319,7 +316,6 @@ const getCheckInDisabledReason = (record: Reservation) => {
     return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể check-in.";
   }
 
-  const now = new Date();
   if (now < start) {
     return `Chưa đến thời gian check-in. Bắt đầu lúc ${formatDateTime(record.startTime || "")}.`;
   }
@@ -329,7 +325,7 @@ const getCheckInDisabledReason = (record: Reservation) => {
   return undefined;
 };
 
-const getCancelDisabledReason = (record: Reservation) => {
+const getCancelDisabledReason = (record: Reservation, now: Date = new Date()) => {
   if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
 
   const status = (record.status || "").toUpperCase();
@@ -342,14 +338,13 @@ const getCancelDisabledReason = (record: Reservation) => {
     return "Thiếu thời gian bắt đầu từ API nên không thể xác định quyền hủy.";
   }
 
-  const now = new Date();
   if (now >= start) {
     return "Chỉ có thể hủy booking trước khi cuộc họp bắt đầu.";
   }
   return undefined;
 };
 
-const getCheckOutDisabledReason = (record: Reservation) => {
+const getCheckOutDisabledReason = (record: Reservation, now: Date = new Date()) => {
   if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
 
   const status = (record.status || "").toUpperCase();
@@ -363,7 +358,6 @@ const getCheckOutDisabledReason = (record: Reservation) => {
     return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể trả phòng.";
   }
 
-  const now = new Date();
   if (now < start || now > end) {
     return "Chỉ có thể trả phòng khi cuộc họp đang diễn ra.";
   }
@@ -371,7 +365,7 @@ const getCheckOutDisabledReason = (record: Reservation) => {
   return undefined;
 };
 
-const getExtendDisabledReason = (record: Reservation) => {
+const getExtendDisabledReason = (record: Reservation, now: Date = new Date()) => {
   if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
 
   const status = (record.status || "").toUpperCase();
@@ -385,13 +379,13 @@ const getExtendDisabledReason = (record: Reservation) => {
     return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể gia hạn.";
   }
 
-  const now = new Date();
   if (now < start || now > end) {
     return "Chỉ có thể gia hạn khi cuộc họp đang diễn ra.";
   }
 
   return undefined;
 };
+// end update helper functions
 
 const getReservationRealtimePayload = (
   message: WebSocketMessage | null,
@@ -441,6 +435,17 @@ const MyBookingsPage: React.FC = () => {
     type: MessageType;
     message: string;
   } | null>(null);
+
+  // start add currentTime state for auto-enabling buttons
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 10000); // Update every 10 seconds
+    return () => clearInterval(timer);
+  }, []);
+  // end add currentTime state
 
   // start add userProfile state
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -626,6 +631,8 @@ const MyBookingsPage: React.FC = () => {
 
     const reservationId = String(currentAction.booking.id);
     const status = currentAction.booking.status || "";
+    // Use currentTime state for validation
+    const now = currentTime;
 
     if (
       currentAction.type === "check-in" &&
@@ -633,6 +640,7 @@ const MyBookingsPage: React.FC = () => {
         status,
         currentAction.booking.startTime,
         currentAction.booking.endTime,
+        now,
       )
     ) {
       message.warning("Chỉ được check-in trong khoảng thời gian đã đặt phòng.");
@@ -645,6 +653,7 @@ const MyBookingsPage: React.FC = () => {
         status,
         currentAction.booking.startTime,
         currentAction.booking.endTime,
+        now,
       )
     ) {
       message.warning("Chỉ có thể trả phòng khi cuộc họp đang diễn ra.");
@@ -657,6 +666,7 @@ const MyBookingsPage: React.FC = () => {
         status,
         currentAction.booking.startTime,
         currentAction.booking.endTime,
+        now,
       )
     ) {
       message.warning("Chỉ có thể gia hạn khi cuộc họp đang diễn ra.");
@@ -665,7 +675,7 @@ const MyBookingsPage: React.FC = () => {
 
     if (
       currentAction.type === "cancel" &&
-      !canCancel(status, currentAction.booking.startTime)
+      !canCancel(status, currentAction.booking.startTime, now)
     ) {
       message.warning("Chỉ có thể hủy booking trước khi cuộc họp bắt đầu.");
       return;
@@ -842,22 +852,25 @@ const MyBookingsPage: React.FC = () => {
           status,
           record.startTime,
           record.endTime,
+          currentTime,
         );
         const returnRoomEnabled = canCheckOut(
           status,
           record.startTime,
           record.endTime,
+          currentTime,
         );
         const extendEnabled = canExtend(
           status,
           record.startTime,
           record.endTime,
+          currentTime,
         );
-        const cancelEnabled = canCancel(status, record.startTime);
-        const checkInDisabledReason = getCheckInDisabledReason(record);
-        const returnRoomDisabledReason = getCheckOutDisabledReason(record);
-        const extendDisabledReason = getExtendDisabledReason(record);
-        const cancelDisabledReason = getCancelDisabledReason(record);
+        const cancelEnabled = canCancel(status, record.startTime, currentTime);
+        const checkInDisabledReason = getCheckInDisabledReason(record, currentTime);
+        const returnRoomDisabledReason = getCheckOutDisabledReason(record, currentTime);
+        const extendDisabledReason = getExtendDisabledReason(record, currentTime);
+        const cancelDisabledReason = getCancelDisabledReason(record, currentTime);
 
         return (
           <Space>
