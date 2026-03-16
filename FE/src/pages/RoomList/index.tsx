@@ -271,25 +271,17 @@ const DashboardPage: React.FC = () => {
       key: "action",
       width: "15%",
       render: (_: unknown, record: RoomListItem) => {
-        const isAvailable = record.status === "AVAILABLE";
-        const label = isAvailable ? "Book" : "View";
-
         return (
           <button
             type="button"
-            className={`px-4 py-1 rounded-full text-xs font-semibold transition
-              ${
-                isAvailable
-                  ? "bg-orange-500 text-white hover:bg-orange-600"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
+            className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-4 py-1 text-xs font-semibold text-orange-700 transition hover:bg-orange-100"
             onClick={() => {
-              navigate(ROUTES.BOOK_ROOM.replace(":roomId", record.id), {
+              navigate(ROUTES.ROOM_DETAIL.replace(":roomId", record.id), {
                 state: { room: record },
               });
             }}
           >
-            {label}
+            View
           </button>
         );
       },
@@ -476,9 +468,6 @@ const DashboardPage: React.FC = () => {
           <Title level={2} className="!mb-1 text-gray-800 font-semibold">
             Campus Room Inventory
           </Title>
-          <Text className="text-gray-500">
-            Real-time availability across all university wings
-          </Text>
         </div>
         <button
           type="button"

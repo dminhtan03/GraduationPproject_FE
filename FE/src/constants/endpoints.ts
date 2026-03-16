@@ -17,6 +17,7 @@ export const API_ENDPOINTS = {
   // e.g. GET /api/v1/rooms?page=0&size=5&status=AVAILABLE&minCapacity=20
   ROOMS: {
     LIST: "/api/v1/rooms-map",
+    SEARCH: "/api/v1/rooms/search",
     DETAIL: "/api/v1/rooms/:id",
     BOOK: "/api/v1/reservations",
     MY_STATUS: "/api/v1/reservations/my-status",

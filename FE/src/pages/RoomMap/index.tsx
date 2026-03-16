@@ -80,7 +80,7 @@ type RawMapBuilding = {
 };
 
 const formatCheckInDateTime = (value?: string | null) => {
-  if (!value) return "-";
+  if (!value) return "No check-in yet";
 
   const normalized = value.includes("T") ? value : value.replace(" ", "T");
   const trimmedFraction = normalized.replace(/\.(\d{3})\d+/, ".$1");
@@ -702,14 +702,11 @@ const RoomMapPage: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 mb-1">
             Interactive Campus Map
           </h1>
-          <p className="text-sm text-slate-500">
-            View real-time availability across all university wings.
-          </p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
           <button
             type="button"
-            onClick={() => navigate("/")}
+            onClick={() => navigate(ROUTES.ROOM_LIST)}
             className="w-full sm:w-auto px-4 py-2 rounded-full border border-slate-200 text-sm font-medium text-slate-700 bg-white hover:bg-slate-50"
           >
             List view

@@ -118,7 +118,7 @@ export const roomService = {
   async searchAvailableRooms(
     payload: RoomStatusRequest,
   ): Promise<RoomStatusItem[]> {
-    const res = await api.post<any>("/api/v1/rooms/search", payload);
+    const res = await api.post<any>(API_ENDPOINTS.ROOMS.SEARCH, payload);
 
     const list = res.data?.data || res.data || [];
 
