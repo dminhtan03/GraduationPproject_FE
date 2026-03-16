@@ -31,6 +31,8 @@ export interface User {
   role?: string;
   /** Tất cả authorities từ BE */
   roles?: string[];
+  cancellationCount: number;
+  bookingLockedUntil: Date
 }
 
 // Interface cho data demo
@@ -171,4 +173,6 @@ export interface UserProfile {
   department: string;
   email: string;
   gender: string;
+  cancellationCount: number;
+  bookingLockedUntil: Date
 }

@@ -7,6 +7,7 @@ import {
   Alert,
   Button,
   Space,
+  Tooltip,
   Tabs,
   Modal,
   Descriptions,
@@ -27,6 +28,10 @@ import {
 } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
+// start add authService import
+import { getProfile } from "../../services/authService";
+import type { UserProfile } from "../../types";
+// end add authService import
 import { reservationService } from "../../services/reservationService";
 import { feedbackService } from "../../services/feedbackService";
 import { extractApiMessage } from "../../utils/errorHandlers";
@@ -61,6 +66,19 @@ const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
   history: ["COMPLETED", "CANCELLED", "REJECTED", "FAILED"],
 };
 
+const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey) => {
+  const historyStatuses = TAB_STATUS_FILTERS.history;
+
+  if (tabKey === "history") {
+    return items.filter((item) =>
+      historyStatuses.includes((item.status || "").toUpperCase()),
+    );
+  }
+
+  return items.filter(
+    (item) => !historyStatuses.includes((item.status || "").toUpperCase()),
+  );
+};
 
 const parseBookingDateTime = (value?: string) => {
   if (!value) return null;
@@ -208,7 +226,7 @@ const extractBackendFailureMessage = (response: unknown): string | null => {
 
   if (candidateMessages.length > 0) return candidateMessages[0];
 
-  return "Unable to extend room";
+  return "Không thể gia hạn phòng";
 };
 
 const getStatusColor = (status: string) => {
@@ -283,30 +301,96 @@ const canCancel = (status: string, startTime?: string) => {
   return now < start;
 };
 
-const hasSubmittedFeedback = (
-  record: Reservation,
-  localFeedbackIds: Set<string>,
-) => {
-  if (record.feedbackSubmitted) return true;
-  if (record.feedbackId) return true;
-  const reservationId = String(record.id || "");
-  return reservationId ? localFeedbackIds.has(reservationId) : false;
-};
-
-const canGiveFeedback = (
-  record: Reservation,
-  localFeedbackIds: Set<string>,
-) => {
-  if (!record.id) return false;
+const getCheckInDisabledReason = (record: Reservation) => {
+  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
 
   const status = (record.status || "").toUpperCase();
-  if (["CANCELLED", "REJECTED"].includes(status)) return false;
-  if (hasSubmittedFeedback(record, localFeedbackIds)) return false;
+  if (
+    ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(
+      status,
+    )
+  ) {
+    return `Booking đang ở trạng thái ${status || "N/A"} nên không thể check-in.`;
+  }
 
+  const start = parseBookingDateTime(record.startTime);
   const end = parseBookingDateTime(record.endTime);
-  if (!end) return false;
+  if (!start || !end) {
+    return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể check-in.";
+  }
 
-  return new Date() > end;
+  const now = new Date();
+  if (now < start) {
+    return `Chưa đến thời gian check-in. Bắt đầu lúc ${formatDateTime(record.startTime || "")}.`;
+  }
+  if (now > end) {
+    return "Đã quá thời gian booking nên không thể check-in.";
+  }
+  return undefined;
+};
+
+const getCancelDisabledReason = (record: Reservation) => {
+  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
+
+  const status = (record.status || "").toUpperCase();
+  if (["CANCELLED", "COMPLETED", "REJECTED"].includes(status)) {
+    return `Booking đang ở trạng thái ${status || "N/A"} nên không thể hủy.`;
+  }
+
+  const start = parseBookingDateTime(record.startTime);
+  if (!start) {
+    return "Thiếu thời gian bắt đầu từ API nên không thể xác định quyền hủy.";
+  }
+
+  const now = new Date();
+  if (now >= start) {
+    return "Chỉ có thể hủy booking trước khi cuộc họp bắt đầu.";
+  }
+  return undefined;
+};
+
+const getCheckOutDisabledReason = (record: Reservation) => {
+  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
+
+  const status = (record.status || "").toUpperCase();
+  if (!["IN_USE", "CHECKED_IN"].includes(status)) {
+    return `Booking đang ở trạng thái ${status || "N/A"} nên chưa thể trả phòng.`;
+  }
+
+  const start = parseBookingDateTime(record.startTime);
+  const end = parseBookingDateTime(record.endTime);
+  if (!start || !end) {
+    return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể trả phòng.";
+  }
+
+  const now = new Date();
+  if (now < start || now > end) {
+    return "Chỉ có thể trả phòng khi cuộc họp đang diễn ra.";
+  }
+
+  return undefined;
+};
+
+const getExtendDisabledReason = (record: Reservation) => {
+  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
+
+  const status = (record.status || "").toUpperCase();
+  if (!["IN_USE", "CHECKED_IN"].includes(status)) {
+    return `Booking đang ở trạng thái ${status || "N/A"} nên chưa thể gia hạn.`;
+  }
+
+  const start = parseBookingDateTime(record.startTime);
+  const end = parseBookingDateTime(record.endTime);
+  if (!start || !end) {
+    return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể gia hạn.";
+  }
+
+  const now = new Date();
+  if (now < start || now > end) {
+    return "Chỉ có thể gia hạn khi cuộc họp đang diễn ra.";
+  }
+
+  return undefined;
 };
 
 const getReservationRealtimePayload = (
@@ -353,13 +437,28 @@ const MyBookingsPage: React.FC = () => {
   const [feedbackRating, setFeedbackRating] = useState<number>(5);
   const [feedbackDescription, setFeedbackDescription] = useState<string>("");
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
-  const [localFeedbackIds, setLocalFeedbackIds] = useState<Set<string>>(
-    () => new Set(),
-  );
   const [toastPopup, setToastPopup] = useState<{
     type: MessageType;
     message: string;
   } | null>(null);
+
+  // start add userProfile state
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  const fetchUserProfile = useCallback(async () => {
+    try {
+      const response = await getProfile();
+      const userData = (response.data as any)?.data || response.data;
+      setUserProfile(userData as UserProfile);
+    } catch (err) {
+      console.error("Failed to fetch user profile:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, [fetchUserProfile]);
+  // end add userProfile state
 
   const showToast = (type: MessageType, nextMessage: string) => {
     setToastPopup({ type, message: nextMessage });
@@ -375,38 +474,23 @@ const MyBookingsPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        let result;
         try {
-          result = await reservationService.getMyBookings({
+          const result = await reservationService.getMyBookings({
             page: Math.max(nextPage - 1, 0),
             size: nextSize,
             statuses: TAB_STATUS_FILTERS[tabKey],
           });
+          setBookings(result.items);
+          setTotal(result.total);
         } catch {
-          result = await reservationService.getMyBookings({
+          const fallbackResult = await reservationService.getMyBookings({
             page: Math.max(nextPage - 1, 0),
             size: nextSize,
           });
-          const filteredItems = result.items.filter((item) =>
-            TAB_STATUS_FILTERS[tabKey].includes((item.status || "").toUpperCase()),
-          );
-          result = {
-            ...result,
-            items: filteredItems,
-            total: filteredItems.length,
-          };
+          const filteredItems = filterItemsByTab(fallbackResult.items, tabKey);
+          setBookings(filteredItems);
+          setTotal(filteredItems.length);
         }
-
-        const mergedItems = result.items.map((item) => {
-          const reservationId = String(item.id || "");
-          if (!reservationId || !localFeedbackIds.has(reservationId)) {
-            return item;
-          }
-          return { ...item, feedbackSubmitted: true };
-        });
-
-        setBookings(mergedItems);
-        setTotal(result.total);
 
         setPage(nextPage);
         setPageSize(nextSize);
@@ -418,7 +502,7 @@ const MyBookingsPage: React.FC = () => {
         setLoading(false);
       }
     },
-    [localFeedbackIds],
+    [],
   );
 
   useEffect(() => {
@@ -468,7 +552,7 @@ const MyBookingsPage: React.FC = () => {
         updatedItems,
       );
 
-      return updatedItems;
+      return filterItemsByTab(updatedItems, activeTab);
     });
 
     console.log(
@@ -523,20 +607,11 @@ const MyBookingsPage: React.FC = () => {
         response,
         "Feedback created successfully",
       );
-      const submittedReservationId = feedbackModal.reservationId;
       showToast("success", successMessage);
-      setLocalFeedbackIds((prev) => new Set(prev).add(submittedReservationId));
-      setBookings((prev) =>
-        prev.map((item) =>
-          String(item.id || "") === submittedReservationId
-            ? { ...item, feedbackSubmitted: true }
-            : item,
-        ),
-      );
       closeFeedbackModal();
       await loadBookings(page, pageSize, activeTab);
     } catch (err) {
-      showToast("error", extractApiMessage(err, "Unable to submit feedback"));
+      message.error(extractApiMessage(err, "Unable to submit feedback"));
     } finally {
       setSubmittingFeedback(false);
     }
@@ -560,7 +635,7 @@ const MyBookingsPage: React.FC = () => {
         currentAction.booking.endTime,
       )
     ) {
-      message.warning("Check-in is only allowed during the reserved time range.");
+      message.warning("Chỉ được check-in trong khoảng thời gian đã đặt phòng.");
       return;
     }
 
@@ -572,7 +647,7 @@ const MyBookingsPage: React.FC = () => {
         currentAction.booking.endTime,
       )
     ) {
-      message.warning("Return room is only allowed while the meeting is in progress.");
+      message.warning("Chỉ có thể trả phòng khi cuộc họp đang diễn ra.");
       return;
     }
 
@@ -584,7 +659,7 @@ const MyBookingsPage: React.FC = () => {
         currentAction.booking.endTime,
       )
     ) {
-      message.warning("Extend is only allowed while the meeting is in progress.");
+      message.warning("Chỉ có thể gia hạn khi cuộc họp đang diễn ra.");
       return;
     }
 
@@ -592,7 +667,7 @@ const MyBookingsPage: React.FC = () => {
       currentAction.type === "cancel" &&
       !canCancel(status, currentAction.booking.startTime)
     ) {
-      message.warning("Cancel is only allowed before the meeting starts.");
+      message.warning("Chỉ có thể hủy booking trước khi cuộc họp bắt đầu.");
       return;
     }
 
@@ -629,10 +704,15 @@ const MyBookingsPage: React.FC = () => {
               ? "Extend room completed successfully"
               : "Cancel booking completed successfully";
 
-      showToast(
-        "success",
+      message.success(
         extractBackendSuccessMessage(actionResponse, actionSuccessFallback),
       );
+
+      // start update profile after cancellation
+      if (currentAction.type === "cancel") {
+        void fetchUserProfile();
+      }
+      // end update profile after cancellation
 
       closeActionModal();
       if (currentAction.type === "return-room") {
@@ -643,15 +723,15 @@ const MyBookingsPage: React.FC = () => {
       const actionErrorMessage = extractApiMessage(
         err,
         currentAction.type === "check-in"
-          ? "Unable to check in booking"
+          ? "Không thể check-in booking"
           : currentAction.type === "return-room"
-            ? "Unable to return room"
+            ? "Không thể trả phòng"
             : currentAction.type === "extend"
-              ? "Unable to extend room"
-              : "Unable to cancel booking",
+              ? "Không thể gia hạn phòng"
+              : "Không thể hủy booking",
       );
       setActionModalError(actionErrorMessage);
-      showToast("error", actionErrorMessage);
+      message.error(actionErrorMessage);
     } finally {
       setLoading(false);
       setActionLoadingId(null);
@@ -758,7 +838,6 @@ const MyBookingsPage: React.FC = () => {
       render: (_: unknown, record: Reservation) => {
         const status = record.status || "";
         const isLoading = actionLoadingId === record.id;
-        const hasId = !!record.id;
         const checkInEnabled = canCheckIn(
           status,
           record.startTime,
@@ -775,81 +854,72 @@ const MyBookingsPage: React.FC = () => {
           record.endTime,
         );
         const cancelEnabled = canCancel(status, record.startTime);
-        const feedbackEnabled = canGiveFeedback(record, localFeedbackIds);
+        const checkInDisabledReason = getCheckInDisabledReason(record);
+        const returnRoomDisabledReason = getCheckOutDisabledReason(record);
+        const extendDisabledReason = getExtendDisabledReason(record);
+        const cancelDisabledReason = getCancelDisabledReason(record);
 
-        const actionButtons: React.ReactNode[] = [];
-
-        if (hasId && checkInEnabled) {
-          actionButtons.push(
-            <Button
-              key="check-in"
-              type="primary"
-              size="small"
-              loading={isLoading}
-              onClick={() => openActionModal("check-in", record)}
+        return (
+          <Space>
+            <Tooltip
+              title={!checkInEnabled ? checkInDisabledReason : undefined}
             >
-              Check-in
-            </Button>,
-          );
-        }
+              <span>
+                <Button
+                  type="primary"
+                  size="small"
+                  loading={isLoading && checkInEnabled}
+                  disabled={!record.id || !checkInEnabled}
+                  onClick={() => openActionModal("check-in", record)}
+                >
+                  Check-in
+                </Button>
+              </span>
+            </Tooltip>
 
-        if (hasId && returnRoomEnabled) {
-          actionButtons.push(
-            <Button
-              key="return-room"
-              size="small"
-              loading={isLoading}
-              onClick={() => openActionModal("return-room", record)}
+            <Tooltip
+              title={!returnRoomEnabled ? returnRoomDisabledReason : undefined}
             >
-              Check Out
-            </Button>,
-          );
-        }
+              <span>
+                <Button
+                  size="small"
+                  loading={isLoading && returnRoomEnabled}
+                  disabled={!record.id || !returnRoomEnabled}
+                  onClick={() => openActionModal("return-room", record)}
+                >
+                  Check Out
+                </Button>
+              </span>
+            </Tooltip>
 
-        if (hasId && extendEnabled) {
-          actionButtons.push(
-            <Button
-              key="extend"
-              size="small"
-              loading={isLoading}
-              onClick={() => openActionModal("extend", record)}
-            >
-              Extend
-            </Button>,
-          );
-        }
+            <Tooltip title={!extendEnabled ? extendDisabledReason : undefined}>
+              <span>
+                <Button
+                  size="small"
+                  loading={isLoading && extendEnabled}
+                  disabled={!record.id || !extendEnabled}
+                  onClick={() => openActionModal("extend", record)}
+                >
+                  Extend
+                </Button>
+              </span>
+            </Tooltip>
 
-        if (hasId && cancelEnabled) {
-          actionButtons.push(
-            <Button
-              key="cancel"
-              danger
-              size="small"
-              loading={isLoading}
-              onClick={() => openActionModal("cancel", record)}
-            >
-              Cancel
-            </Button>,
-          );
-        }
-
-        if (hasId && feedbackEnabled) {
-          actionButtons.push(
-            <Button
-              key="feedback"
-              size="small"
-              onClick={() => openFeedbackModal(record)}
-            >
-              Feedback
-            </Button>,
-          );
-        }
-
-        if (actionButtons.length === 0) {
-          return <span className="text-xs text-gray-400">No actions</span>;
-        }
-
-        return <Space wrap>{actionButtons}</Space>;
+            <Tooltip title={!cancelEnabled ? cancelDisabledReason : undefined}>
+              <span>
+                <Button
+                  danger
+                  size="small"
+                  loading={isLoading && cancelEnabled}
+                  disabled={!record.id || !cancelEnabled}
+                  onClick={() => openActionModal("cancel", record)}
+                >
+                  Cancel
+                </Button>
+              </span>
+            </Tooltip>
+          </Space>
+        );
       },
     },
   ];
@@ -978,6 +1048,18 @@ const MyBookingsPage: React.FC = () => {
             description={actionModalError}
           />
         )}
+
+        {/* start add cancellation warning alert */}
+        {actionModal?.type === "cancel" && userProfile?.cancellationCount === 2 && (
+          <Alert
+            className="mb-4"
+            type="warning"
+            showIcon
+            message="Cảnh báo quan trọng"
+            description="Bạn đã hủy đặt phòng 2 lần trong ngày hôm nay. Nếu hủy thêm lần này (lần thứ 3), chức năng đặt phòng của bạn sẽ bị khóa trong 24 giờ tới."
+          />
+        )}
+        {/* end add cancellation warning alert */}
 
         {actionModal?.type === "extend" && (
           <div className="mb-4">
