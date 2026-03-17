@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Alert, Rate, Typography, message } from "antd";
 import { roomService } from "../../services/roomService";
+import { getProfile } from "../../services/authService";
 import { ROUTES } from "../../constants";
-import type { ApiError, Room } from "../../types";
+import type { ApiError, Room, UserProfile } from "../../types";
+import BookingLockCountdown from "../../components/common/BookingLockCountdown";
 
 const { Title } = Typography;
 
@@ -72,6 +74,7 @@ const RoomDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [detail, setDetail] = useState<RoomDetailData | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   const roomFromState = (state as LocationState | null)?.room;
   const normalizedRoomId = roomId || roomFromState?.id || "";
@@ -114,6 +117,27 @@ const RoomDetailPage: React.FC = () => {
     loadDetail();
   }, [normalizedRoomId, roomFromState]);
 
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const response = await getProfile();
+        const raw = response.data as
+          | { data?: UserProfile }
+          | UserProfile
+          | null;
+        const nested =
+          raw && typeof raw === "object" && "data" in raw
+            ? raw.data
+            : undefined;
+        setUserProfile((nested || raw || null) as UserProfile | null);
+      } catch {
+        setUserProfile(null);
+      }
+    };
+
+    loadProfile();
+  }, []);
+
   const roomName = useMemo(
     () =>
       detail?.locationCode ||
@@ -149,6 +173,13 @@ const RoomDetailPage: React.FC = () => {
     () => status.trim().toUpperCase() === "AVAILABLE",
     [status],
   );
+
+  const isBookingLocked = useMemo(() => {
+    if (!userProfile?.bookingLockedUntil) return false;
+    const lockDate = new Date(userProfile.bookingLockedUntil);
+    if (Number.isNaN(lockDate.getTime())) return false;
+    return lockDate.getTime() > Date.now();
+  }, [userProfile]);
 
   const amenities = useMemo(
     () =>
@@ -202,6 +233,13 @@ const RoomDetailPage: React.FC = () => {
       return;
     }
 
+    if (isBookingLocked) {
+      message.warning(
+        "Booking is temporarily locked. Please wait for countdown.",
+      );
+      return;
+    }
+
     navigate(ROUTES.BOOK_ROOM.replace(":roomId", normalizedRoomId), {
       state: {
         room: {
@@ -228,14 +266,14 @@ const RoomDetailPage: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate(ROUTES.ROOM_LIST)}
-            className="rounded-full bg-[#f5b078] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#ee9f61]"
+            className="rounded-full bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600"
           >
             Back to list
           </button>
           <button
             type="button"
             onClick={() => navigate(ROUTES.ROOM_MAP)}
-            className="rounded-full bg-[#f5b078] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#ee9f61]"
+            className="rounded-full bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600"
           >
             Back to map
           </button>
@@ -434,14 +472,20 @@ const RoomDetailPage: React.FC = () => {
             </div>
 
             <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={handleBook}
-                disabled={!canBookRoom}
-                className="rounded-full bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Book this room
-              </button>
+              <div className="w-full sm:w-auto">
+                <BookingLockCountdown
+                  lockedUntil={userProfile?.bookingLockedUntil}
+                  cancellationCount={userProfile?.cancellationCount}
+                  className="mb-3"
+                />
+                <button
+                  type="button"
+                  onClick={handleBook}
+                  className="w-full rounded-full bg-orange-400 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-500"
+                >
+                  Book this room
+                </button>
+              </div>
             </div>
           </div>
         )}

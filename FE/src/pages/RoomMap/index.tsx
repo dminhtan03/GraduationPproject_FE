@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Alert, Pagination, Rate } from "antd";
+import { Alert, Pagination, Rate, message } from "antd";
 import { TagIcon, ClockIcon } from "@heroicons/react/24/outline";
 import {
   roomService,
   type RoomsMapBuilding,
   type RoomStatusItem,
 } from "../../services/roomService";
+import { getProfile } from "../../services/authService";
 import {
   feedbackService,
   type RoomFeedbackItem,
@@ -32,8 +33,10 @@ import {
   toTotalMinutes,
 } from "../../utils";
 import DatePickerField from "../../components/common/DatePickerField";
+import BookingLockCountdown from "../../components/common/BookingLockCountdown";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import { useRealtimeClock, useRoomStatusWebSocket } from "../../hooks";
+import type { UserProfile } from "../../types";
 
 type RoomDetail = {
   roomId?: string;
@@ -183,6 +186,7 @@ const RoomMapPage: React.FC = () => {
   >({});
   const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
   const [dragOverRoomId, setDragOverRoomId] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useRoomStatusWebSocket({
     floorId: selectedFloorId,
@@ -345,6 +349,27 @@ const RoomMapPage: React.FC = () => {
   }, [roomOrderByFloor]);
 
   useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const response = await getProfile();
+        const raw = response.data as
+          | { data?: UserProfile }
+          | UserProfile
+          | null;
+        const nested =
+          raw && typeof raw === "object" && "data" in raw
+            ? raw.data
+            : undefined;
+        setUserProfile((nested || raw || null) as UserProfile | null);
+      } catch {
+        setUserProfile(null);
+      }
+    };
+
+    loadProfile();
+  }, []);
+
+  useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
@@ -467,6 +492,13 @@ const RoomMapPage: React.FC = () => {
     () => resolveLayoutVariant(currentBuilding, buildings),
     [currentBuilding, buildings],
   );
+
+  const isBookingLocked = useMemo(() => {
+    if (!userProfile?.bookingLockedUntil) return false;
+    const lockDate = new Date(userProfile.bookingLockedUntil);
+    if (Number.isNaN(lockDate.getTime())) return false;
+    return lockDate.getTime() > Date.now();
+  }, [userProfile]);
 
   const renderRoomTile = (
     room: MapRoom,
@@ -660,6 +692,21 @@ const RoomMapPage: React.FC = () => {
 
   const handleBooking = () => {
     if (!selectedRoom) return;
+
+    if (selectedRoom.status !== "AVAILABLE") {
+      message.warning(
+        "Cannot book this room because it is currently unavailable.",
+      );
+      return;
+    }
+
+    if (isBookingLocked) {
+      message.warning(
+        "Booking is temporarily locked. Please wait for countdown.",
+      );
+      return;
+    }
+
     // Pass roomId in URL and full room data in state
     navigate(ROUTES.BOOK_ROOM.replace(":roomId", selectedRoom.roomId), {
       state: {
@@ -1370,11 +1417,17 @@ const RoomMapPage: React.FC = () => {
                 </>
               )}
 
+              <BookingLockCountdown
+                lockedUntil={userProfile?.bookingLockedUntil}
+                cancellationCount={userProfile?.cancellationCount}
+                compact
+                className="mb-3"
+              />
+
               <button
                 type="button"
-                disabled={selectedRoom.status !== "AVAILABLE"}
                 onClick={handleBooking}
-                className="mt-auto w-full inline-flex items-center justify-center rounded-full bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="mt-auto w-full inline-flex items-center justify-center rounded-full bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-600"
               >
                 Booking this room
               </button>

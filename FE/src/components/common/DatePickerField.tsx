@@ -115,12 +115,12 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
               week: "w-full",
               day: "h-9 w-9 p-0 text-center",
               day_button:
-                "h-9 w-9 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-100",
+                "h-9 w-9 rounded-md text-sm font-semibold text-slate-900 hover:bg-slate-100",
               day_selected: "!bg-orange-500 !text-white hover:!bg-orange-600",
               day_today: "border border-orange-300 text-orange-600",
               day_outside: "text-slate-300",
               day_disabled:
-                "text-slate-300 opacity-45 cursor-not-allowed pointer-events-none",
+                "text-slate-400 opacity-90 cursor-not-allowed pointer-events-none",
             }}
           />
         </div>
