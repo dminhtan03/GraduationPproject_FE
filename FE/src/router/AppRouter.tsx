@@ -26,6 +26,15 @@ const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
 const AdminUserManagementPage = React.lazy(
   () => import("../pages/AdminUserManagement"),
 );
+const AdminBuildingManagementPage = React.lazy(
+  () => import("../pages/AdminBuildingManagement"),
+);
+const AdminBuildingFloorsPage = React.lazy(
+  () => import("../pages/AdminBuildingManagement/FloorList"),
+);
+const AdminFloorLayoutPage = React.lazy(
+  () => import("../pages/AdminFloorLayout"),
+);
 
 // Error boundary component cho routes
 // eslint-disable-next-line react-refresh/only-export-components
@@ -92,6 +101,33 @@ export const router = createBrowserRouter([
     element: (
       <SuspenseWrapper>
         <AdminUserManagementPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_BUILDING_MANAGEMENT,
+    element: (
+      <SuspenseWrapper>
+        <AdminBuildingManagementPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_BUILDING_FLOORS,
+    element: (
+      <SuspenseWrapper>
+        <AdminBuildingFloorsPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_FLOOR_LAYOUT,
+    element: (
+      <SuspenseWrapper>
+        <AdminFloorLayoutPage />
       </SuspenseWrapper>
     ),
     errorElement: <ErrorBoundary />,

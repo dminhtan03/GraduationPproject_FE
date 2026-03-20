@@ -141,4 +141,22 @@ export const roomService = {
     );
     return res.data?.data || res.data;
   },
+
+  // start add updateLayout method
+  async updateFloorLayout(
+    floorId: string,
+    items: {
+      roomId: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }[],
+  ): Promise<void> {
+    await api.put(
+      buildUrl(API_ENDPOINTS.ROOMS.UPDATE_LAYOUT, { floorId }),
+      { items },
+    );
+  },
+  // end add updateLayout method
 };

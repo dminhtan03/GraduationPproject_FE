@@ -25,6 +25,18 @@ export const API_ENDPOINTS = {
     RETURN_ROOM: "/api/v1/reservations/return-room/:id",
     EXTEND_ROOM: "/api/v1/reservations/extend/:id",
     CANCEL_BOOKING: "/api/v1/reservations/cancel/:id",
+    // start add layout endpoint
+    UPDATE_LAYOUT: "/api/v1/rooms/floors/:floorId/layout",
+    IMPORT_EXCEL: "/api/v1/rooms/import-excel",
+    // end add layout endpoint
+    // start add building endpoints
+    ADMIN_BUILDINGS: "/api/v1/dashboard/all-buildings",
+    ADMIN_FLOORS: "/api/v1/dashboard/all-floors-by-buildingId/:buildingId",
+    ADMIN_ROOMS_BY_FLOOR: "/api/v1/dashboard/all-room-by-floorId/:floorId",
+    CREATE_BUILDING: "/api/v1/dashboard/buildings",
+    UPDATE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
+    DELETE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
+    // end add building endpoints
   },
 
   // User endpoints

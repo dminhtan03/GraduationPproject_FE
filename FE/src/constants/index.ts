@@ -25,6 +25,11 @@ export const ROUTES = {
   PROFILE_EDIT: "/profile/edit",
   CHANGE_PASSWORD: "/profile/change-password",
   LOG_OUT: "/logout",
+  // start add admin building routes
+  ADMIN_BUILDING_MANAGEMENT: "/admin/buildings",
+  ADMIN_BUILDING_FLOORS: "/admin/buildings/:buildingId/floors",
+  ADMIN_FLOOR_LAYOUT: "/admin/buildings/:buildingId/floors/:floorId/layout",
+  // end add admin building routes
 } as const;
 
 // LocalStorage keys

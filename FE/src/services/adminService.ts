@@ -174,5 +174,45 @@ export const adminService = {
       },
     });
   },
+
+  async importRoomsExcel(file: File, floorId: string): Promise<void> {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("floorId", floorId);
+    await api.post(API_ENDPOINTS.ROOMS.IMPORT_EXCEL, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
   // end add admin api calls
+
+  // start add building management api calls
+  async getAllBuildings(): Promise<any> {
+    const res = await api.get(API_ENDPOINTS.ROOMS.ADMIN_BUILDINGS);
+    return res.data?.data || res.data;
+  },
+
+  async getFloorsByBuilding(buildingId: string): Promise<any> {
+    const res = await api.get(
+      buildUrl(API_ENDPOINTS.ROOMS.ADMIN_FLOORS, { buildingId }),
+    );
+    return res.data?.data || res.data;
+  },
+
+  async getRoomsByFloor(floorId: string): Promise<any> {
+    const res = await api.get(
+      buildUrl(API_ENDPOINTS.ROOMS.ADMIN_ROOMS_BY_FLOOR, { floorId }),
+    );
+    return res.data?.data || res.data;
+  },
+
+  async createBuilding(payload: {
+    name: string;
+    address: string;
+    totalFloors: number;
+  }): Promise<void> {
+    await api.post(API_ENDPOINTS.ROOMS.CREATE_BUILDING, payload);
+  },
+  // end add building management api calls
 };

@@ -428,6 +428,11 @@ const RoomMapPage: React.FC = () => {
             locationCode: String(r.locationCode || ""),
             status: override ?? baseStatus,
             score: r.score,
+            xPosition: r.x ?? r.xPosition ?? r.xposition ?? 0,
+            yPosition: r.y ?? r.yPosition ?? r.yposition ?? 0,
+            width: r.width || 80,
+            height: r.height || 50,
+            positioned: r.positioned ?? false,
           };
         })
       : [];
@@ -509,20 +514,21 @@ const RoomMapPage: React.FC = () => {
       key={room.roomId}
       type="button"
       onClick={() => handleRoomClick(room)}
-      draggable
-      onDragStart={() => setDraggedRoomId(room.roomId)}
+      draggable={!room.positioned}
+      onDragStart={() => !room.positioned && setDraggedRoomId(room.roomId)}
       onDragEnd={() => {
         setDraggedRoomId(null);
         setDragOverRoomId(null);
       }}
-      onDragOver={(event) => event.preventDefault()}
-      onDragEnter={() => setDragOverRoomId(room.roomId)}
+      onDragOver={(event) => !room.positioned && event.preventDefault()}
+      onDragEnter={() => !room.positioned && setDragOverRoomId(room.roomId)}
       onDragLeave={() => {
         if (dragOverRoomId === room.roomId) {
           setDragOverRoomId(null);
         }
       }}
       onDrop={(event) => {
+        if (room.positioned) return;
         event.preventDefault();
         if (!draggedRoomId || draggedRoomId === room.roomId || !currentFloorKey)
           return;
@@ -1027,7 +1033,7 @@ const RoomMapPage: React.FC = () => {
           </div>
 
           {/* Map canvas */}
-          <div className="relative flex-1 min-h-[320px] sm:min-h-[380px] bg-slate-50 rounded-2xl border border-dashed border-slate-200 flex items-center justify-start sm:justify-center overflow-x-auto overflow-y-hidden px-2">
+          <div className="relative flex-1 min-h-[400px] sm:min-h-[500px] bg-slate-50 rounded-2xl border border-dashed border-slate-200 flex items-center justify-start sm:justify-center overflow-x-auto overflow-y-hidden px-2">
             {loading && (
               <div className="text-sm text-slate-500">Loading map...</div>
             )}
@@ -1039,7 +1045,28 @@ const RoomMapPage: React.FC = () => {
 
             {!loading && currentFloor && currentFloor.rooms.length > 0 && (
               <>
-                {layoutVariant === "gamma" && (
+                {currentFloor.rooms.some((r) => r.positioned) ? (
+                  <div className="w-full flex justify-center py-4 bg-slate-50 rounded-2xl">
+                    <div className="relative w-[1000px] h-[600px] bg-white rounded-2xl border-2 border-slate-200 shadow-sm overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:20px_20px]">
+                      {currentFloor.rooms.map((room) => (
+                        <div
+                          key={room.roomId}
+                          style={{
+                            position: "absolute",
+                            left: room.xPosition || 0,
+                            top: room.yPosition || 0,
+                            width: room.width || 80,
+                            height: room.height || 50,
+                          }}
+                        >
+                          {renderRoomTile(room, "w-full h-full", "text-[10px]")}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {layoutVariant === "gamma" && (
                   <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[640px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner flex flex-col">
                     <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-b border-slate-100">
                       {top.map((room) => renderRoomTile(room, "h-16"))}
@@ -1207,11 +1234,13 @@ const RoomMapPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                )}
-              </>
-            )}
-          </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
         </div>
+      </div>
 
         {/* Room details panel */}
         <aside className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 flex flex-col gap-4">
