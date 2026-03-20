@@ -403,11 +403,11 @@ const RoomMapPage: React.FC = () => {
             locationCode: String(r.locationCode || ""),
             status: override ?? baseStatus,
             score: r.score,
-            xPosition: r.xposition || r.xPosition,
-            yPosition: r.yposition || r.yPosition,
-            width: r.width,
-            height: r.height,
-            positioned: r.positioned,
+            xPosition: r.x ?? r.xPosition ?? r.xposition ?? 0,
+            yPosition: r.y ?? r.yPosition ?? r.yposition ?? 0,
+            width: r.width || 80,
+            height: r.height || 50,
+            positioned: r.positioned ?? false,
           };
         })
       : [];
@@ -999,21 +999,23 @@ const RoomMapPage: React.FC = () => {
             {!loading && currentFloor && currentFloor.rooms.length > 0 && (
               <>
                 {currentFloor.rooms.some((r) => r.positioned) ? (
-                  <div className="relative w-full h-full min-w-[800px] min-h-[500px] bg-white rounded-2xl border border-slate-200 shadow-inner overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:20px_20px]">
-                    {currentFloor.rooms.map((room) => (
-                      <div
-                        key={room.roomId}
-                        style={{
-                          position: "absolute",
-                          left: room.xPosition || 0,
-                          top: room.yPosition || 0,
-                          width: room.width || 120,
-                          height: room.height || 80,
-                        }}
-                      >
-                        {renderRoomTile(room, "w-full h-full", "text-[10px] sm:text-[11px]")}
-                      </div>
-                    ))}
+                  <div className="w-full flex justify-center py-4 bg-slate-50 rounded-2xl">
+                    <div className="relative w-[1000px] h-[600px] bg-white rounded-2xl border-2 border-slate-200 shadow-sm overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:20px_20px]">
+                      {currentFloor.rooms.map((room) => (
+                        <div
+                          key={room.roomId}
+                          style={{
+                            position: "absolute",
+                            left: room.xPosition || 0,
+                            top: room.yPosition || 0,
+                            width: room.width || 80,
+                            height: room.height || 50,
+                          }}
+                        >
+                          {renderRoomTile(room, "w-full h-full", "text-[10px]")}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -1187,10 +1189,11 @@ const RoomMapPage: React.FC = () => {
                   </div>
                   )}
                 </>
-              </>
-            )}
-          </div>
+              )}
+            </>
+          )}
         </div>
+      </div>
 
         {/* Room details panel */}
         <aside className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 flex flex-col gap-4">

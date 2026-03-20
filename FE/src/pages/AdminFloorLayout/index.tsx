@@ -6,6 +6,8 @@ import {
   DeviceTabletIcon,
   ComputerDesktopIcon,
   CloudArrowUpIcon,
+  Squares2X2Icon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 import { useNavigate, useParams } from "react-router-dom";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
@@ -48,10 +50,10 @@ const AdminFloorLayoutPage: React.FC = () => {
       setItems(floorRooms.map((r: any) => ({
         roomId: r.roomId || r.id,
         locationCode: r.locationCode,
-        x: r.xposition || r.xPosition || 0,
-        y: r.yposition || r.yPosition || 0,
-        width: r.width || 120,
-        height: r.height || 80,
+        x: r.x ?? r.xPosition ?? r.xposition ?? 0,
+        y: r.y ?? r.yPosition ?? r.yposition ?? 0,
+        width: r.width || 80,
+        height: r.height || 50,
       })));
     } catch (err) {
       console.error(err);
@@ -68,19 +70,36 @@ const AdminFloorLayoutPage: React.FC = () => {
     if (!floorId) return;
     setSaving(true);
     try {
-      await roomService.updateFloorLayout(floorId, items.map(item => ({
+      const payload = items.map((item) => ({
         roomId: item.roomId,
         x: item.x,
         y: item.y,
         width: item.width,
         height: item.height,
-      })));
+      }));
+      await roomService.updateFloorLayout(floorId, payload);
       setToastPopup({ type: "success", message: "Layout saved successfully" });
     } catch (err) {
       setToastPopup({ type: "error", message: "Failed to save layout" });
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAutoLayout = () => {
+    setItems(prev => prev.map((item, index) => ({
+      ...item,
+      x: (index % 5) * 100 + 20, // Xếp thành hàng, mỗi hàng 5 phòng
+      y: Math.floor(index / 5) * 70 + 20,
+      width: 80,
+      height: 50,
+    })));
+    setToastPopup({ type: "success", message: "Auto-layout applied. Click 'Save Layout' to persist changes." });
+  };
+
+  const handleResetLayout = () => {
+    loadRooms(); // Reset to last saved state
+    setToastPopup({ type: "success", message: "Layout reset to last saved state." });
   };
 
   const updateItem = (roomId: string, data: Partial<LayoutItem>) => {
@@ -112,6 +131,20 @@ const AdminFloorLayoutPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleResetLayout}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <ArrowPathIcon className="h-5 w-5" />
+              Reset
+            </button>
+            <button
+              onClick={handleAutoLayout}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <Squares2X2Icon className="h-5 w-5" />
+              Auto Layout
+            </button>
             <button
               onClick={handleSaveLayout}
               disabled={saving}
