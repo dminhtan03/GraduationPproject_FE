@@ -8,6 +8,13 @@ export interface MapRoom {
   locationCode: string;
   status: MapRoomStatus;
   score?: number | null;
+  // start add layout fields
+  xPosition?: number;
+  yPosition?: number;
+  width?: number;
+  height?: number;
+  positioned?: boolean;
+  // end add layout fields
 }
 
 export interface FloorWithRooms {

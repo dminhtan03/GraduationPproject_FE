@@ -3,7 +3,13 @@ import {
   ArrowRightOnRectangleIcon,
   ShieldCheckIcon,
   UsersIcon,
+  // start add icons
+  BuildingOfficeIcon,
+  MapIcon,
+  // end add icons
 } from "@heroicons/react/24/outline";
+import { Link, useLocation } from "react-router-dom";
+import { ROUTES } from "../../constants";
 
 type AdminSidebarProps = {
   adminName: string;
@@ -20,6 +26,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   mobileOpen,
   onCloseMobile,
 }) => {
+  const location = useLocation();
   const initials = adminName
     ? adminName
         .split(" ")
@@ -63,14 +70,32 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </div>
         </div>
 
-        <nav className="flex-1 px-4 py-5">
-          <button
-            type="button"
-            className="flex w-full items-center gap-3 rounded-2xl bg-orange-50 px-4 py-3 text-left text-sm font-semibold text-orange-700 ring-1 ring-orange-200"
+        <nav className="flex-1 space-y-2 px-4 py-5">
+          <Link
+            to="/admin/user-management"
+            className={[
+              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
+              location.pathname.includes("/admin/user-management")
+                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
+                : "text-slate-600 hover:bg-slate-50",
+            ].join(" ")}
           >
             <UsersIcon className="h-5 w-5" />
             User Management
-          </button>
+          </Link>
+
+          <Link
+            to={ROUTES.ADMIN_BUILDING_MANAGEMENT}
+            className={[
+              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
+              location.pathname.includes("/admin/buildings")
+                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
+                : "text-slate-600 hover:bg-slate-50",
+            ].join(" ")}
+          >
+            <BuildingOfficeIcon className="h-5 w-5" />
+            Building Management
+          </Link>
         </nav>
 
         <div className="border-t border-slate-200 p-4">
