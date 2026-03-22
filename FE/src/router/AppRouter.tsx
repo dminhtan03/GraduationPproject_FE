@@ -14,6 +14,7 @@ const BookRoomPage = React.lazy(() => import("../pages/BookRoom"));
 const RoomMapPage = React.lazy(() => import("../pages/RoomMap"));
 const AboutPage = React.lazy(() => import("../pages/About"));
 const MyBookingsPage = React.lazy(() => import("../pages/MyBookings"));
+const BookingDetailPage = React.lazy(() => import("../pages/BookingDetail"));
 const ProfilePage = React.lazy(() => import("../pages/Profile"));
 const EditProfilePage = React.lazy(
   () => import("../pages/Profile/EditProfile"),
@@ -35,6 +36,8 @@ const AdminBuildingFloorsPage = React.lazy(
 const AdminFloorLayoutPage = React.lazy(
   () => import("../pages/AdminFloorLayout"),
 );
+const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
+const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 
 // Error boundary component cho routes
 // eslint-disable-next-line react-refresh/only-export-components
@@ -133,6 +136,24 @@ export const router = createBrowserRouter([
     errorElement: <ErrorBoundary />,
   },
   {
+    path: ROUTES.FORBIDDEN,
+    element: (
+      <SuspenseWrapper>
+        <ForbiddenPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.NOT_FOUND,
+    element: (
+      <SuspenseWrapper>
+        <NotFoundPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
     path: "/",
     element: (
       <SuspenseWrapper>
@@ -167,6 +188,14 @@ export const router = createBrowserRouter([
         element: (
           <SuspenseWrapper>
             <MyBookingsPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.BOOKING_DETAIL,
+        element: (
+          <SuspenseWrapper>
+            <BookingDetailPage />
           </SuspenseWrapper>
         ),
       },
@@ -239,7 +268,7 @@ export const router = createBrowserRouter([
   // Catch all route - redirect to home
   {
     path: "*",
-    element: <Navigate to={ROUTES.LOGIN} replace />,
+    element: <Navigate to={ROUTES.FORBIDDEN} replace />,
   },
 ]);
 

@@ -283,6 +283,18 @@ const BookRoomPage: React.FC = () => {
       return false;
     }
 
+    if (attendeeCount !== "") {
+      if (!Number.isFinite(attendeeCount) || attendeeCount <= 0) {
+        message.warning("Attendee count must be greater than 0.");
+        return false;
+      }
+
+      if (room?.slot != null && attendeeCount > room.slot) {
+        message.warning(`Attendee count cannot exceed room capacity (${room.slot}).`);
+        return false;
+      }
+    }
+
     return true;
   };
 
@@ -306,12 +318,15 @@ const BookRoomPage: React.FC = () => {
 
     setLoading(true);
     try {
+      const normalizedAttendeeCount =
+        attendeeCount === "" || !Number.isFinite(attendeeCount) ? undefined : attendeeCount;
+
       await reservationService.createReservation({
         roomId: normalizedRoomId,
         purpose: purpose.trim(),
         startTime,
         endTime,
-        attendeeCount: attendeeCount === "" ? undefined : attendeeCount,
+        attendeeCount: normalizedAttendeeCount,
         note: note.trim() || undefined,
       });
 
@@ -576,6 +591,7 @@ const BookRoomPage: React.FC = () => {
               <input
                 type="number"
                 min={1}
+                max={room?.slot}
                 value={attendeeCount}
                 onChange={(event) =>
                   setAttendeeCount(event.target.value ? Number(event.target.value) : "")
@@ -584,6 +600,9 @@ const BookRoomPage: React.FC = () => {
                 disabled={loading}
                 placeholder="Optional"
               />
+              {typeof room?.slot === "number" && (
+                <p className="mt-1 text-xs text-gray-500">Maximum capacity: {room.slot} attendees</p>
+              )}
             </div>
 
             <div>

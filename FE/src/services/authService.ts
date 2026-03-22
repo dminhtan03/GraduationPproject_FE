@@ -86,6 +86,8 @@ const extractUserFromToken = (accessToken: string | undefined): User | null => {
     email: String(payload.sub || ""),
     role,
     roles: roles.length ? roles : undefined,
+    cancellationCount: 0,
+    bookingLockedUntil: new Date(0),
   };
 };
 

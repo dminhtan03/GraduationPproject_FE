@@ -11,6 +11,7 @@ import {
   Tabs,
   Modal,
   Descriptions,
+  Select,
   Input,
   InputNumber,
   Rate,
@@ -30,6 +31,7 @@ import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
 // start add authService import
 import { getProfile } from "../../services/authService";
+import { adminService } from "../../services/adminService";
 import type { UserProfile } from "../../types";
 // end add authService import
 import { reservationService } from "../../services/reservationService";
@@ -60,6 +62,35 @@ interface ReservationRealtimePayload {
   reservationId: string;
   newStatus: string;
 }
+
+interface BuildingFilterOption {
+  value: string;
+  label: string;
+}
+
+const normalizeBuildingOptions = (payload: unknown): BuildingFilterOption[] => {
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as { data?: unknown[] })?.data)
+      ? ((payload as { data?: unknown[] }).data as unknown[])
+      : [];
+
+  return list
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const raw = item as Record<string, unknown>;
+      const value =
+        (raw.id != null ? String(raw.id) : "") ||
+        (raw.buildingId != null ? String(raw.buildingId) : "");
+      const label =
+        (typeof raw.name === "string" ? raw.name : "") ||
+        (typeof raw.buildingName === "string" ? raw.buildingName : "");
+
+      if (!value || !label) return null;
+      return { value, label };
+    })
+    .filter((item): item is BuildingFilterOption => !!item);
+};
 
 const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
   ongoing: ["PENDING", "RESERVED", "IN_USE", "CHECKED_IN"],
@@ -435,6 +466,9 @@ const MyBookingsPage: React.FC = () => {
     type: MessageType;
     message: string;
   } | null>(null);
+  const [buildingOptions, setBuildingOptions] = useState<BuildingFilterOption[]>([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>("all");
+  const [cancelReason, setCancelReason] = useState<string>("");
 
   // start add currentTime state for auto-enabling buttons
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -465,6 +499,20 @@ const MyBookingsPage: React.FC = () => {
   }, [fetchUserProfile]);
   // end add userProfile state
 
+  useEffect(() => {
+    const loadBuildings = async () => {
+      try {
+        const response = await adminService.getAllBuildings();
+        const options = normalizeBuildingOptions(response);
+        setBuildingOptions(options);
+      } catch {
+        setBuildingOptions([]);
+      }
+    };
+
+    void loadBuildings();
+  }, []);
+
   const showToast = (type: MessageType, nextMessage: string) => {
     setToastPopup({ type, message: nextMessage });
     window.setTimeout(() => {
@@ -475,15 +523,26 @@ const MyBookingsPage: React.FC = () => {
   };
 
   const loadBookings = useCallback(
-    async (nextPage: number, nextSize: number, tabKey: BookingTabKey) => {
+    async (
+      nextPage: number,
+      nextSize: number,
+      tabKey: BookingTabKey,
+      buildingId: string,
+    ) => {
       setLoading(true);
       setError(null);
       try {
+        const selectedBuilding =
+          buildingId !== "all"
+            ? buildingOptions.find((item) => item.value === buildingId)
+            : null;
+
         try {
           const result = await reservationService.getMyBookings({
             page: Math.max(nextPage - 1, 0),
             size: nextSize,
             statuses: TAB_STATUS_FILTERS[tabKey],
+            buildingId: buildingId !== "all" ? buildingId : undefined,
           });
           setBookings(result.items);
           setTotal(result.total);
@@ -492,7 +551,13 @@ const MyBookingsPage: React.FC = () => {
             page: Math.max(nextPage - 1, 0),
             size: nextSize,
           });
-          const filteredItems = filterItemsByTab(fallbackResult.items, tabKey);
+          let filteredItems = filterItemsByTab(fallbackResult.items, tabKey);
+          if (selectedBuilding?.label) {
+            filteredItems = filteredItems.filter((item) => {
+              const buildingName = (item.buildingName || item.address || "").toLowerCase();
+              return buildingName.includes(selectedBuilding.label.toLowerCase());
+            });
+          }
           setBookings(filteredItems);
           setTotal(filteredItems.length);
         }
@@ -507,12 +572,12 @@ const MyBookingsPage: React.FC = () => {
         setLoading(false);
       }
     },
-    [],
+    [buildingOptions],
   );
 
   useEffect(() => {
-    loadBookings(1, 5, "ongoing");
-  }, [loadBookings]);
+    loadBookings(1, 5, "ongoing", selectedBuildingId);
+  }, [loadBookings, selectedBuildingId]);
 
   useEffect(() => {
     const realtimePayload = getReservationRealtimePayload(lastMessage);
@@ -563,19 +628,23 @@ const MyBookingsPage: React.FC = () => {
     console.log(
       "[MyBookings] Triggering background reload after realtime update",
     );
-    void loadBookings(page, pageSize, activeTab);
-  }, [activeTab, lastMessage, loadBookings, page, pageSize]);
+    void loadBookings(page, pageSize, activeTab, selectedBuildingId);
+  }, [activeTab, lastMessage, loadBookings, page, pageSize, selectedBuildingId]);
 
   const openActionModal = (type: BookingActionType, booking: Reservation) => {
     setActionModalError(null);
     if (type === "extend") {
       setExtendHour(1);
     }
+    if (type === "cancel") {
+      setCancelReason("");
+    }
     setActionModal({ type, booking });
   };
 
   const closeActionModal = () => {
     setActionModalError(null);
+    setCancelReason("");
     setActionModal(null);
   };
 
@@ -614,7 +683,7 @@ const MyBookingsPage: React.FC = () => {
       );
       showToast("success", successMessage);
       closeFeedbackModal();
-      await loadBookings(page, pageSize, activeTab);
+      await loadBookings(page, pageSize, activeTab, selectedBuildingId);
     } catch (err) {
       message.error(extractApiMessage(err, "Unable to submit feedback"));
     } finally {
@@ -681,6 +750,11 @@ const MyBookingsPage: React.FC = () => {
       return;
     }
 
+    if (currentAction.type === "cancel" && !cancelReason.trim()) {
+      message.warning("Please provide a cancellation reason.");
+      return;
+    }
+
     setLoading(true);
     setActionLoadingId(reservationId);
     try {
@@ -702,7 +776,10 @@ const MyBookingsPage: React.FC = () => {
           throw { message: extendFailure, status: 400 };
         }
       } else {
-        actionResponse = await reservationService.cancelBooking(reservationId);
+        actionResponse = await reservationService.cancelBooking(
+          reservationId,
+          cancelReason.trim(),
+        );
       }
 
       const actionSuccessFallback =
@@ -728,7 +805,7 @@ const MyBookingsPage: React.FC = () => {
       if (currentAction.type === "return-room") {
         openFeedbackModal(currentAction.booking);
       }
-      await loadBookings(page, pageSize, activeTab);
+      await loadBookings(page, pageSize, activeTab, selectedBuildingId);
     } catch (err) {
       const actionErrorMessage = extractApiMessage(
         err,
@@ -751,13 +828,18 @@ const MyBookingsPage: React.FC = () => {
   const handleTabChange = (key: string) => {
     const nextTab = key as BookingTabKey;
     setActiveTab(nextTab);
-    loadBookings(1, pageSize, nextTab);
+    loadBookings(1, pageSize, nextTab, selectedBuildingId);
   };
 
   const handleTableChange = (pagination: TablePaginationConfig) => {
     const nextPage = pagination.current || 1;
     const nextSize = pagination.pageSize || pageSize;
-    loadBookings(nextPage, nextSize, activeTab);
+    loadBookings(nextPage, nextSize, activeTab, selectedBuildingId);
+  };
+
+  const handleBuildingFilterChange = (value: string) => {
+    setSelectedBuildingId(value);
+    loadBookings(1, pageSize, activeTab, value);
   };
 
   const tabItems = useMemo(
@@ -784,11 +866,12 @@ const MyBookingsPage: React.FC = () => {
       render: (value: string | undefined) => value || "-",
     },
     {
-      title: "ADDRESS",
-      dataIndex: "address",
-      key: "address",
+      title: "BUILDING",
+      dataIndex: "buildingName",
+      key: "buildingName",
       width: "17%",
-      render: (value: string | undefined) => value || "-",
+      render: (_: string | undefined, record: Reservation) =>
+        record.buildingName || record.address || "-",
     },
     {
       title: "DETAILS",
@@ -951,7 +1034,7 @@ const MyBookingsPage: React.FC = () => {
         className="mb-2"
       />
 
-      <div className="mb-4 flex gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => navigate(ROUTES.ROOM_LIST)}
@@ -961,12 +1044,25 @@ const MyBookingsPage: React.FC = () => {
         </button>
         <button
           type="button"
-          onClick={() => loadBookings(page, pageSize, activeTab)}
+          onClick={() => loadBookings(page, pageSize, activeTab, selectedBuildingId)}
           className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
           disabled={loading}
         >
           Refresh
         </button>
+
+        <div className="min-w-[220px]">
+          <Select
+            value={selectedBuildingId}
+            className="w-full"
+            onChange={handleBuildingFilterChange}
+            options={[
+              { value: "all", label: "All buildings" },
+              ...buildingOptions,
+            ]}
+            placeholder="Filter by building"
+          />
+        </div>
       </div>
 
       {error && (
@@ -1008,6 +1104,20 @@ const MyBookingsPage: React.FC = () => {
               pageSizeOptions: ["5", "10", "20"],
             }}
             onChange={handleTableChange}
+            onRow={(record) => ({
+              onClick: (event) => {
+                const target = event.target as HTMLElement;
+                if (target.closest("button") || target.closest(".ant-btn")) {
+                  return;
+                }
+
+                if (!record.id) return;
+                navigate(ROUTES.BOOKING_DETAIL.replace(":bookingId", record.id), {
+                  state: { booking: record },
+                });
+              },
+            })}
+            rowClassName={(record) => (record.id ? "cursor-pointer" : "")}
             scroll={{ x: 980 }}
           />
         </div>
@@ -1091,6 +1201,22 @@ const MyBookingsPage: React.FC = () => {
           </div>
         )}
 
+        {actionModal?.type === "cancel" && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Cancellation reason <span className="text-red-500">*</span>
+            </label>
+            <Input.TextArea
+              rows={3}
+              maxLength={400}
+              showCount
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+              placeholder="Enter reason for cancellation"
+            />
+          </div>
+        )}
+
         <Descriptions
           size="small"
           column={1}
@@ -1107,9 +1233,9 @@ const MyBookingsPage: React.FC = () => {
               children: actionModal?.booking.floor || "-",
             },
             {
-              key: "address",
-              label: "Address",
-              children: actionModal?.booking.address || "-",
+              key: "building",
+              label: "Building",
+              children: actionModal?.booking.buildingName || actionModal?.booking.address || "-",
             },
             {
               key: "timeStart",

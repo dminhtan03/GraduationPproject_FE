@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { API_ENDPOINTS } from "../constants/endpoints";
+import { buildUrl } from "../constants/endpoints";
 import type {
   ApiError,
   CreateReservationRequest,
@@ -47,6 +48,12 @@ const normalizeReservation = (item: any): Reservation => {
         : item?.reservationId != null
           ? String(item.reservationId)
           : undefined,
+    roomId:
+      item?.roomId != null
+        ? String(item.roomId)
+        : item?.seatId != null
+          ? String(item.seatId)
+          : undefined,
     locationCode:
       item?.locationCode ??
       item?.roomLocationCode ??
@@ -64,10 +71,22 @@ const normalizeReservation = (item: any): Reservation => {
       item?.buildingAddress ??
       item?.buildingName ??
       undefined,
+    buildingName:
+      item?.buildingName ??
+      item?.building ??
+      item?.address ??
+      item?.buildingAddress ??
+      undefined,
     purpose: item?.purpose ?? item?.bookingPurpose ?? item?.title ?? undefined,
     note: item?.note ?? item?.description ?? item?.message ?? undefined,
     startTime: item?.startTime ?? item?.startDateTime ?? item?.fromTime ?? undefined,
     endTime: item?.endTime ?? item?.endDateTime ?? item?.toTime ?? undefined,
+    attendeeCount:
+      typeof item?.attendeeCount === "number"
+        ? item.attendeeCount
+        : typeof item?.participantCount === "number"
+          ? item.participantCount
+          : undefined,
     status: resolvedStatus != null ? String(resolvedStatus) : undefined,
     feedbackId:
       feedbackIdValue != null && String(feedbackIdValue).trim()
@@ -77,6 +96,7 @@ const normalizeReservation = (item: any): Reservation => {
       typeof rawFeedbackSubmitted === "boolean"
         ? rawFeedbackSubmitted
         : feedbackIdValue != null,
+    rawData: item && typeof item === "object" ? (item as Record<string, unknown>) : undefined,
   };
 };
 
@@ -115,6 +135,16 @@ const putWithFallback = async (
 
 export const reservationService = {
   async createReservation(payload: CreateReservationRequest) {
+    if (
+      payload.attendeeCount != null &&
+      (!Number.isFinite(payload.attendeeCount) || payload.attendeeCount <= 0)
+    ) {
+      throw {
+        message: "Attendee count must be greater than 0.",
+        status: 400,
+      };
+    }
+
     return api.post(API_ENDPOINTS.ROOMS.BOOK, {
       roomId: payload.roomId,
       purpose: payload.purpose,
@@ -250,9 +280,39 @@ export const reservationService = {
     }
   },
 
-  async cancelBooking(reservationId: string) {
+  async getBookingDetail(reservationId: string): Promise<Record<string, unknown>> {
+    const normalizedId = String(reservationId);
+    const candidates = [
+      buildUrl(`${API_ENDPOINTS.ROOMS.BOOK}/:id`, { id: normalizedId }),
+      buildUrl(`${API_ENDPOINTS.ROOMS.MY_STATUS}/:id`, { id: normalizedId }),
+      buildUrl("/api/v1/reservations/detail/:id", { id: normalizedId }),
+    ];
+
+    let lastError: unknown;
+    for (const endpoint of candidates) {
+      try {
+        const response = await api.get<any>(endpoint);
+        const payload = response.data || {};
+        const data = payload?.data ?? payload;
+        if (data && typeof data === "object") {
+          return data as Record<string, unknown>;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || { message: "Unable to load booking detail", status: 500 };
+  },
+
+  async cancelBooking(reservationId: string, reason?: string) {
     const normalizedId = String(reservationId);
     const cancelUrl = API_ENDPOINTS.ROOMS.CANCEL_BOOKING.replace(":id", normalizedId);
+    const payload = {
+      reservationId: normalizedId,
+      cancelReason: reason?.trim() || undefined,
+      reason: reason?.trim() || undefined,
+    };
 
     return putWithFallback(
       cancelUrl,
@@ -260,7 +320,7 @@ export const reservationService = {
         `${API_ENDPOINTS.ROOMS.BOOK}/cancel/${normalizedId}`,
         `${API_ENDPOINTS.ROOMS.BOOK}/${normalizedId}/cancel`,
       ],
-      { reservationId: normalizedId },
+      payload,
     );
   },
 };

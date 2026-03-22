@@ -129,16 +129,20 @@ export type ReservationStatus =
 
 export interface Reservation {
   id?: string;
+  roomId?: string;
   locationCode?: string;
   floor?: string;
   address?: string;
+  buildingName?: string;
   purpose?: string;
   note?: string;
   startTime?: string;
   endTime?: string;
+  attendeeCount?: number;
   status?: ReservationStatus;
   feedbackId?: string;
   feedbackSubmitted?: boolean;
+  rawData?: Record<string, unknown>;
 }
 
 export interface ReservationStatusQuery {
