@@ -18,87 +18,129 @@ const formatTime = (iso: string): string => {
 };
 
 const NotificationsPage: React.FC = () => {
-  const { notifications, markAllAsRead, unreadCount } = useNotifications();
+  const { notifications, markAllAsRead, unreadCount, markAsRead } =
+    useNotifications();
+
+  const getCategoryClass = (category?: string) => {
+    if (category === "booking") {
+      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+    }
+    if (category === "ai") {
+      return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
+    }
+    return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+  };
+
+  const getCategoryLabel = (category?: string) => {
+    if (category === "booking") {
+      return "Booking";
+    }
+    if (category === "ai") {
+      return "AI";
+    }
+    return "System";
+  };
 
   return (
-    <div className="page-container flex justify-center">
-      <div className="w-full max-w-3xl">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-semibold text-gray-900">
+    <div className="page-container mx-auto max-w-5xl">
+      <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold text-slate-900">
             Notifications
           </h1>
           {notifications.length > 0 && (
             <button
               type="button"
               onClick={markAllAsRead}
-              className="text-sm text-orange-500 hover:text-orange-600 hover:underline"
+              className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-medium text-orange-700 transition hover:bg-orange-100"
             >
               {unreadCount > 0 ? "Mark all as read" : "All caught up"}
             </button>
           )}
         </div>
+      </div>
 
-        {notifications.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center text-gray-500">
-            You have no notifications yet.
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 divide-y divide-gray-100">
-            {notifications.map((n) => (
-              <div
-                key={n.id}
-                className={`flex items-start gap-3 px-5 py-4 ${
-                  n.read ? "bg-white" : "bg-orange-50/60"
-                }`}
-              >
-                <div
-                  className={`mt-1 w-9 h-9 rounded-full flex items-center justify-center text-sm ${
-                    n.category === "batch"
-                      ? "bg-orange-100 text-orange-500"
-                      : n.category === "ai"
-                        ? "bg-blue-100 text-blue-500"
-                        : n.category === "booking"
-                          ? "bg-green-100 text-green-500"
-                          : "bg-gray-100 text-gray-500"
-                  }`}
-                >
-                  {n.category === "batch" && <span>↻</span>}
-                  {n.category === "ai" && <span>🤖</span>}
-                  {n.category === "booking" && <span>✓</span>}
-                  {!n.category && <span>•</span>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-medium text-gray-900 truncate">
-                      {n.title}
-                    </p>
-                    <span className="text-xs text-gray-400 ml-2 flex-shrink-0">
-                      {formatTime(n.createdAt)}
+      {notifications.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center text-slate-500">
+          You have no notifications yet.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {notifications.map((n) => (
+            <button
+              type="button"
+              key={n.id}
+              onClick={() => markAsRead(n.id)}
+              className={`w-full rounded-2xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                n.read
+                  ? "border-slate-200 bg-white"
+                  : "border-orange-200 bg-orange-50"
+              }`}
+            >
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <p className="truncate text-base font-semibold text-slate-900">
+                    {n.title}
+                  </p>
+                  {!n.read && (
+                    <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
+                      New
                     </span>
-                  </div>
-                  <p className="text-sm text-gray-600">{n.message}</p>
-                  {typeof n.progress === "number" && (
-                    <div className="mt-2">
-                      <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-orange-400 transition-all"
-                          style={{
-                            width: `${Math.min(100, Math.max(0, n.progress))}%`,
-                          }}
-                        />
-                      </div>
-                      <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
-                        <span>{`${Math.min(100, Math.max(0, n.progress)).toFixed(0)}% Complete`}</span>
-                        {n.statusText && <span>{n.statusText}</span>}
-                      </div>
-                    </div>
                   )}
                 </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryClass(
+                      n.category,
+                    )}`}
+                  >
+                    {getCategoryLabel(n.category)}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {formatTime(n.createdAt)}
+                  </span>
+                </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+              <p className="text-sm text-slate-700">{n.message}</p>
+
+              {(n.reservationId || n.reservationStatusAtNow) && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  {n.reservationId && (
+                    <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">
+                      Reservation: {n.reservationId}
+                    </span>
+                  )}
+                  {n.reservationStatusAtNow && (
+                    <span className="rounded-md bg-sky-50 px-2 py-1 font-medium text-sky-700 ring-1 ring-sky-200">
+                      Status: {n.reservationStatusAtNow}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {typeof n.progress === "number" && (
+                <div className="mt-3">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full bg-orange-500 transition-all"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, n.progress))}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
+                    <span>{`${Math.min(100, Math.max(0, n.progress)).toFixed(0)}% Complete`}</span>
+                    {n.statusText && (
+                      <span className="font-medium">{n.statusText}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

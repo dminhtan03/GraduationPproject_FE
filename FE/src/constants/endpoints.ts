@@ -65,6 +65,11 @@ export const API_ENDPOINTS = {
     LIST: "/api/v1/feedback",
   },
 
+  NOTIFICATIONS: {
+    LIST: "/api/v1/notifications/getAll",
+    MARK_AS_READ: "/api/v1/notifications/markAsRead/:notificationId",
+  },
+
   DASHBOARD: {
     ALL_USERS: "/api/v1/dashboard/all-users",
     LOCK_USER: "/api/v1/dashboard/lock-user/:userId",

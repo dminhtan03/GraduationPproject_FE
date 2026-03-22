@@ -63,8 +63,12 @@ const mapPayloadToWebSocketMessage = (payload: unknown): WebSocketMessage => {
           id: raw.id,
           title: raw.title || "Notification",
           message: raw.content || raw.message || "",
+          content: raw.content,
           createdAt: raw.createdAt || new Date().toISOString(),
           category: raw.type || "system",
+          reservationId: raw.reservationId || raw.ReservationId,
+          reservationStatusAtNow: raw.reservationStatusAtNow,
+          isRead: raw.isRead,
         },
         timestamp: new Date().toISOString(),
       };

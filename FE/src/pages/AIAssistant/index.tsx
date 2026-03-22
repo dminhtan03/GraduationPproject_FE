@@ -20,7 +20,7 @@ import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 type Sender = "user" | "bot";
 
@@ -42,6 +42,18 @@ interface ChatSessionSummary {
 }
 
 const createId = () => Math.random().toString(36).slice(2);
+
+const formatClock = (value: string) =>
+  new Date(value).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const formatDate = (value: string) =>
+  new Date(value).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  });
 
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
@@ -169,32 +181,32 @@ const AIAssistantPage: React.FC = () => {
     return (
       <div
         key={message.id}
-        className={`flex mb-4 ${isUser ? "justify-end" : "justify-start"}`}
+        className={`mb-5 flex ${isUser ? "justify-end" : "justify-start"}`}
       >
         <div
-          className={`flex items-end gap-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}
+          className={`flex items-end gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}
         >
           <Avatar
             size={32}
             style={{
-              backgroundColor: isUser ? "#f97316" : "#e5e7eb",
-              color: isUser ? "#ffffff" : "#111827",
+              backgroundColor: isUser ? "#ea580c" : "#fed7aa",
+              color: isUser ? "#ffffff" : "#9a3412",
               fontSize: 12,
             }}
           >
             {isUser ? userInitials : <RobotOutlined />}
           </Avatar>
           <div
-            className={`max-w-xl rounded-2xl px-4 py-3 shadow-sm text-sm leading-relaxed ${
+            className={`max-w-[min(78vw,44rem)] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
               isUser
-                ? "bg-orange-500 text-white rounded-br-none"
-                : "bg-white text-gray-800 border border-gray-100 rounded-bl-none"
+                ? "rounded-br-md bg-orange-500 text-orange-50"
+                : "rounded-bl-md border border-orange-200 bg-white text-orange-900"
             }`}
           >
             <div>{message.text}</div>
-            <div className="mt-1 text-[11px] opacity-70 flex items-center gap-1">
+            <div className="mt-2 flex items-center gap-1 text-[11px] opacity-70">
               <ClockCircleOutlined />
-              <span>{new Date(message.createdAt).toLocaleTimeString()}</span>
+              <span>{formatClock(message.createdAt)}</span>
             </div>
           </div>
         </div>
@@ -211,31 +223,38 @@ const AIAssistantPage: React.FC = () => {
     return (
       <div
         key={s.roomId}
-        className="flex flex-col justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm min-w-[220px] max-w-xs mr-4 mb-3"
+        className="mb-3 mr-3 flex min-w-[220px] max-w-xs flex-col justify-between rounded-2xl border border-orange-200/80 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
       >
         <div>
-          <div className="flex items-center justify-between mb-1">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <Text strong>{s.locationCode || s.roomId}</Text>
-            <Tag color={s.status === "AVAILABLE" ? "green" : "red"}>
+            <Tag
+              color={s.status === "AVAILABLE" ? "green" : "red"}
+              className="mr-0"
+            >
               {s.status}
             </Tag>
           </div>
           {typeof s.score === "number" && (
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-orange-700/80">
               Match score: {s.score.toFixed(2)}
             </div>
           )}
         </div>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-4 flex gap-2">
           <Button
             type="primary"
             size="small"
-            className="flex-1 bg-orange-500 border-orange-500"
+            className="flex-1 border-orange-500 bg-orange-500"
             onClick={() => handleBookNow(s)}
           >
             Book Now
           </Button>
-          <Button size="small" className="flex-1" ghost>
+          <Button
+            size="small"
+            className="flex-1 border-orange-200 text-orange-700"
+            ghost
+          >
             Quick Reserve
           </Button>
         </div>
@@ -260,173 +279,208 @@ const AIAssistantPage: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-12 gap-6">
-      {/* Left: History */}
-      <div className="col-span-3">
-        <div className="h-full rounded-2xl bg-white border border-gray-200 shadow-sm p-4 flex flex-col">
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-1">
-              <Title level={5} className="mb-0">
-                History
-              </Title>
-              <Button
-                type="text"
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={handleNewChat}
-              />
-            </div>
-            <Input.Search placeholder="Search chats..." size="middle" />
-          </div>
+    <div className="relative overflow-hidden rounded-3xl border border-orange-200/80 bg-gradient-to-br from-orange-50 via-amber-50/50 to-white p-4 sm:p-6">
+      <div className="pointer-events-none absolute -top-20 -left-20 h-56 w-56 rounded-full bg-orange-200/45 blur-3xl" />
+      <div className="pointer-events-none absolute -right-16 -bottom-16 h-52 w-52 rounded-full bg-amber-200/45 blur-3xl" />
 
-          <div className="flex-1 overflow-y-auto pr-1">
-            {sessions.length === 0 ? (
-              <Empty
-                description="No conversations yet"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
-            ) : (
-              sessions.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={`w-full text-left rounded-xl px-3 py-2 mb-2 border transition-colors ${
-                    s.id === selectedSessionId
-                      ? "bg-orange-50 border-orange-200"
-                      : "bg-white border-gray-200 hover:bg-gray-50"
-                  }`}
-                  onClick={() => setSelectedSessionId(s.id)}
-                >
-                  <div className="text-sm font-medium text-gray-900 truncate">
-                    {s.title}
-                  </div>
-                  <div className="text-xs text-gray-500 truncate">
-                    {s.subtitle}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-
-          {/* Footer area intentionally left blank (no Manage Preferences) */}
-        </div>
-      </div>
-
-      {/* Right: Chat area */}
-      <div className="col-span-9 flex flex-col">
-        <div className="flex-1 rounded-2xl bg-gray-50 border border-gray-200 shadow-sm p-4 flex flex-col max-h-[70vh] overflow-hidden">
-          {/* Top: current summary */}
-          {selectedSession && (
+      <div className="relative grid grid-cols-1 gap-5 xl:grid-cols-12">
+        {/* Left: History */}
+        <div className="xl:col-span-4 2xl:col-span-3">
+          <div className="flex h-full flex-col rounded-3xl border border-orange-200/70 bg-white/90 p-4 shadow-sm backdrop-blur sm:p-5">
             <div className="mb-4">
-              <div className="flex items-center justify-start mb-1">
-                <Title level={5} className="mb-0">
-                  AI Assistant
-                </Title>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-orange-900">
+                  History
+                </h2>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={handleNewChat}
+                  className="text-orange-700"
+                />
               </div>
+              <Input.Search
+                placeholder="Search chats..."
+                size="middle"
+                className="rounded-xl"
+              />
             </div>
-          )}
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto pr-2 mb-4">
-            {messages.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-                Start by telling the assistant what kind of room you need.
-              </div>
-            ) : (
-              messages.map((m) => renderMessage(m))
-            )}
-            {isSending && (
-              <div className="flex mb-4 justify-start">
-                <div className="flex items-end gap-2 flex-row">
-                  <Avatar
-                    size={32}
-                    style={{
-                      backgroundColor: "#e5e7eb",
-                      color: "#111827",
-                      fontSize: 12,
-                    }}
+            <div className="flex-1 overflow-y-auto pr-1">
+              {sessions.length === 0 ? (
+                <Empty
+                  description="No conversations yet"
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                />
+              ) : (
+                sessions.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`mb-2.5 w-full rounded-2xl border px-3 py-2.5 text-left transition ${
+                      s.id === selectedSessionId
+                        ? "border-orange-500 bg-orange-500 text-orange-50 shadow"
+                        : "border-orange-200 bg-white hover:border-orange-300 hover:bg-orange-50"
+                    }`}
+                    onClick={() => setSelectedSessionId(s.id)}
                   >
-                    <RobotOutlined />
-                  </Avatar>
-                  <div className="max-w-xs rounded-2xl px-4 py-2 shadow-sm text-sm leading-relaxed bg-white text-gray-800 border border-gray-100 rounded-bl-none">
-                    <span className="typing-dots">
-                      <span />
-                      <span />
-                      <span />
-                    </span>
+                    <div className="truncate text-sm font-semibold">
+                      {s.title}
+                    </div>
+                    <div
+                      className={`truncate text-xs ${
+                        s.id === selectedSessionId
+                          ? "text-orange-100/85"
+                          : "text-orange-700/75"
+                      }`}
+                    >
+                      {s.subtitle}
+                    </div>
+                    <div
+                      className={`mt-1 text-[11px] ${
+                        s.id === selectedSessionId
+                          ? "text-orange-100/70"
+                          : "text-orange-700/60"
+                      }`}
+                    >
+                      {formatDate(s.createdAt)}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Chat area */}
+        <div className="xl:col-span-8 2xl:col-span-9">
+          <div className="flex h-[72vh] min-h-[560px] flex-col overflow-hidden rounded-3xl border border-orange-200/80 bg-white/90 p-4 shadow-sm backdrop-blur sm:p-5">
+            {/* Top: current summary */}
+            {selectedSession && (
+              <div className="mb-4 rounded-2xl border border-orange-200 bg-orange-50/70 px-4 py-3">
+                <div className="mb-1 flex items-center gap-2">
+                  <RobotOutlined className="text-orange-700" />
+                  <h2 className="text-base font-semibold text-orange-900">
+                    AI Assistant
+                  </h2>
+                </div>
+                <p className="text-xs text-orange-700/80">
+                  Ask for room suggestions, available slots, and booking
+                  guidance.
+                </p>
+              </div>
+            )}
+
+            {/* Messages */}
+            <div className="mb-4 flex-1 overflow-y-auto pr-2">
+              {messages.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-orange-300 bg-orange-50/60 p-6 text-center">
+                  <RobotOutlined className="mb-2 text-xl text-orange-400" />
+                  <p className="text-sm text-orange-700/80">
+                    Start by telling the assistant what kind of room you need.
+                  </p>
+                </div>
+              ) : (
+                messages.map((m) => renderMessage(m))
+              )}
+              {isSending && (
+                <div className="mb-4 flex justify-start">
+                  <div className="flex flex-row items-end gap-3">
+                    <Avatar
+                      size={32}
+                      style={{
+                        backgroundColor: "#fed7aa",
+                        color: "#9a3412",
+                        fontSize: 12,
+                      }}
+                    >
+                      <RobotOutlined />
+                    </Avatar>
+                    <div className="max-w-xs rounded-2xl rounded-bl-md border border-orange-200 bg-white px-4 py-2 text-sm leading-relaxed text-orange-900 shadow-sm">
+                      <span className="typing-dots">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                    </div>
                   </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Suggestions list */}
+            {suggestions.length > 0 && (
+              <div className="mb-4 rounded-2xl border border-orange-200 bg-orange-50/60 p-3.5">
+                <Text strong className="mb-2 block text-orange-900">
+                  Suggested rooms
+                </Text>
+                <div className="flex flex-wrap">
+                  {suggestions.map((s) => renderSuggestionCard(s))}
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
-          </div>
 
-          {/* Suggestions list */}
-          {suggestions.length > 0 && (
-            <div className="mb-4">
-              <Text strong className="block mb-2">
-                Suggested rooms
-              </Text>
-              <div className="flex flex-wrap">
-                {suggestions.map((s) => renderSuggestionCard(s))}
-              </div>
-            </div>
-          )}
-
-          {/* Quick actions */}
-          <div className="mb-3 flex flex-wrap gap-2">
-            <Button
-              size="small"
-              onClick={() =>
-                handleQuickAction("Check lab availability for this afternoon")
-              }
-            >
-              Check Lab availability
-            </Button>
-            <Button
-              size="small"
-              onClick={() =>
-                handleQuickAction(
-                  "Show me available rooms in the Epsilon building",
-                )
-              }
-            >
-              Show me map of Epsilon
-            </Button>
-            <Button
-              size="small"
-              onClick={() =>
-                handleQuickAction(
-                  "How do I book a group study room for 5 people?",
-                )
-              }
-            >
-              How to book for a group?
-            </Button>
-          </div>
-
-          {/* Input bar */}
-          <div className="flex items-center gap-3 pt-2 border-t border-gray-200">
-            <Input.TextArea
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onPressEnter={(e) => {
-                if (!e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
+            {/* Quick actions */}
+            <div className="mb-3 flex flex-wrap gap-2">
+              <Button
+                size="small"
+                className="rounded-full border-orange-200 bg-white text-orange-800 hover:border-orange-300 hover:text-orange-900"
+                onClick={() =>
+                  handleQuickAction("Check lab availability for this afternoon")
                 }
-              }}
-              autoSize={{ minRows: 1, maxRows: 3 }}
-              placeholder="Type a message to find rooms..."
-            />
-            <Button
-              type="primary"
-              shape="circle"
-              icon={<SendOutlined />}
-              loading={isSending}
-              onClick={() => handleSend()}
-              className="bg-orange-500 border-orange-500 flex-shrink-0"
-            />
+              >
+                Check Lab availability
+              </Button>
+              <Button
+                size="small"
+                className="rounded-full border-orange-200 bg-white text-orange-800 hover:border-orange-300 hover:text-orange-900"
+                onClick={() =>
+                  handleQuickAction(
+                    "Show me available rooms in the Epsilon building",
+                  )
+                }
+              >
+                Show me map of Epsilon
+              </Button>
+              <Button
+                size="small"
+                className="rounded-full border-orange-200 bg-white text-orange-800 hover:border-orange-300 hover:text-orange-900"
+                onClick={() =>
+                  handleQuickAction(
+                    "How do I book a group study room for 5 people?",
+                  )
+                }
+              >
+                How to book for a group?
+              </Button>
+            </div>
+
+            {/* Input bar */}
+            <div className="flex items-end gap-3 rounded-2xl border border-orange-200 bg-orange-50/70 p-2.5">
+              <Input.TextArea
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onPressEnter={(e) => {
+                  if (!e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                autoSize={{ minRows: 1, maxRows: 3 }}
+                placeholder="Type a message to find rooms..."
+                className="border-none bg-transparent shadow-none"
+              />
+              <Button
+                type="primary"
+                shape="circle"
+                icon={<SendOutlined />}
+                loading={isSending}
+                onClick={() => handleSend()}
+                className="h-10 w-10 shrink-0 border-orange-500 bg-orange-500"
+              />
+            </div>
           </div>
         </div>
       </div>
