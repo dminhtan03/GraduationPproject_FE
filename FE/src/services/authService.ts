@@ -193,6 +193,17 @@ export const getDefaultRouteByRole = (user: User | null): string => {
   return ROUTES.ROOM_LIST;
 };
 
+export const isAdminUser = (user: User | null): boolean => {
+  if (!user) return false;
+  const roles = user.roles ?? (user.role ? [user.role] : []);
+  return roles.some((role) => role === "ROLE_ADMIN" || role.includes("ADMIN"));
+};
+
+export const getCurrentUser = (): User | null => {
+  const token = localStorage.getItem(STORAGE_KEYS.USER_TOKEN);
+  return extractUserFromToken(token || undefined);
+};
+
 /**
  * Khôi phục phiên đăng nhập khi reload app:
  * - Ưu tiên access token trong localStorage

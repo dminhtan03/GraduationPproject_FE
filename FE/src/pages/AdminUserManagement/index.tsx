@@ -39,18 +39,6 @@ type ApiFieldError = {
 
 const PAGE_SIZE = 10;
 
-const SHEET_COLUMNS = [
-  "firstName",
-  "lastName",
-  "phoneNumber",
-  "address",
-  "department",
-  "email",
-  "gender",
-  "password",
-  "role",
-] as const;
-
 const normalizeRole = (value?: string) => {
   const raw = String(value || "")
     .trim()
@@ -58,51 +46,6 @@ const normalizeRole = (value?: string) => {
   if (!raw) return "USER";
   return raw.startsWith("ROLE_") ? raw.replace("ROLE_", "") : raw;
 };
-
-const parseCsvLine = (line: string): string[] => {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-
-    if (char === '"') {
-      if (inQuotes && line[index + 1] === '"') {
-        current += '"';
-        index += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === "," && !inQuotes) {
-      result.push(current.trim());
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  result.push(current.trim());
-  return result;
-};
-
-const toRegisterPayload = (
-  row: Record<string, string>,
-): RegisterUserPayload => ({
-  firstName: row.firstName || "",
-  lastName: row.lastName || "",
-  phoneNumber: row.phoneNumber || "",
-  address: row.address || "",
-  department: row.department || "",
-  email: row.email || "",
-  gender: row.gender || "",
-  password: row.password || "",
-  role: normalizeRole(row.role),
-});
 
 const AdminUserManagementPage: React.FC = () => {
   const navigate = useNavigate();
@@ -130,6 +73,9 @@ const AdminUserManagementPage: React.FC = () => {
     message: string;
   } | null>(null);
   const [confirmActionUser, setConfirmActionUser] = useState<AdminUser | null>(
+    null,
+  );
+  const [reasonViewerUser, setReasonViewerUser] = useState<AdminUser | null>(
     null,
   );
   const [addUserForm, setAddUserForm] = useState<RegisterUserPayload>({
@@ -249,94 +195,24 @@ const AdminUserManagementPage: React.FC = () => {
     setConfirmActionUser(null);
   };
 
+  const openReasonPopup = (user: AdminUser) => {
+    setReasonViewerUser(user);
+  };
+
+  const closeReasonPopup = () => {
+    setReasonViewerUser(null);
+  };
+
+  const getReasonText = (user: AdminUser | null): string => {
+    if (!user) return "You violate the terms of service";
+    const rawReason = String(user.reason || "").trim();
+    if (rawReason) return rawReason;
+    return "You violate the terms of service";
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate(ROUTES.LOGIN);
-  };
-
-  const handleImportSheet = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!file) return;
-
-    setImportResult(null);
-    setError(null);
-
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      setError("Please upload a .csv file exported from Excel sheet.");
-      return;
-    }
-
-    setImporting(true);
-    try {
-      const content = await file.text();
-      const lines = content
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
-
-      if (lines.length < 2) {
-        setError("CSV file is empty or missing data rows.");
-        return;
-      }
-
-      const headers = parseCsvLine(lines[0]).map((header) => header.trim());
-      const missingColumns = SHEET_COLUMNS.filter(
-        (column) => !headers.includes(column),
-      );
-
-      if (missingColumns.length) {
-        setError(
-          `Missing columns: ${missingColumns.join(", ")}. Required columns: ${SHEET_COLUMNS.join(", ")}`,
-        );
-        return;
-      }
-
-      const rows = lines.slice(1).map((line) => {
-        const values = parseCsvLine(line);
-        const item: Record<string, string> = {};
-        headers.forEach((header, index) => {
-          item[header] = (values[index] || "").trim();
-        });
-        return item;
-      });
-
-      let successCount = 0;
-      const failedRows: Array<{ row: number; reason: string }> = [];
-
-      for (let index = 0; index < rows.length; index += 1) {
-        const payload = toRegisterPayload(rows[index]);
-        try {
-          await adminService.registerUser(payload);
-          successCount += 1;
-        } catch (e: unknown) {
-          failedRows.push({
-            row: index + 2,
-            reason: extractApiMessage(e, "Register failed"),
-          });
-        }
-      }
-
-      const failCount = failedRows.length;
-      const summary = `Imported ${successCount}/${rows.length} users successfully.${
-        failCount
-          ? ` Failed: ${failCount} row(s) (${failedRows
-              .slice(0, 3)
-              .map((item) => `row ${item.row}: ${item.reason}`)
-              .join(" | ")})`
-          : ""
-      }`;
-
-      setImportResult(summary);
-      await loadUsers();
-    } catch (e: unknown) {
-      setError(extractApiMessage(e, "Unable to import users from sheet"));
-    } finally {
-      setImporting(false);
-    }
   };
 
   const resetAddUserForm = () => {
@@ -808,28 +684,40 @@ const AdminUserManagementPage: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => requestToggleLockConfirm(user)}
-                        disabled={actionLoadingId === user.id}
-                        className={[
-                          "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
-                          user.locked
-                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                            : "bg-amber-100 text-amber-700 hover:bg-amber-200",
-                        ].join(" ")}
-                      >
-                        {user.locked ? (
-                          <LockOpenIcon className="h-4 w-4" />
-                        ) : (
-                          <LockClosedIcon className="h-4 w-4" />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => requestToggleLockConfirm(user)}
+                          disabled={actionLoadingId === user.id}
+                          className={[
+                            "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                            user.locked
+                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                              : "bg-amber-100 text-amber-700 hover:bg-amber-200",
+                          ].join(" ")}
+                        >
+                          {user.locked ? (
+                            <LockOpenIcon className="h-4 w-4" />
+                          ) : (
+                            <LockClosedIcon className="h-4 w-4" />
+                          )}
+                          {actionLoadingId === user.id
+                            ? "Updating..."
+                            : user.locked
+                              ? "Unlock"
+                              : "Lock"}
+                        </button>
+
+                        {user.locked && (
+                          <button
+                            type="button"
+                            onClick={() => openReasonPopup(user)}
+                            className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            Reason
+                          </button>
                         )}
-                        {actionLoadingId === user.id
-                          ? "Updating..."
-                          : user.locked
-                            ? "Unlock"
-                            : "Lock"}
-                      </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -855,7 +743,7 @@ const AdminUserManagementPage: React.FC = () => {
                   Phone:{" "}
                   <span className="font-medium">{user.phoneNumber || "-"}</span>
                 </p>
-                <div className="mt-3 flex items-center justify-between">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <span
                     className={[
                       "rounded-full px-2.5 py-1 text-xs font-semibold",
@@ -866,28 +754,40 @@ const AdminUserManagementPage: React.FC = () => {
                   >
                     {user.locked ? "LOCKED" : "ACTIVE"}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => requestToggleLockConfirm(user)}
-                    disabled={actionLoadingId === user.id}
-                    className={[
-                      "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
-                      user.locked
-                        ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                        : "bg-amber-100 text-amber-700 hover:bg-amber-200",
-                    ].join(" ")}
-                  >
-                    {user.locked ? (
-                      <LockOpenIcon className="h-4 w-4" />
-                    ) : (
-                      <LockClosedIcon className="h-4 w-4" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => requestToggleLockConfirm(user)}
+                      disabled={actionLoadingId === user.id}
+                      className={[
+                        "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition",
+                        user.locked
+                          ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                          : "bg-amber-100 text-amber-700 hover:bg-amber-200",
+                      ].join(" ")}
+                    >
+                      {user.locked ? (
+                        <LockOpenIcon className="h-4 w-4" />
+                      ) : (
+                        <LockClosedIcon className="h-4 w-4" />
+                      )}
+                      {actionLoadingId === user.id
+                        ? "Updating..."
+                        : user.locked
+                          ? "Unlock"
+                          : "Lock"}
+                    </button>
+
+                    {user.locked && (
+                      <button
+                        type="button"
+                        onClick={() => openReasonPopup(user)}
+                        className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Reason
+                      </button>
                     )}
-                    {actionLoadingId === user.id
-                      ? "Updating..."
-                      : user.locked
-                        ? "Unlock"
-                        : "Lock"}
-                  </button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -979,6 +879,33 @@ const AdminUserManagementPage: React.FC = () => {
                   : confirmActionUser.locked
                     ? "Confirm Unlock"
                     : "Confirm Lock"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reasonViewerUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">
+              User reason
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {reasonViewerUser.fullName || "This user"}
+            </p>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+              {getReasonText(reasonViewerUser)}
+            </div>
+
+            <div className="mt-5 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={closeReasonPopup}
+                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+              >
+                Close
               </button>
             </div>
           </div>

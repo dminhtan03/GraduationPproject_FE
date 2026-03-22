@@ -9,6 +9,7 @@ export type AdminUser = {
   department: string;
   enabled: boolean;
   locked: boolean;
+  reason?: string;
 };
 
 export type RegisterUserPayload = {
@@ -45,6 +46,9 @@ type BackendUser = {
   enabled?: boolean;
   locked?: boolean;
   isLocked?: boolean;
+  reason?: string | null;
+  lockReason?: string | null;
+  lockedReason?: string | null;
 };
 
 const extractSuccessMessage = (payload: unknown, fallback: string): string => {
@@ -79,6 +83,7 @@ const normalizeUser = (user: BackendUser): AdminUser => ({
   department: String(user.department || ""),
   enabled: Boolean(user.enabled),
   locked: Boolean(user.locked ?? user.isLocked),
+  reason: String(user.reason ?? user.lockReason ?? user.lockedReason ?? ""),
 });
 
 const extractUsersAndMeta = (

@@ -3,6 +3,11 @@
 import React from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { ROUTES } from "../constants";
+import {
+  getCurrentUser,
+  getDefaultRouteByRole,
+  isAdminUser,
+} from "../services/authService";
 
 // Lazy load components để optimize performance
 const MainLayout = React.lazy(() => import("../components/Layout/MainLayout"));
@@ -35,6 +40,41 @@ const AdminBuildingFloorsPage = React.lazy(
 const AdminFloorLayoutPage = React.lazy(
   () => import("../pages/AdminFloorLayout"),
 );
+const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
+const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
+
+type AccessMode = "authenticated" | "admin-only" | "user-only";
+
+// eslint-disable-next-line react-refresh/only-export-components
+const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const user = getCurrentUser();
+  if (!user) return <>{children}</>;
+  return <Navigate to={getDefaultRouteByRole(user)} replace />;
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
+const ProtectedRoute: React.FC<{
+  children: React.ReactNode;
+  mode?: AccessMode;
+}> = ({ children, mode = "authenticated" }) => {
+  const user = getCurrentUser();
+
+  if (!user) {
+    return <Navigate to={ROUTES.LOGIN} replace />;
+  }
+
+  if (mode === "admin-only" && !isAdminUser(user)) {
+    return <Navigate to={ROUTES.FORBIDDEN} replace />;
+  }
+
+  if (mode === "user-only" && isAdminUser(user)) {
+    return <Navigate to={ROUTES.FORBIDDEN} replace />;
+  }
+
+  return <>{children}</>;
+};
 
 // Error boundary component cho routes
 // eslint-disable-next-line react-refresh/only-export-components
@@ -81,17 +121,39 @@ export const router = createBrowserRouter([
   {
     path: ROUTES.LOGIN,
     element: (
-      <SuspenseWrapper>
-        <LoginPage />
-      </SuspenseWrapper>
+      <PublicOnlyRoute>
+        <SuspenseWrapper>
+          <LoginPage />
+        </SuspenseWrapper>
+      </PublicOnlyRoute>
     ),
     errorElement: <ErrorBoundary />,
   },
   {
     path: ROUTES.FORGOT_PASSWORD,
     element: (
+      <PublicOnlyRoute>
+        <SuspenseWrapper>
+          <ForgotPasswordPage />
+        </SuspenseWrapper>
+      </PublicOnlyRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.FORBIDDEN,
+    element: (
       <SuspenseWrapper>
-        <ForgotPasswordPage />
+        <ForbiddenPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.NOT_FOUND,
+    element: (
+      <SuspenseWrapper>
+        <NotFoundPage />
       </SuspenseWrapper>
     ),
     errorElement: <ErrorBoundary />,
@@ -99,8 +161,37 @@ export const router = createBrowserRouter([
   {
     path: ROUTES.ADMIN_DASHBOARD,
     element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminUserManagementPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_BUILDING_MANAGEMENT,
+    element: (
       <SuspenseWrapper>
-        <AdminUserManagementPage />
+        <AdminBuildingManagementPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_BUILDING_FLOORS,
+    element: (
+      <SuspenseWrapper>
+        <AdminBuildingFloorsPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_FLOOR_LAYOUT,
+    element: (
+      <SuspenseWrapper>
+        <AdminFloorLayoutPage />
       </SuspenseWrapper>
     ),
     errorElement: <ErrorBoundary />,
@@ -135,9 +226,11 @@ export const router = createBrowserRouter([
   {
     path: "/",
     element: (
-      <SuspenseWrapper>
-        <MainLayout />
-      </SuspenseWrapper>
+      <ProtectedRoute mode="user-only">
+        <SuspenseWrapper>
+          <MainLayout />
+        </SuspenseWrapper>
+      </ProtectedRoute>
     ),
     errorElement: <ErrorBoundary />,
     children: [
@@ -239,7 +332,11 @@ export const router = createBrowserRouter([
   // Catch all route - redirect to home
   {
     path: "*",
-    element: <Navigate to={ROUTES.LOGIN} replace />,
+    element: (
+      <SuspenseWrapper>
+        <NotFoundPage />
+      </SuspenseWrapper>
+    ),
   },
 ]);
 

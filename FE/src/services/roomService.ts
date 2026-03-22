@@ -1,6 +1,7 @@
 import { api } from "./api";
 import type { Room, RoomStatus } from "../types";
 import type { MapRoomStatus } from "../utils";
+import { API_CONFIG } from "../constants";
 import { API_ENDPOINTS, buildUrl } from "../constants/endpoints";
 
 export interface GetRoomParams {
@@ -45,6 +46,76 @@ export interface RoomStatusItem {
   status: MapRoomStatus;
   score: number | null;
 }
+
+type UnknownRecord = Record<string, unknown>;
+
+const extractData = (raw: unknown): unknown => {
+  if (!raw || typeof raw !== "object") return raw;
+  const body = raw as UnknownRecord;
+  const firstData = body.data;
+
+  if (firstData && typeof firstData === "object") {
+    const nested = (firstData as UnknownRecord).data;
+    return nested ?? firstData;
+  }
+
+  return firstData ?? raw;
+};
+
+const toAbsoluteImageUrl = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined;
+
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("blob:")
+  ) {
+    return trimmed;
+  }
+
+  const base = (API_CONFIG.BASE_URL || "").replace(/\/+$/, "");
+  if (!base) return trimmed;
+
+  return trimmed.startsWith("/") ? `${base}${trimmed}` : `${base}/${trimmed}`;
+};
+
+const normalizeRoomImages = (
+  images: unknown,
+): Array<{ id?: string; imageUrl?: string }> => {
+  if (!Array.isArray(images)) return [];
+
+  return images
+    .map((item) => {
+      if (!item || typeof item !== "object") return undefined;
+
+      const image = item as UnknownRecord;
+      const imageUrl = toAbsoluteImageUrl(
+        image.imageUrl ?? image.url ?? image.image ?? image.path,
+      );
+
+      return {
+        id: typeof image.id === "string" ? image.id : undefined,
+        imageUrl,
+      };
+    })
+    .filter((img): img is { id?: string; imageUrl?: string } =>
+      Boolean(img && (img.id || img.imageUrl)),
+    );
+};
+
+const normalizeRoomDetail = (detail: unknown): UnknownRecord => {
+  if (!detail || typeof detail !== "object") return {};
+
+  const mapped = detail as UnknownRecord;
+  return {
+    ...mapped,
+    images: normalizeRoomImages(mapped.images),
+  };
+};
 
 // Flatten rooms from buildingResponse -> floors -> rooms
 function flattenRooms(data: any, params: GetRoomParams): Room[] {
@@ -139,7 +210,22 @@ export const roomService = {
     const res = await api.get<any>(
       buildUrl(API_ENDPOINTS.ROOMS.DETAIL, { id: roomId }),
     );
-    return res.data?.data || res.data;
+    const detail = normalizeRoomDetail(extractData(res));
+
+    if (Array.isArray(detail.images) && detail.images.length > 0) {
+      return detail;
+    }
+
+    try {
+      const imageRes = await api.get<any>(`/api/v1/room-images/room/${roomId}`);
+      const images = normalizeRoomImages(extractData(imageRes));
+      return {
+        ...detail,
+        images,
+      };
+    } catch {
+      return detail;
+    }
   },
 
   // start add updateLayout method

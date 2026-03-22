@@ -44,7 +44,8 @@ const Header: React.FC = () => {
     typeof window !== "undefined" ? window.innerWidth < 1024 : false,
   );
 
-  const { notifications, unreadCount, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAllAsRead, markAsRead } =
+    useNotifications();
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -109,6 +110,26 @@ const Header: React.FC = () => {
   };
 
   const latestNotifications = notifications.slice(0, 3);
+
+  const getCategoryBadgeClass = (category?: string) => {
+    if (category === "booking") {
+      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+    }
+    if (category === "ai") {
+      return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
+    }
+    return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+  };
+
+  const getCategoryLabel = (category?: string) => {
+    if (category === "booking") {
+      return "Booking";
+    }
+    if (category === "ai") {
+      return "AI";
+    }
+    return "System";
+  };
 
   const handleBellClick = () => {
     setIsNotificationOpen((prev) => !prev);
@@ -213,108 +234,69 @@ const Header: React.FC = () => {
       </div>
 
       {isNotificationOpen && (
-        <div className="absolute right-2 sm:right-4 top-14 sm:top-16 w-[calc(100vw-1rem)] sm:w-[340px] md:w-[380px] bg-white rounded-2xl shadow-xl border border-gray-200 z-50 flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
-            <span className="font-semibold text-gray-900">Notifications</span>
+        <div className="absolute right-2 sm:right-4 top-14 sm:top-16 z-50 w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:w-[360px] md:w-[400px]">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Notifications
+              </p>
+            </div>
             {notifications.length > 0 && (
               <button
                 type="button"
                 onClick={markAllAsRead}
-                className="text-xs text-orange-500 hover:text-orange-600 hover:underline"
+                className="rounded-full px-2.5 py-1 text-xs font-medium text-orange-600 transition hover:bg-orange-50"
               >
                 Mark all as read
               </button>
             )}
           </div>
-          <div className="max-h-72 overflow-y-auto px-3 py-2 bg-gray-50">
+          <div className="max-h-80 space-y-2 overflow-y-auto bg-slate-50 px-3 py-3">
             {latestNotifications.length === 0 ? (
-              <div className="text-sm text-gray-400 text-center py-5">
+              <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
                 You have no notifications yet.
               </div>
             ) : (
-              latestNotifications.map((n, index) => (
-                <div
+              latestNotifications.map((n) => (
+                <button
+                  type="button"
                   key={n.id}
-                  className={
-                    index === 0 && n.category === "batch"
-                      ? "mb-2.5 last:mb-0 rounded-2xl bg-orange-50 border border-orange-100 shadow-sm px-4 py-3"
-                      : "flex items-start gap-3 mb-2.5 last:mb-0 rounded-xl bg-white px-3 py-2.5 shadow-sm border border-gray-100"
-                  }
+                  onClick={() => markAsRead(n.id)}
+                  className={`w-full rounded-xl border px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                    n.read
+                      ? "border-slate-200 bg-white"
+                      : "border-orange-200 bg-orange-50"
+                  }`}
                 >
-                  {index === 0 && n.category === "batch" ? (
-                    <>
-                      <div className="flex items-start gap-3 mb-2">
-                        <div className="mt-1 w-8 h-8 rounded-full flex items-center justify-center text-xs bg-orange-100 text-orange-500">
-                          ↻
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-gray-900 text-sm">
-                            {n.title}
-                          </p>
-                          <p className="text-xs text-gray-600 truncate">
-                            {n.message}
-                          </p>
-                        </div>
-                      </div>
-                      {typeof n.progress === "number" && (
-                        <div className="mt-1">
-                          <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-orange-400"
-                              style={{
-                                width: `${Math.min(
-                                  100,
-                                  Math.max(0, n.progress),
-                                )}%`,
-                              }}
-                            />
-                          </div>
-                          <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500">
-                            <span>{`${Math.min(
-                              100,
-                              Math.max(0, n.progress),
-                            ).toFixed(0)}% Complete`}</span>
-                            {n.statusText && (
-                              <span className="text-orange-500 font-medium">
-                                {n.statusText}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <div
-                        className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center text-xs ${
-                          n.category === "ai"
-                            ? "bg-blue-100 text-blue-500"
-                            : n.category === "booking"
-                              ? "bg-green-100 text-green-500"
-                              : "bg-gray-100 text-gray-500"
-                        }`}
-                      >
-                        {n.category === "ai" && <span>🤖</span>}
-                        {n.category === "booking" && <span>✓</span>}
-                        {!n.category && <span>•</span>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 text-sm">
-                          {n.title}
-                        </p>
-                        <p className="text-xs text-gray-600 mb-0.5">
-                          {n.message}
-                        </p>
-                        <span className="text-[11px] text-gray-400">
-                          {new Date(n.createdAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {n.title}
+                    </p>
+                    <span
+                      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${getCategoryBadgeClass(
+                        n.category,
+                      )}`}
+                    >
+                      {getCategoryLabel(n.category)}
+                    </span>
+                  </div>
+                  <p className="max-h-10 overflow-hidden text-xs text-slate-600">
+                    {n.message}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>
+                      {new Date(n.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    {!n.read && (
+                      <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 font-medium text-orange-700">
+                        New
+                      </span>
+                    )}
+                  </div>
+                </button>
               ))
             )}
           </div>
@@ -324,7 +306,7 @@ const Header: React.FC = () => {
               setIsNotificationOpen(false);
               navigate(ROUTES.NOTIFICATIONS);
             }}
-            className="px-4 py-2.5 text-center text-sm font-semibold text-orange-500 border-t border-gray-100 hover:bg-orange-50"
+            className="w-full border-t border-slate-100 px-4 py-3 text-center text-sm font-semibold text-orange-600 transition hover:bg-orange-50"
           >
             See All Notifications
           </button>
