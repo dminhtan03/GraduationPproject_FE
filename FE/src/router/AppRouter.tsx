@@ -172,54 +172,33 @@ export const router = createBrowserRouter([
   {
     path: ROUTES.ADMIN_BUILDING_MANAGEMENT,
     element: (
-      <SuspenseWrapper>
-        <AdminBuildingManagementPage />
-      </SuspenseWrapper>
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminBuildingManagementPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
     ),
     errorElement: <ErrorBoundary />,
   },
   {
     path: ROUTES.ADMIN_BUILDING_FLOORS,
     element: (
-      <SuspenseWrapper>
-        <AdminBuildingFloorsPage />
-      </SuspenseWrapper>
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminBuildingFloorsPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
     ),
     errorElement: <ErrorBoundary />,
   },
   {
     path: ROUTES.ADMIN_FLOOR_LAYOUT,
     element: (
-      <SuspenseWrapper>
-        <AdminFloorLayoutPage />
-      </SuspenseWrapper>
-    ),
-    errorElement: <ErrorBoundary />,
-  },
-  {
-    path: ROUTES.ADMIN_BUILDING_MANAGEMENT,
-    element: (
-      <SuspenseWrapper>
-        <AdminBuildingManagementPage />
-      </SuspenseWrapper>
-    ),
-    errorElement: <ErrorBoundary />,
-  },
-  {
-    path: ROUTES.ADMIN_BUILDING_FLOORS,
-    element: (
-      <SuspenseWrapper>
-        <AdminBuildingFloorsPage />
-      </SuspenseWrapper>
-    ),
-    errorElement: <ErrorBoundary />,
-  },
-  {
-    path: ROUTES.ADMIN_FLOOR_LAYOUT,
-    element: (
-      <SuspenseWrapper>
-        <AdminFloorLayoutPage />
-      </SuspenseWrapper>
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminFloorLayoutPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
     ),
     errorElement: <ErrorBoundary />,
   },
