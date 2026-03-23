@@ -72,10 +72,10 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
         <nav className="flex-1 space-y-2 px-4 py-5">
           <Link
-            to="/admin/user-management"
+            to={ROUTES.ADMIN_DASHBOARD}
             className={[
               "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
-              location.pathname.includes("/admin/user-management")
+              location.pathname.includes(ROUTES.ADMIN_DASHBOARD)
                 ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
                 : "text-slate-600 hover:bg-slate-50",
             ].join(" ")}
