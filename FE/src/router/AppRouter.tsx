@@ -7,7 +7,9 @@ import {
   getCurrentUser,
   getDefaultRouteByRole,
   isAdminUser,
+  restoreSession,
 } from "../services/authService";
+import type { User } from "../types";
 
 // Lazy load components để optimize performance
 const MainLayout = React.lazy(() => import("../components/Layout/MainLayout"));
@@ -46,12 +48,57 @@ const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 
 type AccessMode = "authenticated" | "admin-only" | "user-only";
 
+const useResolvedUser = () => {
+  const [user, setUser] = React.useState<User | null>(() => getCurrentUser());
+  const [isResolving, setIsResolving] = React.useState<boolean>(() => !user);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const resolve = async () => {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        if (!isMounted) return;
+        setUser(currentUser);
+        setIsResolving(false);
+        return;
+      }
+
+      try {
+        const restoredUser = await restoreSession();
+        if (!isMounted) return;
+        setUser(restoredUser);
+      } finally {
+        if (!isMounted) return;
+        setIsResolving(false);
+      }
+    };
+
+    resolve();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  return { user, isResolving };
+};
+
 // eslint-disable-next-line react-refresh/only-export-components
 const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const user = getCurrentUser();
+  const { user, isResolving } = useResolvedUser();
+  if (isResolving) return <PageLoading />;
   if (!user) return <>{children}</>;
+  return <Navigate to={getDefaultRouteByRole(user)} replace />;
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
+const RoleRedirect: React.FC = () => {
+  const { user, isResolving } = useResolvedUser();
+  if (isResolving) return <PageLoading />;
+  if (!user) return <Navigate to={ROUTES.LOGIN} replace />;
   return <Navigate to={getDefaultRouteByRole(user)} replace />;
 };
 
@@ -60,7 +107,11 @@ const ProtectedRoute: React.FC<{
   children: React.ReactNode;
   mode?: AccessMode;
 }> = ({ children, mode = "authenticated" }) => {
-  const user = getCurrentUser();
+  const { user, isResolving } = useResolvedUser();
+
+  if (isResolving) {
+    return <PageLoading />;
+  }
 
   if (!user) {
     return <Navigate to={ROUTES.LOGIN} replace />;
@@ -206,7 +257,7 @@ export const router = createBrowserRouter([
   {
     path: "/",
     element: (
-      <ProtectedRoute mode="user-only">
+      <ProtectedRoute mode="authenticated">
         <SuspenseWrapper>
           <MainLayout />
         </SuspenseWrapper>
@@ -216,7 +267,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate to={ROUTES.LOGIN} replace />,
+        element: <RoleRedirect />,
       },
       {
         path: ROUTES.ROOM_LIST,

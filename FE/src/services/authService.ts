@@ -60,6 +60,12 @@ const decodeJwt = (token: string): Record<string, unknown> | null => {
   }
 };
 
+const isTokenExpired = (payload: Record<string, unknown>): boolean => {
+  const exp = payload.exp;
+  if (typeof exp !== "number") return true;
+  return exp * 1000 <= Date.now();
+};
+
 // Chuẩn hoá dữ liệu user từ JWT payload (BE: user=fullName, sub=email, roles=authorities)
 const parseRoles = (roles: unknown): string[] => {
   if (!Array.isArray(roles)) return [];
@@ -76,6 +82,7 @@ const extractUserFromToken = (accessToken: string | undefined): User | null => {
   if (!accessToken) return null;
   const payload = decodeJwt(accessToken);
   if (!payload) return null;
+  if (isTokenExpired(payload)) return null;
 
   const roles = parseRoles(payload.roles);
   const role = roles[0] ?? undefined;
@@ -189,7 +196,7 @@ export const getProfile = async (): Promise<ApiResponse<unknown>> => {
 export const getDefaultRouteByRole = (user: User | null): string => {
   if (!user?.role && !user?.roles?.length) return ROUTES.ROOM_LIST;
   const roles = user.roles ?? (user.role ? [user.role] : []);
-  if (roles.some((r) => r === "ROLE_ADMIN" || (r && r.includes("ADMIN")))) {
+  if (roles.some((r) => r === "ROLE_ADMIN" || r === "ADMIN")) {
     return ROUTES.ADMIN_DASHBOARD;
   }
   return ROUTES.ROOM_LIST;
@@ -198,12 +205,16 @@ export const getDefaultRouteByRole = (user: User | null): string => {
 export const isAdminUser = (user: User | null): boolean => {
   if (!user) return false;
   const roles = user.roles ?? (user.role ? [user.role] : []);
-  return roles.some((role) => role === "ROLE_ADMIN" || role.includes("ADMIN"));
+  return roles.some((role) => role === "ROLE_ADMIN" || role === "ADMIN");
 };
 
 export const getCurrentUser = (): User | null => {
   const token = localStorage.getItem(STORAGE_KEYS.USER_TOKEN);
-  return extractUserFromToken(token || undefined);
+  const user = extractUserFromToken(token || undefined);
+  if (!user && token) {
+    localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
+  }
+  return user;
 };
 
 /**
