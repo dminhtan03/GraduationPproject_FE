@@ -36,8 +36,6 @@ const AdminBuildingFloorsPage = React.lazy(
 const AdminFloorLayoutPage = React.lazy(
   () => import("../pages/AdminFloorLayout"),
 );
-const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
-const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 
 // Error boundary component cho routes
 // eslint-disable-next-line react-refresh/only-export-components
@@ -131,24 +129,6 @@ export const router = createBrowserRouter([
     element: (
       <SuspenseWrapper>
         <AdminFloorLayoutPage />
-      </SuspenseWrapper>
-    ),
-    errorElement: <ErrorBoundary />,
-  },
-  {
-    path: ROUTES.FORBIDDEN,
-    element: (
-      <SuspenseWrapper>
-        <ForbiddenPage />
-      </SuspenseWrapper>
-    ),
-    errorElement: <ErrorBoundary />,
-  },
-  {
-    path: ROUTES.NOT_FOUND,
-    element: (
-      <SuspenseWrapper>
-        <NotFoundPage />
       </SuspenseWrapper>
     ),
     errorElement: <ErrorBoundary />,
@@ -268,7 +248,7 @@ export const router = createBrowserRouter([
   // Catch all route - redirect to home
   {
     path: "*",
-    element: <Navigate to={ROUTES.FORBIDDEN} replace />,
+    element: <Navigate to={ROUTES.LOGIN} replace />,
   },
 ]);
 

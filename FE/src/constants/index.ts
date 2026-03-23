@@ -30,8 +30,6 @@ export const ROUTES = {
   ADMIN_BUILDING_MANAGEMENT: "/admin/buildings",
   ADMIN_BUILDING_FLOORS: "/admin/buildings/:buildingId/floors",
   ADMIN_FLOOR_LAYOUT: "/admin/buildings/:buildingId/floors/:floorId/layout",
-  FORBIDDEN: "/403",
-  NOT_FOUND: "/404",
   // end add admin building routes
 } as const;
 

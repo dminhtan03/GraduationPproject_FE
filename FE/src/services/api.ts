@@ -4,7 +4,6 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 import { ApiResponse, ApiError } from "../types";
 import { API_CONFIG, STORAGE_KEYS } from "../constants";
 import { API_ENDPOINTS } from "../constants/endpoints";
-import { ROUTES } from "../constants";
 import { handleApiError, logError } from "../utils/errorHandlers";
 
 // Helper: đọc refresh token từ cookie (do FE lưu)
@@ -107,14 +106,10 @@ const createAxiosInstance = (): AxiosInstance => {
         }
       }
 
-      // Token/authorization related failures should be redirected to 404 screen.
+      // Nếu vẫn 401 hoặc refresh thất bại, xoá token và đưa về login
       if (apiError.status === 401) {
         localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
-        window.location.href = ROUTES.NOT_FOUND;
-      }
-
-      if (apiError.status === 403) {
-        window.location.href = ROUTES.NOT_FOUND;
+        window.location.href = "/login";
       }
 
       return Promise.reject(apiError);

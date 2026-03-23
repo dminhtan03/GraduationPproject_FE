@@ -1,6 +1,7 @@
 import { api } from "./api";
 import { API_ENDPOINTS } from "../constants/endpoints";
 import { buildUrl } from "../constants/endpoints";
+import { API_CONFIG } from "../constants";
 import type {
   ApiError,
   CreateReservationRequest,
@@ -282,27 +283,137 @@ export const reservationService = {
 
   async getBookingDetail(reservationId: string): Promise<Record<string, unknown>> {
     const normalizedId = String(reservationId);
-    const candidates = [
-      buildUrl(`${API_ENDPOINTS.ROOMS.BOOK}/:id`, { id: normalizedId }),
-      buildUrl(`${API_ENDPOINTS.ROOMS.MY_STATUS}/:id`, { id: normalizedId }),
-      buildUrl("/api/v1/reservations/detail/:id", { id: normalizedId }),
-    ];
+    if (!normalizedId) {
+      throw { message: "Missing reservation id", status: 400 };
+    }
+
+    const endpointCandidates = [API_ENDPOINTS.ROOMS.MY_STATUS, API_ENDPOINTS.ROOMS.BOOK];
 
     let lastError: unknown;
-    for (const endpoint of candidates) {
+    for (const endpoint of endpointCandidates) {
       try {
-        const response = await api.get<any>(endpoint);
+        const response = await api.get<any>(endpoint, {
+          params: {
+            page: 0,
+            size: 100,
+          },
+        });
+
         const payload = response.data || {};
-        const data = payload?.data ?? payload;
-        if (data && typeof data === "object") {
-          return data as Record<string, unknown>;
+        const items = toArray(payload);
+        const found = items.find((item) => {
+          const itemId =
+            item?.id != null
+              ? String(item.id)
+              : item?.reservationId != null
+                ? String(item.reservationId)
+                : "";
+          return itemId === normalizedId;
+        });
+
+        if (found && typeof found === "object") {
+          return found as Record<string, unknown>;
         }
       } catch (error) {
         lastError = error;
       }
     }
 
-    throw lastError || { message: "Unable to load booking detail", status: 500 };
+    throw lastError || { message: "Unable to load booking detail", status: 404 };
+  },
+
+  async getRoomImagesByRoomId(roomId: string): Promise<string[]> {
+    const normalizedRoomId = String(roomId || "").trim();
+    if (!normalizedRoomId) return [];
+
+    const endpoint = buildUrl(API_ENDPOINTS.ROOMS.ROOM_IMAGES_BY_ROOM, {
+      roomId: normalizedRoomId,
+    });
+
+    const response = await api.get<any>(endpoint);
+    const payload = response.data || {};
+    const source = payload?.data ?? payload;
+
+    const rawItems = toArray(source);
+    const items =
+      rawItems.length > 0
+        ? rawItems
+        : source && typeof source === "object"
+          ? [source]
+          : [];
+
+    const toAbsoluteUrl = (value: string): string => {
+      if (!value) return "";
+      if (/^https?:\/\//i.test(value) || /^data:image\//i.test(value)) {
+        return value;
+      }
+      if (value.startsWith("/")) {
+        const base = String(API_CONFIG.BASE_URL || "").replace(/\/$/, "");
+        return `${base}${value}`;
+      }
+      return value;
+    };
+
+    const urls = new Set<string>();
+    const visited = new Set<unknown>();
+
+    const tryAdd = (value: unknown) => {
+      if (typeof value !== "string") return;
+      const trimmed = value.trim();
+      if (!trimmed) return;
+
+      const lower = trimmed.toLowerCase();
+      const looksLikeImageRef =
+        /^https?:\/\//i.test(trimmed) ||
+        trimmed.startsWith("/") ||
+        /^data:image\//i.test(trimmed) ||
+        lower.includes("cloud") ||
+        lower.includes("image") ||
+        /\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i.test(trimmed);
+
+      if (looksLikeImageRef) {
+        urls.add(toAbsoluteUrl(trimmed));
+      }
+    };
+
+    const walk = (node: unknown) => {
+      if (node == null || visited.has(node)) return;
+      visited.add(node);
+
+      if (typeof node === "string") {
+        tryAdd(node);
+        return;
+      }
+
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+
+      if (typeof node !== "object") return;
+
+      const objectNode = node as Record<string, unknown>;
+      const preferredKeys = [
+        "imageUrl",
+        "url",
+        "fileUrl",
+        "publicUrl",
+        "imagePath",
+        "path",
+        "secureUrl",
+        "thumbnailUrl",
+      ];
+
+      preferredKeys.forEach((key) => {
+        tryAdd(objectNode[key]);
+      });
+
+      Object.values(objectNode).forEach(walk);
+    };
+
+    items.forEach(walk);
+
+    return [...urls];
   },
 
   async cancelBooking(reservationId: string, reason?: string) {

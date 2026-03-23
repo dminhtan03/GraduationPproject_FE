@@ -42,6 +42,7 @@ import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
 import { useWebSocket } from "../../hooks/useWebSocket";
+import DatePickerField from "../../components/common/DatePickerField";
 
 const { Title, Paragraph } = Typography;
 
@@ -94,7 +95,7 @@ const normalizeBuildingOptions = (payload: unknown): BuildingFilterOption[] => {
 
 const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
   ongoing: ["PENDING", "RESERVED", "IN_USE", "CHECKED_IN"],
-  history: ["COMPLETED", "CANCELLED", "REJECTED", "FAILED"],
+  history: ["COMPLETED", "CANCELLED", "REJECTED", "FAILED", "NO_SHOW"],
 };
 
 const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey) => {
@@ -135,6 +136,59 @@ const formatTimePart = (value?: string) => {
   const date = parseBookingDateTime(value);
   if (!date) return "-";
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+const isSameDay = (value: string | undefined, targetDate: string) => {
+  const parsed = parseBookingDateTime(value);
+  if (!parsed || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) return false;
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}` === targetDate;
+};
+
+const toApiDayRange = (
+  value: string,
+): { startTime?: string; endTime?: string } => {
+  if (!value.trim()) return {};
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return {};
+
+  const startTime = `${value}T00:00:00`;
+  const endTime = `${value}T23:59:59`;
+  return { startTime, endTime };
+};
+
+const isInvalidDateFormatError = (error: unknown) => {
+  const message = extractApiMessage(error, "").toLowerCase();
+  return (
+    message.includes("invalid date format") ||
+    message.includes("date format") ||
+    message.includes("invalid date") ||
+    message.includes("định dạng ngày")
+  );
+};
+
+const buildDateRangeCandidates = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized || !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return [{} as { startTime?: string; endTime?: string }];
+  }
+
+  return [
+    {
+      startTime: `${normalized}T00:00:00`,
+      endTime: `${normalized}T23:59:59`,
+    },
+    {
+      startTime: `${normalized} 00:00:00`,
+      endTime: `${normalized} 23:59:59`,
+    },
+    {
+      startTime: normalized,
+      endTime: undefined,
+    },
+  ];
 };
 
 const extractBackendSuccessMessage = (
@@ -267,6 +321,7 @@ const getStatusColor = (status: string) => {
   if (normalized === "IN_USE" || normalized === "CHECKED_IN") return "blue";
   if (normalized === "COMPLETED") return "cyan";
   if (normalized === "CANCELLED") return "red";
+  if (normalized === "NO_SHOW") return "orange";
   if (normalized === "REJECTED") return "volcano";
   if (normalized === "FAILED") return "magenta";
   return "default";
@@ -280,7 +335,7 @@ const isValidDate = (value?: string) => {
 const canCheckIn = (status: string, startTime?: string, endTime?: string, now: Date = new Date()) => {
   const normalized = status.toUpperCase();
   if (
-    ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(
+    ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED", "NO_SHOW"].includes(
       normalized,
     )
   ) {
@@ -334,7 +389,7 @@ const getCheckInDisabledReason = (record: Reservation, now: Date = new Date()) =
 
   const status = (record.status || "").toUpperCase();
   if (
-    ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED"].includes(
+    ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED", "NO_SHOW"].includes(
       status,
     )
   ) {
@@ -468,6 +523,7 @@ const MyBookingsPage: React.FC = () => {
   } | null>(null);
   const [buildingOptions, setBuildingOptions] = useState<BuildingFilterOption[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("all");
+  const [searchDate, setSearchDate] = useState<string>("");
   const [cancelReason, setCancelReason] = useState<string>("");
 
   // start add currentTime state for auto-enabling buttons
@@ -528,6 +584,7 @@ const MyBookingsPage: React.FC = () => {
       nextSize: number,
       tabKey: BookingTabKey,
       buildingId: string,
+      dateFilter: string,
     ) => {
       setLoading(true);
       setError(null);
@@ -537,29 +594,67 @@ const MyBookingsPage: React.FC = () => {
             ? buildingOptions.find((item) => item.value === buildingId)
             : null;
 
-        try {
-          const result = await reservationService.getMyBookings({
-            page: Math.max(nextPage - 1, 0),
-            size: nextSize,
-            statuses: TAB_STATUS_FILTERS[tabKey],
-            buildingId: buildingId !== "all" ? buildingId : undefined,
-          });
-          setBookings(result.items);
-          setTotal(result.total);
-        } catch {
-          const fallbackResult = await reservationService.getMyBookings({
-            page: Math.max(nextPage - 1, 0),
-            size: nextSize,
-          });
-          let filteredItems = filterItemsByTab(fallbackResult.items, tabKey);
+        if (dateFilter) {
+          // Avoid sending date params because backend currently rejects date format on this endpoint.
+          const largePageSize = 1000;
+          let allItems: Reservation[] = [];
+
+          try {
+            const result = await reservationService.getMyBookings({
+              page: 0,
+              size: largePageSize,
+              statuses: TAB_STATUS_FILTERS[tabKey],
+              buildingId: buildingId !== "all" ? buildingId : undefined,
+            });
+            allItems = result.items;
+          } catch {
+            const fallbackResult = await reservationService.getMyBookings({
+              page: 0,
+              size: largePageSize,
+              buildingId: buildingId !== "all" ? buildingId : undefined,
+            });
+            allItems = filterItemsByTab(fallbackResult.items, tabKey);
+          }
+
           if (selectedBuilding?.label) {
-            filteredItems = filteredItems.filter((item) => {
+            allItems = allItems.filter((item) => {
               const buildingName = (item.buildingName || item.address || "").toLowerCase();
               return buildingName.includes(selectedBuilding.label.toLowerCase());
             });
           }
-          setBookings(filteredItems);
-          setTotal(filteredItems.length);
+
+          const dateMatched = allItems.filter((item) => isSameDay(item.startTime, dateFilter));
+          const startIndex = Math.max(nextPage - 1, 0) * nextSize;
+          const paged = dateMatched.slice(startIndex, startIndex + nextSize);
+
+          setBookings(paged);
+          setTotal(dateMatched.length);
+        } else {
+          try {
+            const result = await reservationService.getMyBookings({
+              page: Math.max(nextPage - 1, 0),
+              size: nextSize,
+              statuses: TAB_STATUS_FILTERS[tabKey],
+              buildingId: buildingId !== "all" ? buildingId : undefined,
+            });
+            setBookings(result.items);
+            setTotal(result.total);
+          } catch {
+            const fallbackResult = await reservationService.getMyBookings({
+              page: Math.max(nextPage - 1, 0),
+              size: nextSize,
+              buildingId: buildingId !== "all" ? buildingId : undefined,
+            });
+            let filteredItems = filterItemsByTab(fallbackResult.items, tabKey);
+            if (selectedBuilding?.label) {
+              filteredItems = filteredItems.filter((item) => {
+                const buildingName = (item.buildingName || item.address || "").toLowerCase();
+                return buildingName.includes(selectedBuilding.label.toLowerCase());
+              });
+            }
+            setBookings(filteredItems);
+            setTotal(filteredItems.length);
+          }
         }
 
         setPage(nextPage);
@@ -576,8 +671,8 @@ const MyBookingsPage: React.FC = () => {
   );
 
   useEffect(() => {
-    loadBookings(1, 5, "ongoing", selectedBuildingId);
-  }, [loadBookings, selectedBuildingId]);
+    loadBookings(1, 5, "ongoing", selectedBuildingId, searchDate);
+  }, [loadBookings, searchDate, selectedBuildingId]);
 
   useEffect(() => {
     const realtimePayload = getReservationRealtimePayload(lastMessage);
@@ -628,8 +723,8 @@ const MyBookingsPage: React.FC = () => {
     console.log(
       "[MyBookings] Triggering background reload after realtime update",
     );
-    void loadBookings(page, pageSize, activeTab, selectedBuildingId);
-  }, [activeTab, lastMessage, loadBookings, page, pageSize, selectedBuildingId]);
+    void loadBookings(page, pageSize, activeTab, selectedBuildingId, searchDate);
+  }, [activeTab, lastMessage, loadBookings, page, pageSize, searchDate, selectedBuildingId]);
 
   const openActionModal = (type: BookingActionType, booking: Reservation) => {
     setActionModalError(null);
@@ -683,7 +778,13 @@ const MyBookingsPage: React.FC = () => {
       );
       showToast("success", successMessage);
       closeFeedbackModal();
-      await loadBookings(page, pageSize, activeTab, selectedBuildingId);
+      await loadBookings(
+        page,
+        pageSize,
+        activeTab,
+        selectedBuildingId,
+        searchDate,
+      );
     } catch (err) {
       message.error(extractApiMessage(err, "Unable to submit feedback"));
     } finally {
@@ -805,7 +906,13 @@ const MyBookingsPage: React.FC = () => {
       if (currentAction.type === "return-room") {
         openFeedbackModal(currentAction.booking);
       }
-      await loadBookings(page, pageSize, activeTab, selectedBuildingId);
+      await loadBookings(
+        page,
+        pageSize,
+        activeTab,
+        selectedBuildingId,
+        searchDate,
+      );
     } catch (err) {
       const actionErrorMessage = extractApiMessage(
         err,
@@ -828,18 +935,27 @@ const MyBookingsPage: React.FC = () => {
   const handleTabChange = (key: string) => {
     const nextTab = key as BookingTabKey;
     setActiveTab(nextTab);
-    loadBookings(1, pageSize, nextTab, selectedBuildingId);
+    loadBookings(1, pageSize, nextTab, selectedBuildingId, searchDate);
   };
 
   const handleTableChange = (pagination: TablePaginationConfig) => {
     const nextPage = pagination.current || 1;
     const nextSize = pagination.pageSize || pageSize;
-    loadBookings(nextPage, nextSize, activeTab, selectedBuildingId);
+    loadBookings(nextPage, nextSize, activeTab, selectedBuildingId, searchDate);
   };
 
   const handleBuildingFilterChange = (value: string) => {
     setSelectedBuildingId(value);
-    loadBookings(1, pageSize, activeTab, value);
+    loadBookings(1, pageSize, activeTab, value, searchDate);
+  };
+
+  const handleSearchByStartTime = () => {
+    loadBookings(1, pageSize, activeTab, selectedBuildingId, searchDate);
+  };
+
+  const handleClearStartTimeSearch = () => {
+    setSearchDate("");
+    loadBookings(1, pageSize, activeTab, selectedBuildingId, "");
   };
 
   const tabItems = useMemo(
@@ -950,70 +1066,68 @@ const MyBookingsPage: React.FC = () => {
           currentTime,
         );
         const cancelEnabled = canCancel(status, record.startTime, currentTime);
-        const checkInDisabledReason = getCheckInDisabledReason(record, currentTime);
-        const returnRoomDisabledReason = getCheckOutDisabledReason(record, currentTime);
-        const extendDisabledReason = getExtendDisabledReason(record, currentTime);
-        const cancelDisabledReason = getCancelDisabledReason(record, currentTime);
+        const canRender = {
+          checkIn: !!record.id && checkInEnabled,
+          returnRoom: !!record.id && returnRoomEnabled,
+          extend: !!record.id && extendEnabled,
+          cancel: !!record.id && cancelEnabled,
+        };
+
+        if (!canRender.checkIn && !canRender.returnRoom && !canRender.extend && !canRender.cancel) {
+          return <span className="text-xs text-gray-400">No available actions</span>;
+        }
 
         return (
           <Space>
-            <Tooltip
-              title={!checkInEnabled ? checkInDisabledReason : undefined}
-            >
+            {canRender.checkIn && (
               <span>
                 <Button
                   type="primary"
                   size="small"
                   loading={isLoading && checkInEnabled}
-                  disabled={!record.id || !checkInEnabled}
                   onClick={() => openActionModal("check-in", record)}
                 >
                   Check-in
                 </Button>
               </span>
-            </Tooltip>
+            )}
 
-            <Tooltip
-              title={!returnRoomEnabled ? returnRoomDisabledReason : undefined}
-            >
+            {canRender.returnRoom && (
               <span>
                 <Button
                   size="small"
                   loading={isLoading && returnRoomEnabled}
-                  disabled={!record.id || !returnRoomEnabled}
                   onClick={() => openActionModal("return-room", record)}
                 >
                   Check Out
                 </Button>
               </span>
-            </Tooltip>
+            )}
 
-            <Tooltip title={!extendEnabled ? extendDisabledReason : undefined}>
+            {canRender.extend && (
               <span>
                 <Button
                   size="small"
                   loading={isLoading && extendEnabled}
-                  disabled={!record.id || !extendEnabled}
                   onClick={() => openActionModal("extend", record)}
                 >
                   Extend
                 </Button>
               </span>
-            </Tooltip>
+            )}
 
-            <Tooltip title={!cancelEnabled ? cancelDisabledReason : undefined}>
+            {canRender.cancel && (
               <span>
                 <Button
                   danger
                   size="small"
                   loading={isLoading && cancelEnabled}
-                  disabled={!record.id || !cancelEnabled}
                   onClick={() => openActionModal("cancel", record)}
                 >
                   Cancel
                 </Button>
               </span>
-            </Tooltip>
+            )}
           </Space>
         );
       },
@@ -1044,11 +1158,39 @@ const MyBookingsPage: React.FC = () => {
         </button>
         <button
           type="button"
-          onClick={() => loadBookings(page, pageSize, activeTab, selectedBuildingId)}
+          onClick={() =>
+            loadBookings(page, pageSize, activeTab, selectedBuildingId, searchDate)
+          }
           className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
           disabled={loading}
         >
           Refresh
+        </button>
+
+        <div className="min-w-[260px]">
+          <DatePickerField
+            value={searchDate}
+            onChange={setSearchDate}
+            label="Start date"
+          />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSearchByStartTime}
+          className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+          disabled={loading}
+        >
+          Search by date
+        </button>
+
+        <button
+          type="button"
+          onClick={handleClearStartTimeSearch}
+          className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
+          disabled={loading}
+        >
+          Clear search
         </button>
 
         <div className="min-w-[220px]">
