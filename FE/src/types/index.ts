@@ -32,7 +32,7 @@ export interface User {
   /** Tất cả authorities từ BE */
   roles?: string[];
   cancellationCount: number;
-  bookingLockedUntil: Date
+  bookingLockedUntil: Date;
 }
 
 // Interface cho data demo
@@ -85,6 +85,7 @@ export type NotificationCategory =
 
 export interface AppNotification {
   id: string;
+  backendId?: string;
   title: string;
   message: string;
   createdAt: string;
@@ -94,6 +95,8 @@ export interface AppNotification {
   progress?: number;
   /** Optional short status label, e.g. "In progress", "Completed" */
   statusText?: string;
+  reservationId?: string;
+  reservationStatusAtNow?: string;
 }
 
 // ===== ROOM (Campus Room Inventory) =====
@@ -178,5 +181,5 @@ export interface UserProfile {
   email: string;
   gender: string;
   cancellationCount: number;
-  bookingLockedUntil: Date
+  bookingLockedUntil: Date;
 }

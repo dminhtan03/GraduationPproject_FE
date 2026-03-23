@@ -12,6 +12,11 @@ import type {
   WebSocketMessage,
 } from "../types";
 import { useWebSocket } from "../hooks/useWebSocket";
+import {
+  notificationService,
+  type NotificationApiItem,
+} from "../services/notificationService";
+import { logError } from "../utils/errorHandlers";
 
 interface NotificationContextValue {
   notifications: AppNotification[];
@@ -27,6 +32,65 @@ const NotificationContext = createContext<NotificationContextValue | undefined>(
 const createId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
+const sortByCreatedAtDesc = (items: AppNotification[]) =>
+  [...items].sort((a, b) => {
+    const left = new Date(a.createdAt).getTime() || 0;
+    const right = new Date(b.createdAt).getTime() || 0;
+    return right - left;
+  });
+
+const inferCategory = (
+  title: string,
+  message: string,
+): NotificationCategory => {
+  const source = `${title} ${message}`.toLowerCase();
+
+  if (
+    source.includes("reservation") ||
+    source.includes("booking") ||
+    source.includes("check-in") ||
+    source.includes("check in")
+  ) {
+    return "booking";
+  }
+
+  if (source.includes("ai")) {
+    return "ai";
+  }
+
+  return "system";
+};
+
+const mapApiItemToNotification = (
+  item: NotificationApiItem,
+): AppNotification => {
+  const reservationId =
+    typeof item.reservationId === "string"
+      ? item.reservationId
+      : typeof item.ReservationId === "string"
+        ? item.ReservationId
+        : undefined;
+
+  const title = String(item.title || "Notification");
+  const message = String(item.content || "");
+  const createdAt = String(item.createdAt || new Date().toISOString());
+
+  return {
+    id: String(item.id || reservationId || createId()),
+    backendId: typeof item.id === "string" ? item.id : undefined,
+    title,
+    message,
+    createdAt,
+    category: inferCategory(title, message),
+    read: Boolean(item.isRead ?? item.read ?? false),
+    reservationId,
+    reservationStatusAtNow:
+      typeof item.reservationStatusAtNow === "string"
+        ? item.reservationStatusAtNow
+        : undefined,
+  };
+};
+
 const mapMessageToNotification = (
   message: WebSocketMessage,
 ): AppNotification | null => {
@@ -36,21 +100,34 @@ const mapMessageToNotification = (
 
   const raw = (message.data || {}) as Record<string, unknown>;
 
+  const title = String(raw.title ?? raw.subject ?? "Notification");
+  const body = String(
+    raw.message ?? raw.content ?? raw.body ?? raw.description ?? "",
+  );
+
+  const reservationId =
+    typeof raw.reservationId === "string"
+      ? raw.reservationId
+      : typeof raw.ReservationId === "string"
+        ? raw.ReservationId
+        : undefined;
+
   const id =
     typeof raw.id === "string" && raw.id.trim().length > 0
       ? raw.id
-      : createId();
+      : reservationId && reservationId.trim().length > 0
+        ? `reservation-${reservationId}`
+        : createId();
 
-  const titleSource = raw.title ?? raw.subject ?? "Notification";
-  const messageSource = raw.message ?? raw.body ?? raw.description ?? "";
   const createdAtSource = raw.createdAt ?? raw.time ?? message.timestamp;
-  const categorySource = raw.category ?? raw.type ?? "system";
-
-  const title = String(titleSource);
-  const body = String(messageSource);
   const createdAt = String(createdAtSource || message.timestamp);
 
-  const category = String(categorySource || "system") as NotificationCategory;
+  const categorySource = raw.category;
+  const category =
+    typeof categorySource === "string" && categorySource.trim().length > 0
+      ? (categorySource as NotificationCategory)
+      : inferCategory(title, body);
+
   const progress =
     typeof raw.progress === "number" ? (raw.progress as number) : undefined;
   const statusText =
@@ -62,6 +139,7 @@ const mapMessageToNotification = (
 
   return {
     id,
+    backendId: typeof raw.id === "string" ? (raw.id as string) : undefined,
     title,
     message: body,
     createdAt,
@@ -69,55 +147,48 @@ const mapMessageToNotification = (
     read: false,
     progress,
     statusText,
+    reservationId,
+    reservationStatusAtNow:
+      typeof raw.reservationStatusAtNow === "string"
+        ? (raw.reservationStatusAtNow as string)
+        : undefined,
   };
-};
-
-const createInitialNotifications = (): AppNotification[] => {
-  const now = new Date();
-  const minutesAgo = (m: number) => {
-    const d = new Date(now.getTime() - m * 60 * 1000);
-    return d.toISOString();
-  };
-
-  return [
-    {
-      id: createId(),
-      title: "Batch Service Active",
-      message: "Processing rooms in Building Epsilon...",
-      createdAt: minutesAgo(0),
-      category: "batch",
-      read: false,
-      progress: 53,
-      statusText: "In progress",
-    },
-    {
-      id: createId(),
-      title: "New Message from AI Assistant",
-      message:
-        "Based on your booking history, a room is available for your upcoming study group.",
-      createdAt: minutesAgo(2),
-      category: "ai",
-      read: false,
-    },
-    {
-      id: createId(),
-      title: "Booking Confirmation",
-      message: "Your booking has been confirmed.",
-      createdAt: minutesAgo(60),
-      category: "booking",
-      read: false,
-    },
-  ];
 };
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [notifications, setNotifications] = useState<AppNotification[]>(
-    createInitialNotifications,
-  );
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const { lastMessage } = useWebSocket();
+
+  useEffect(() => {
+    let active = true;
+
+    const loadInitialNotifications = async () => {
+      try {
+        const items = await notificationService.getAll(0, 50);
+        if (!active) {
+          return;
+        }
+
+        const mapped = sortByCreatedAtDesc(
+          items.map((item) => mapApiItemToNotification(item)),
+        );
+        setNotifications(mapped);
+      } catch (error) {
+        logError(error, "Load Notifications");
+      }
+    };
+
+    loadInitialNotifications().catch((error) =>
+      logError(error, "Load Notifications"),
+    );
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -129,10 +200,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
       const existingIndex = prev.findIndex((n) => n.id === mapped.id);
       if (existingIndex !== -1) {
         const updated = [...prev];
-        updated[existingIndex] = { ...updated[existingIndex], ...mapped };
-        return updated;
+        const keepReadState = updated[existingIndex].read;
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          ...mapped,
+          read: keepReadState,
+        };
+        return sortByCreatedAtDesc(updated);
       }
-      return [mapped, ...prev].slice(0, 30);
+
+      return sortByCreatedAtDesc([mapped, ...prev]).slice(0, 50);
     });
   }, [lastMessage]);
 
@@ -142,13 +219,41 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const markAllAsRead = useCallback(() => {
+    const unreadIds = notifications
+      .filter((n) => !n.read && typeof n.backendId === "string")
+      .map((n) => n.backendId as string);
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+
+    if (unreadIds.length === 0) {
+      return;
+    }
+
+    Promise.allSettled(
+      unreadIds.map((id) => notificationService.markAsRead(id)),
+    ).catch((error) => logError(error, "Mark All Notifications As Read"));
+  }, [notifications]);
 
   const markAsRead = useCallback((id: string) => {
+    let backendId: string | undefined;
+
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+      prev.map((n) => {
+        if (n.id !== id) {
+          return n;
+        }
+
+        backendId = n.backendId;
+        return { ...n, read: true };
+      }),
     );
+
+    if (!backendId) {
+      return;
+    }
+
+    notificationService
+      .markAsRead(backendId)
+      .catch((error) => logError(error, "Mark Notification As Read"));
   }, []);
 
   const value: NotificationContextValue = useMemo(

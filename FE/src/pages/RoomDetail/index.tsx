@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { Alert, Rate, Typography, message } from "antd";
+import { Alert, Modal, Rate, Typography, message } from "antd";
 import { roomService } from "../../services/roomService";
 import { getProfile } from "../../services/authService";
 import { ROUTES } from "../../constants";
@@ -75,6 +75,8 @@ const RoomDetailPage: React.FC = () => {
   const [warning, setWarning] = useState<string | null>(null);
   const [detail, setDetail] = useState<RoomDetailData | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const roomFromState = (state as LocationState | null)?.room;
   const normalizedRoomId = roomId || roomFromState?.id || "";
@@ -197,6 +199,11 @@ const RoomDetailPage: React.FC = () => {
     [detail],
   );
 
+  const validImages = useMemo(
+    () => images.filter((item) => typeof item.imageUrl === "string"),
+    [images],
+  );
+
   const feedbacks = useMemo(
     () =>
       Array.isArray(detail?.feedbacks)
@@ -252,6 +259,32 @@ const RoomDetailPage: React.FC = () => {
         },
       },
     });
+  };
+
+  const openImageViewer = (index: number) => {
+    if (validImages.length === 0) return;
+    const normalizedIndex = Math.min(
+      Math.max(index, 0),
+      validImages.length - 1,
+    );
+    setActiveImageIndex(normalizedIndex);
+    setIsImageViewerOpen(true);
+  };
+
+  const closeImageViewer = () => {
+    setIsImageViewerOpen(false);
+  };
+
+  const showNextImage = () => {
+    if (validImages.length <= 1) return;
+    setActiveImageIndex((prev) => (prev + 1) % validImages.length);
+  };
+
+  const showPrevImage = () => {
+    if (validImages.length <= 1) return;
+    setActiveImageIndex(
+      (prev) => (prev - 1 + validImages.length) % validImages.length,
+    );
   };
 
   return (
@@ -399,33 +432,160 @@ const RoomDetailPage: React.FC = () => {
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-white p-4">
-              <div className="mb-3 text-xs text-slate-500">Room images</div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-xs text-slate-500">Room images</div>
+                {validImages.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => openImageViewer(0)}
+                    className="text-xs font-semibold text-orange-500 transition hover:text-orange-600"
+                  >
+                    View All &gt;
+                  </button>
+                )}
+              </div>
+
               {images.length === 0 ? (
                 <div className="text-sm text-slate-500">No room images.</div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {images.map((img) => (
-                    <div
-                      key={img.id || img.imageUrl}
-                      className="overflow-hidden rounded-xl border border-slate-100 bg-slate-50"
+                <div className="space-y-3">
+                  {validImages[0]?.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => openImageViewer(0)}
+                      className="block w-full overflow-hidden rounded-2xl border border-slate-100 bg-slate-50"
                     >
-                      {img.imageUrl ? (
-                        <img
-                          src={img.imageUrl}
-                          alt="Room"
-                          className="h-28 w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="flex h-28 items-center justify-center text-xs text-slate-400">
-                          No image URL
-                        </div>
-                      )}
+                      <img
+                        src={validImages[0].imageUrl}
+                        alt="Room"
+                        className="h-64 w-full object-cover sm:h-80 lg:h-[420px]"
+                        loading="lazy"
+                      />
+                    </button>
+                  )}
+
+                  {validImages.length > 1 && (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      {validImages.slice(1, 5).map((img, index) => {
+                        const targetIndex = index + 1;
+                        return (
+                          <button
+                            key={img.id || img.imageUrl}
+                            type="button"
+                            onClick={() => openImageViewer(targetIndex)}
+                            className="relative overflow-hidden rounded-xl border border-slate-100 bg-slate-50"
+                          >
+                            <img
+                              src={img.imageUrl}
+                              alt={`Room ${targetIndex + 1}`}
+                              className="h-28 w-full object-cover sm:h-32"
+                              loading="lazy"
+                            />
+                            {targetIndex === 4 && validImages.length > 5 && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-sm font-semibold text-white">
+                                +{validImages.length - 5}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
-                  ))}
+                  )}
+
+                  {validImages.length === 0 && (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {images.map((img) => (
+                        <div
+                          key={img.id || img.imageUrl}
+                          className="overflow-hidden rounded-xl border border-slate-100 bg-slate-50"
+                        >
+                          <div className="flex h-28 items-center justify-center text-xs text-slate-400">
+                            No image URL
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {images.some((img) => !img.imageUrl) &&
+                    validImages.length > 0 && (
+                      <div className="text-xs text-slate-400">
+                        Some images are unavailable due to missing URL.
+                      </div>
+                    )}
                 </div>
               )}
             </div>
+
+            <Modal
+              open={isImageViewerOpen}
+              onCancel={closeImageViewer}
+              footer={null}
+              width={980}
+              centered
+              title={
+                validImages.length > 0
+                  ? `Room images (${activeImageIndex + 1}/${validImages.length})`
+                  : "Room images"
+              }
+            >
+              {validImages.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="relative overflow-hidden rounded-2xl bg-slate-100">
+                    <img
+                      src={validImages[activeImageIndex]?.imageUrl}
+                      alt={`Room ${activeImageIndex + 1}`}
+                      className="h-[56vh] w-full object-contain bg-black/5"
+                    />
+                    {validImages.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={showPrevImage}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/55 px-3 py-2 text-xs font-semibold text-white transition hover:bg-black/70"
+                        >
+                          Prev
+                        </button>
+                        <button
+                          type="button"
+                          onClick={showNextImage}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/55 px-3 py-2 text-xs font-semibold text-white transition hover:bg-black/70"
+                        >
+                          Next
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {validImages.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {validImages.map((img, index) => (
+                        <button
+                          key={img.id || `${img.imageUrl}-${index}`}
+                          type="button"
+                          onClick={() => setActiveImageIndex(index)}
+                          className={`shrink-0 overflow-hidden rounded-lg border ${
+                            index === activeImageIndex
+                              ? "border-orange-500"
+                              : "border-slate-200"
+                          }`}
+                        >
+                          <img
+                            src={img.imageUrl}
+                            alt={`Thumbnail ${index + 1}`}
+                            className="h-14 w-24 object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="py-10 text-center text-slate-500">
+                  No images.
+                </div>
+              )}
+            </Modal>
 
             <div className="rounded-2xl border border-slate-100 bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
