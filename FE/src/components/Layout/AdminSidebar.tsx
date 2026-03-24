@@ -3,6 +3,7 @@ import {
   ArrowRightOnRectangleIcon,
   ShieldCheckIcon,
   UsersIcon,
+  BookOpenIcon,
   // start add icons
   BuildingOfficeIcon,
   MapIcon,
@@ -82,6 +83,19 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           >
             <UsersIcon className="h-5 w-5" />
             User Management
+          </Link>
+
+          <Link
+            to={ROUTES.ADMIN_ALL_BOOKINGS}
+            className={[
+              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
+              location.pathname.includes(ROUTES.ADMIN_ALL_BOOKINGS)
+                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
+                : "text-slate-600 hover:bg-slate-50",
+            ].join(" ")}
+          >
+            <BookOpenIcon className="h-5 w-5" />
+            All Booking List
           </Link>
 
           <Link

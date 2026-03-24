@@ -51,6 +51,63 @@ type BackendUser = {
   lockedReason?: string | null;
 };
 
+type BackendReservation = {
+  id?: string;
+  bookingId?: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  status?: string | null;
+  roomType?: string | null;
+  room?: {
+    name?: string | null;
+    roomName?: string | null;
+    locationCode?: string | null;
+    type?: string | null;
+    roomType?: string | null;
+  } | null;
+  user?: {
+    fullName?: string | null;
+    name?: string | null;
+    username?: string | null;
+    email?: string | null;
+  } | null;
+  account?: {
+    fullName?: string | null;
+    name?: string | null;
+    username?: string | null;
+    email?: string | null;
+  } | null;
+  booker?: {
+    fullName?: string | null;
+    name?: string | null;
+    username?: string | null;
+    email?: string | null;
+  } | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+};
+
+type AdminBooking = {
+  id: string;
+  bookingId: string;
+  user: string;
+  userName: string;
+  room: string;
+  roomName: string;
+  roomType: string;
+  startTime?: string;
+  endTime?: string;
+  date?: string;
+  status: string;
+};
+
+type AdminBookingFilters = {
+  startTime?: string;
+  endTime?: string;
+  buildingName?: string;
+  status?: string;
+};
+
 const extractSuccessMessage = (payload: unknown, fallback: string): string => {
   if (!payload || typeof payload !== "object") return fallback;
 
@@ -85,6 +142,51 @@ const normalizeUser = (user: BackendUser): AdminUser => ({
   locked: Boolean(user.locked ?? user.isLocked),
   reason: String(user.reason ?? user.lockReason ?? user.lockedReason ?? ""),
 });
+
+const pickFirstText = (...values: Array<unknown>): string => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+};
+
+const normalizeBooking = (item: BackendReservation): AdminBooking => {
+  const userName = pickFirstText(
+    item.user?.fullName,
+    item.user?.name,
+    item.user?.username,
+    item.account?.fullName,
+    item.account?.name,
+    item.account?.username,
+    item.booker?.fullName,
+    item.booker?.name,
+    item.booker?.username,
+    item.createdByName,
+    item.createdBy,
+  );
+
+  const roomName = pickFirstText(
+    item.room?.name,
+    item.room?.roomName,
+    item.room?.locationCode,
+  );
+
+  return {
+    id: String(item.id || item.bookingId || ""),
+    bookingId: String(item.bookingId || item.id || ""),
+    user: userName,
+    userName,
+    room: roomName,
+    roomName,
+    roomType: pickFirstText(item.roomType, item.room?.type, item.room?.roomType),
+    startTime: item.startTime || undefined,
+    endTime: item.endTime || undefined,
+    date: item.endTime || item.startTime || undefined,
+    status: String(item.status || ""),
+  };
+};
 
 const extractUsersAndMeta = (
   payload: unknown,
@@ -195,21 +297,21 @@ export const adminService = {
   // start add building management api calls
   async getAllBuildings(): Promise<any> {
     const res = await api.get(API_ENDPOINTS.ROOMS.ADMIN_BUILDINGS);
-    return res.data?.data || res.data;
+    return (res.data as any)?.data || res.data;
   },
 
   async getFloorsByBuilding(buildingId: string): Promise<any> {
     const res = await api.get(
       buildUrl(API_ENDPOINTS.ROOMS.ADMIN_FLOORS, { buildingId }),
     );
-    return res.data?.data || res.data;
+    return (res.data as any)?.data || res.data;
   },
 
   async getRoomsByFloor(floorId: string): Promise<any> {
     const res = await api.get(
       buildUrl(API_ENDPOINTS.ROOMS.ADMIN_ROOMS_BY_FLOOR, { floorId }),
     );
-    return res.data?.data || res.data;
+    return (res.data as any)?.data || res.data;
   },
 
   async createBuilding(payload: {
@@ -220,4 +322,70 @@ export const adminService = {
     await api.post(API_ENDPOINTS.ROOMS.CREATE_BUILDING, payload);
   },
   // end add building management api calls
+
+  // start add admin booking list api
+  async getAllBookings(
+    page = 0,
+    size = 20,
+    filters?: AdminBookingFilters,
+  ): Promise<{
+    items: AdminBooking[];
+    total: number;
+    page: number;
+    size: number;
+  }> {
+    const params: Record<string, string | number> = { page, size };
+    if (filters?.startTime) {
+      params.startTime = filters.startTime;
+      params.fromTime = filters.startTime;
+    }
+    if (filters?.endTime) {
+      params.endTime = filters.endTime;
+      params.toTime = filters.endTime;
+    }
+    if (filters?.buildingName) {
+      params.buildingName = filters.buildingName;
+      params.building = filters.buildingName;
+    }
+    if (filters?.status) {
+      params.status = filters.status;
+      params.statuses = filters.status;
+    }
+
+    console.log("=== ADMIN BOOKING SEARCH ===");
+    console.log("Endpoint:", API_ENDPOINTS.DASHBOARD.ALL_RESERVATIONS);
+    console.log("Query Params:", params);
+    console.log("Request URL:", `${API_ENDPOINTS.DASHBOARD.ALL_RESERVATIONS}?${new URLSearchParams(params as any).toString()}`);
+
+    const res = await api.get<any>(API_ENDPOINTS.DASHBOARD.ALL_RESERVATIONS, {
+      params,
+    });
+
+    const payload = res.data || {};
+    const responseData = payload?.data ?? payload;
+    const meta = payload?.meta ?? {};
+
+    let items: BackendReservation[] = [];
+    let total = 0;
+
+    // Handle different response formats
+    if (Array.isArray(responseData)) {
+      items = responseData;
+      total = responseData.length;
+    } else if (Array.isArray(responseData?.content)) {
+      items = responseData.content;
+      total = responseData?.totalElements ?? responseData.content.length;
+    } else if (Array.isArray(responseData?.items)) {
+      items = responseData.items;
+      total = responseData?.total ?? items.length;
+    }
+
+    return {
+      items: items.map(normalizeBooking),
+      total: Number(meta?.total ?? total) || 0,
+      page: Number(meta?.page ?? page) || 0,
+      size: Number(meta?.size ?? size) || 20,
+    };
+  },
+  // end add admin booking list api
 };

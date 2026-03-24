@@ -87,6 +87,7 @@ export const API_ENDPOINTS = {
     ALL_USERS: "/api/v1/dashboard/all-users",
     LOCK_USER: "/api/v1/dashboard/lock-user/:userId",
     UNLOCK_USER: "/api/v1/dashboard/unlock-user/:userId",
+    ALL_RESERVATIONS: "/api/v1/reservations",
   },
 } as const;
 
