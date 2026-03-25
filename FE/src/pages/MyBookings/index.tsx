@@ -523,6 +523,7 @@ const MyBookingsPage: React.FC = () => {
   } | null>(null);
   const [buildingOptions, setBuildingOptions] = useState<BuildingFilterOption[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("all");
+  const [locationCodeFilter, setLocationCodeFilter] = useState<string>("");
   const [searchDate, setSearchDate] = useState<string>("");
   const [cancelReason, setCancelReason] = useState<string>("");
 
@@ -585,6 +586,7 @@ const MyBookingsPage: React.FC = () => {
       tabKey: BookingTabKey,
       buildingId: string,
       dateFilter: string,
+      locationCode: string,
     ) => {
       setLoading(true);
       setError(null);
@@ -605,6 +607,7 @@ const MyBookingsPage: React.FC = () => {
               size: largePageSize,
               statuses: TAB_STATUS_FILTERS[tabKey],
               buildingId: buildingId !== "all" ? buildingId : undefined,
+              locationCode: locationCode.trim() || undefined,
             });
             allItems = result.items;
           } catch {
@@ -612,6 +615,7 @@ const MyBookingsPage: React.FC = () => {
               page: 0,
               size: largePageSize,
               buildingId: buildingId !== "all" ? buildingId : undefined,
+              locationCode: locationCode.trim() || undefined,
             });
             allItems = filterItemsByTab(fallbackResult.items, tabKey);
           }
@@ -636,6 +640,7 @@ const MyBookingsPage: React.FC = () => {
               size: nextSize,
               statuses: TAB_STATUS_FILTERS[tabKey],
               buildingId: buildingId !== "all" ? buildingId : undefined,
+              locationCode: locationCode.trim() || undefined,
             });
             setBookings(result.items);
             setTotal(result.total);
@@ -644,6 +649,7 @@ const MyBookingsPage: React.FC = () => {
               page: Math.max(nextPage - 1, 0),
               size: nextSize,
               buildingId: buildingId !== "all" ? buildingId : undefined,
+              locationCode: locationCode.trim() || undefined,
             });
             let filteredItems = filterItemsByTab(fallbackResult.items, tabKey);
             if (selectedBuilding?.label) {
@@ -671,8 +677,15 @@ const MyBookingsPage: React.FC = () => {
   );
 
   useEffect(() => {
-    loadBookings(1, 5, "ongoing", selectedBuildingId, searchDate);
-  }, [loadBookings, searchDate, selectedBuildingId]);
+    loadBookings(1, pageSize, activeTab, selectedBuildingId, searchDate, locationCodeFilter);
+  }, [
+    loadBookings,
+    pageSize,
+    activeTab,
+    searchDate,
+    selectedBuildingId,
+    locationCodeFilter,
+  ]);
 
   useEffect(() => {
     const realtimePayload = getReservationRealtimePayload(lastMessage);
@@ -723,8 +736,24 @@ const MyBookingsPage: React.FC = () => {
     console.log(
       "[MyBookings] Triggering background reload after realtime update",
     );
-    void loadBookings(page, pageSize, activeTab, selectedBuildingId, searchDate);
-  }, [activeTab, lastMessage, loadBookings, page, pageSize, searchDate, selectedBuildingId]);
+    void loadBookings(
+      page,
+      pageSize,
+      activeTab,
+      selectedBuildingId,
+      searchDate,
+      locationCodeFilter,
+    );
+  }, [
+    activeTab,
+    lastMessage,
+    loadBookings,
+    page,
+    pageSize,
+    searchDate,
+    selectedBuildingId,
+    locationCodeFilter,
+  ]);
 
   const openActionModal = (type: BookingActionType, booking: Reservation) => {
     setActionModalError(null);
@@ -784,6 +813,7 @@ const MyBookingsPage: React.FC = () => {
         activeTab,
         selectedBuildingId,
         searchDate,
+        locationCodeFilter,
       );
     } catch (err) {
       message.error(extractApiMessage(err, "Unable to submit feedback"));
@@ -912,6 +942,7 @@ const MyBookingsPage: React.FC = () => {
         activeTab,
         selectedBuildingId,
         searchDate,
+        locationCodeFilter,
       );
     } catch (err) {
       const actionErrorMessage = extractApiMessage(
@@ -935,27 +966,24 @@ const MyBookingsPage: React.FC = () => {
   const handleTabChange = (key: string) => {
     const nextTab = key as BookingTabKey;
     setActiveTab(nextTab);
-    loadBookings(1, pageSize, nextTab, selectedBuildingId, searchDate);
+    setPage(1);
   };
 
   const handleTableChange = (pagination: TablePaginationConfig) => {
     const nextPage = pagination.current || 1;
     const nextSize = pagination.pageSize || pageSize;
-    loadBookings(nextPage, nextSize, activeTab, selectedBuildingId, searchDate);
+    loadBookings(nextPage, nextSize, activeTab, selectedBuildingId, searchDate, locationCodeFilter);
   };
 
   const handleBuildingFilterChange = (value: string) => {
     setSelectedBuildingId(value);
-    loadBookings(1, pageSize, activeTab, value, searchDate);
-  };
-
-  const handleSearchByStartTime = () => {
-    loadBookings(1, pageSize, activeTab, selectedBuildingId, searchDate);
+    setPage(1);
   };
 
   const handleClearStartTimeSearch = () => {
     setSearchDate("");
-    loadBookings(1, pageSize, activeTab, selectedBuildingId, "");
+    setLocationCodeFilter("");
+    loadBookings(1, pageSize, activeTab, selectedBuildingId, "", "");
   };
 
   const tabItems = useMemo(
@@ -1148,7 +1176,12 @@ const MyBookingsPage: React.FC = () => {
         className="mb-2"
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <div className="mb-3 text-xs font-medium text-slate-500">
+          Filters auto-apply when you change date, location code, or building.
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => navigate(ROUTES.ROOM_LIST)}
@@ -1159,7 +1192,14 @@ const MyBookingsPage: React.FC = () => {
         <button
           type="button"
           onClick={() =>
-            loadBookings(page, pageSize, activeTab, selectedBuildingId, searchDate)
+            loadBookings(
+              page,
+              pageSize,
+              activeTab,
+              selectedBuildingId,
+              searchDate,
+              locationCodeFilter,
+            )
           }
           className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
           disabled={loading}
@@ -1170,19 +1210,13 @@ const MyBookingsPage: React.FC = () => {
         <div className="min-w-[260px]">
           <DatePickerField
             value={searchDate}
-            onChange={setSearchDate}
+            onChange={(nextDate) => {
+              setSearchDate(nextDate);
+              setPage(1);
+            }}
             label="Start date"
           />
         </div>
-
-        <button
-          type="button"
-          onClick={handleSearchByStartTime}
-          className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-          disabled={loading}
-        >
-          Search by date
-        </button>
 
         <button
           type="button"
@@ -1192,6 +1226,18 @@ const MyBookingsPage: React.FC = () => {
         >
           Clear search
         </button>
+
+        <div className="min-w-[220px]">
+          <Input
+            value={locationCodeFilter}
+            onChange={(event) => {
+              setLocationCodeFilter(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Search location code"
+            allowClear
+          />
+        </div>
 
         <div className="min-w-[220px]">
           <Select
@@ -1204,6 +1250,7 @@ const MyBookingsPage: React.FC = () => {
             ]}
             placeholder="Filter by building"
           />
+        </div>
         </div>
       </div>
 
