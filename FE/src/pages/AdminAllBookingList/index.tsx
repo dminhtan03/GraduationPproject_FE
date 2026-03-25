@@ -8,6 +8,7 @@ import {
   Table,
   Alert,
   Select,
+  Input,
   Button,
   Tag,
   Space,
@@ -28,11 +29,15 @@ import CustomMessage, {
 
 interface BookingRow {
   id?: string;
+  reservationId?: string;
   bookingId?: string;
   user?: string;
   userName?: string;
+  userEmail?: string;
   room?: string;
   roomName?: string;
+  floorName?: string;
+  buildingName?: string;
   roomType?: string;
   date?: string;
   startTime?: string;
@@ -48,6 +53,36 @@ interface BuildingOption {
 }
 
 const PAGE_SIZE = 10;
+
+const pad = (value: number) => value.toString().padStart(2, "0");
+const ALL_HOURS = Array.from({ length: 24 }, (_, index) => pad(index));
+const MINUTE_OPTIONS = ["00", "10", "20", "30", "40", "50", "59"];
+
+const toDatePart = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const DEFAULT_FILTER_DATE = toDatePart(new Date());
+const DEFAULT_START_CLOCK = "00:00";
+const DEFAULT_END_CLOCK = "23:59";
+
+const combineDateTime = (dateValue: string, timeValue: string) => {
+  if (!dateValue || !timeValue) return "";
+  return `${dateValue}T${timeValue}`;
+};
+
+const getClockHour = (clock: string) => {
+  if (!clock.includes(":")) return "";
+  return clock.split(":")[0] || "";
+};
+
+const getClockMinute = (clock: string) => {
+  if (!clock.includes(":")) return "";
+  return clock.split(":")[1] || "";
+};
 
 const getStatusColor = (status: string) => {
   const normalized = status?.toUpperCase() || "";
@@ -68,14 +103,13 @@ const parseDate = (dateStr?: string) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const toBackendStartTime = (date?: string) => {
-  if (!date) return undefined;
-  return `${date}T00:00:00`;
-};
-
-const toBackendEndTime = (date?: string) => {
-  if (!date) return undefined;
-  return `${date}T23:59:59`;
+const normalizeDateTimeForApi = (value?: string) => {
+  if (!value) return undefined;
+  // Native datetime-local returns YYYY-MM-DDTHH:mm, BE expects seconds.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) {
+    return `${value}:00`;
+  }
+  return value;
 };
 
 const formatDate = (dateStr?: string) => {
@@ -106,8 +140,14 @@ const AdminAllBookingListPage: React.FC = () => {
   } | null>(null);
   // Filter form states
   const [statusFilter, setStatusFilter] = useState<string>("All");
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>(DEFAULT_FILTER_DATE);
+  const [endDate, setEndDate] = useState<string>(DEFAULT_FILTER_DATE);
+  const [startClock, setStartClock] = useState<string>(DEFAULT_START_CLOCK);
+  const [endClock, setEndClock] = useState<string>(DEFAULT_END_CLOCK);
+  const [userNameFilter, setUserNameFilter] = useState<string>("");
+  const [userEmailFilter, setUserEmailFilter] = useState<string>("");
+  const [roomNameFilter, setRoomNameFilter] = useState<string>("");
+  const [floorNameFilter, setFloorNameFilter] = useState<string>("");
   const [buildingNameFilter, setBuildingNameFilter] = useState<string>("");
   const [buildingOptions, setBuildingOptions] = useState<BuildingOption[]>([]);
 
@@ -115,6 +155,10 @@ const AdminAllBookingListPage: React.FC = () => {
   const [appliedStatus, setAppliedStatus] = useState<string>("All");
   const [appliedStartDate, setAppliedStartDate] = useState<string>("");
   const [appliedEndDate, setAppliedEndDate] = useState<string>("");
+  const [appliedUserName, setAppliedUserName] = useState<string>("");
+  const [appliedUserEmail, setAppliedUserEmail] = useState<string>("");
+  const [appliedRoomName, setAppliedRoomName] = useState<string>("");
+  const [appliedFloorName, setAppliedFloorName] = useState<string>("");
   const [appliedBuildingName, setAppliedBuildingName] = useState<string>("");
 
   const loadAdminProfile = async () => {
@@ -169,10 +213,18 @@ const AdminAllBookingListPage: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     setError(null);
+
+    const normalizedStart = normalizeDateTimeForApi(appliedStartDate);
+    const normalizedEnd = normalizeDateTimeForApi(appliedEndDate);
+
     adminService
       .getAllBookings(page - 1, pageSize, {
-        startTime: toBackendStartTime(appliedStartDate),
-        endTime: toBackendEndTime(appliedEndDate),
+        startDate: normalizedStart,
+        endDate: normalizedEnd,
+        userName: appliedUserName || undefined,
+        userEmail: appliedUserEmail || undefined,
+        roomName: appliedRoomName || undefined,
+        floorName: appliedFloorName || undefined,
         buildingName: appliedBuildingName || undefined,
         status: appliedStatus !== "All" ? appliedStatus : undefined,
       })
@@ -187,24 +239,66 @@ const AdminAllBookingListPage: React.FC = () => {
         setTotal(0);
         setLoading(false);
       });
-  }, [appliedStatus, appliedStartDate, appliedEndDate, appliedBuildingName, page, pageSize]);
+  }, [
+    appliedStatus,
+    appliedStartDate,
+    appliedEndDate,
+    appliedUserName,
+    appliedUserEmail,
+    appliedRoomName,
+    appliedFloorName,
+    appliedBuildingName,
+    page,
+    pageSize,
+  ]);
 
   const handleApplyFilters = () => {
+    const startDateTime = combineDateTime(startDate, startClock);
+    const endDateTime = combineDateTime(endDate, endClock);
+    const normalizedStart = normalizeDateTimeForApi(startDateTime);
+    const normalizedEnd = normalizeDateTimeForApi(endDateTime);
+    const parsedStart = parseDate(normalizedStart);
+    const parsedEnd = parseDate(normalizedEnd);
+
+    if (!normalizedStart || !normalizedEnd) {
+      showToast("warning", "Please select both start time and end time");
+      return;
+    }
+
+    if (parsedStart && parsedEnd && parsedEnd <= parsedStart) {
+      showToast("warning", "End time must be later than Start time");
+      return;
+    }
+
     setAppliedStatus(statusFilter);
-    setAppliedStartDate(startDate);
-    setAppliedEndDate(endDate);
+    setAppliedStartDate(startDateTime);
+    setAppliedEndDate(endDateTime);
+    setAppliedUserName(userNameFilter.trim());
+    setAppliedUserEmail(userEmailFilter.trim());
+    setAppliedRoomName(roomNameFilter.trim());
+    setAppliedFloorName(floorNameFilter.trim());
     setAppliedBuildingName((buildingNameFilter || "").trim());
     setPage(1);
   };
 
   const handleResetFilters = () => {
     setStatusFilter("All");
-    setStartDate("");
-    setEndDate("");
+    setStartDate(DEFAULT_FILTER_DATE);
+    setEndDate(DEFAULT_FILTER_DATE);
+    setStartClock(DEFAULT_START_CLOCK);
+    setEndClock(DEFAULT_END_CLOCK);
+    setUserNameFilter("");
+    setUserEmailFilter("");
+    setRoomNameFilter("");
+    setFloorNameFilter("");
     setBuildingNameFilter("");
     setAppliedStatus("All");
     setAppliedStartDate("");
     setAppliedEndDate("");
+    setAppliedUserName("");
+    setAppliedUserEmail("");
+    setAppliedRoomName("");
+    setAppliedFloorName("");
     setAppliedBuildingName("");
     setPage(1);
   };
@@ -245,7 +339,7 @@ const AdminAllBookingListPage: React.FC = () => {
       "STATUS",
     ];
     const rows = bookings.map((booking) => [
-      booking.bookingId || booking.id || "-",
+      booking.reservationId || booking.bookingId || booking.id || "-",
       booking.userName || booking.user || "-",
       booking.roomName || booking.room || "-",
       booking.startTime ? new Date(booking.startTime).toLocaleString() : "-",
@@ -315,7 +409,7 @@ const AdminAllBookingListPage: React.FC = () => {
               .map(
                 (booking) => `
               <tr>
-                <td>${booking.bookingId || booking.id || "-"}</td>
+                <td>${booking.reservationId || booking.bookingId || booking.id || "-"}</td>
                 <td>${booking.userName || booking.user || "-"}</td>
                 <td>${booking.roomName || booking.room || "-"}</td>
                 <td>${booking.startTime ? new Date(booking.startTime).toLocaleString() : "-"}</td>
@@ -338,11 +432,12 @@ const AdminAllBookingListPage: React.FC = () => {
 
   const columns: ColumnsType<BookingRow> = [
     {
-      title: "BOOKING ID",
+      title: "RESERVATION ID",
       dataIndex: "bookingId",
       key: "bookingId",
       width: "10%",
-      render: (value, record) => value || record.id || "-",
+      render: (value, record) =>
+        record.reservationId || value || record.id || "-",
     },
     {
       title: "USER NAME",
@@ -449,30 +544,139 @@ const AdminAllBookingListPage: React.FC = () => {
               Filter Bookings
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6 mb-6">
-              {/* Date Range Filter */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Start Date
+                  Start Time
                 </label>
-                <DatePickerField
-                  value={startDate}
-                  onChange={setStartDate}
+                <div className="grid grid-cols-2 gap-2">
+                  <DatePickerField
+                    value={startDate}
+                    onChange={(nextDate) => {
+                      setStartDate(nextDate);
+                      if (endDate && nextDate > endDate) {
+                        setEndDate(nextDate);
+                      }
+                    }}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select
+                      value={getClockHour(startClock) || undefined}
+                      onChange={(nextHour) => {
+                        const currentMinute = getClockMinute(startClock) || "00";
+                        setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                      }}
+                      placeholder="Hour"
+                      listHeight={160}
+                      className="w-full"
+                      options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                    />
+                    <select
+                      value={getClockMinute(startClock)}
+                      onChange={(event) => {
+                        const nextMinute = event.target.value;
+                        const currentHour = getClockHour(startClock) || "00";
+                        setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                      }}
+                      className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    >
+                      <option value="">Minute</option>
+                      {MINUTE_OPTIONS.map((minute) => (
+                        <option key={minute} value={minute}>
+                          {minute}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  End Time
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <DatePickerField
+                    value={endDate}
+                    minDate={startDate}
+                    onChange={setEndDate}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select
+                      value={getClockHour(endClock) || undefined}
+                      onChange={(nextHour) => {
+                        const currentMinute = getClockMinute(endClock) || "00";
+                        setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                      }}
+                      placeholder="Hour"
+                      listHeight={160}
+                      className="w-full"
+                      options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                    />
+                    <select
+                      value={getClockMinute(endClock)}
+                      onChange={(event) => {
+                        const nextMinute = event.target.value;
+                        const currentHour = getClockHour(endClock) || "00";
+                        setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                      }}
+                      className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    >
+                      <option value="">Minute</option>
+                      {MINUTE_OPTIONS.map((minute) => (
+                        <option key={minute} value={minute}>
+                          {minute}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  User Name
+                </label>
+                <Input
+                  value={userNameFilter}
+                  onChange={(event) => setUserNameFilter(event.target.value)}
+                  placeholder="Enter user name"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  End Date
+                  User Email
                 </label>
-                <DatePickerField
-                  value={endDate}
-                  onChange={setEndDate}
-                  minDate={startDate}
+                <Input
+                  value={userEmailFilter}
+                  onChange={(event) => setUserEmailFilter(event.target.value)}
+                  placeholder="Enter user email"
                 />
               </div>
 
-              {/* Status Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Room Name
+                </label>
+                <Input
+                  value={roomNameFilter}
+                  onChange={(event) => setRoomNameFilter(event.target.value)}
+                  placeholder="Enter room name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Floor Name
+                </label>
+                <Input
+                  value={floorNameFilter}
+                  onChange={(event) => setFloorNameFilter(event.target.value)}
+                  placeholder="Enter floor name"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Status
@@ -493,7 +697,7 @@ const AdminAllBookingListPage: React.FC = () => {
                 />
               </div>
 
-              <div>
+              <div className="md:col-span-2 lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Building Name
                 </label>
@@ -541,6 +745,7 @@ const AdminAllBookingListPage: React.FC = () => {
             ) : (
               <Table<BookingRow>
                 rowKey={(record, index) =>
+                  record.reservationId ||
                   record.bookingId ||
                   record.id ||
                   `booking-${index}`

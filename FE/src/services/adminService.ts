@@ -53,11 +53,30 @@ type BackendUser = {
 
 type BackendReservation = {
   id?: string;
+  reservationId?: string;
   bookingId?: string;
+  userName?: string | null;
+  username?: string | null;
+  fullName?: string | null;
+  userEmail?: string | null;
+  roomName?: string | null;
+  floorName?: string | null;
+  buildingName?: string | null;
   startTime?: string | null;
   endTime?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   status?: string | null;
   roomType?: string | null;
+  building?: {
+    id?: string | null;
+    name?: string | null;
+    address?: string | null;
+  } | null;
+  floor?: {
+    id?: string | null;
+    name?: string | null;
+  } | null;
   room?: {
     name?: string | null;
     roomName?: string | null;
@@ -89,11 +108,15 @@ type BackendReservation = {
 
 type AdminBooking = {
   id: string;
+  reservationId: string;
   bookingId: string;
   user: string;
   userName: string;
+  userEmail: string;
   room: string;
   roomName: string;
+  floorName: string;
+  buildingName: string;
   roomType: string;
   startTime?: string;
   endTime?: string;
@@ -102,8 +125,12 @@ type AdminBooking = {
 };
 
 type AdminBookingFilters = {
-  startTime?: string;
-  endTime?: string;
+  startDate?: string;
+  endDate?: string;
+  userName?: string;
+  userEmail?: string;
+  roomName?: string;
+  floorName?: string;
   buildingName?: string;
   status?: string;
 };
@@ -154,6 +181,9 @@ const pickFirstText = (...values: Array<unknown>): string => {
 
 const normalizeBooking = (item: BackendReservation): AdminBooking => {
   const userName = pickFirstText(
+    item.userName,
+    item.username,
+    item.fullName,
     item.user?.fullName,
     item.user?.name,
     item.user?.username,
@@ -168,22 +198,32 @@ const normalizeBooking = (item: BackendReservation): AdminBooking => {
   );
 
   const roomName = pickFirstText(
+    item.roomName,
     item.room?.name,
     item.room?.roomName,
     item.room?.locationCode,
   );
 
   return {
-    id: String(item.id || item.bookingId || ""),
-    bookingId: String(item.bookingId || item.id || ""),
+    id: String(item.id || item.reservationId || item.bookingId || ""),
+    reservationId: String(item.reservationId || item.id || item.bookingId || ""),
+    bookingId: String(item.bookingId || item.reservationId || item.id || ""),
     user: userName,
     userName,
+    userEmail: pickFirstText(
+      item.userEmail,
+      item.user?.email,
+      item.account?.email,
+      item.booker?.email,
+    ),
     room: roomName,
     roomName,
+    floorName: pickFirstText(item.floorName, item.floor?.name),
+    buildingName: pickFirstText(item.buildingName, item.building?.name),
     roomType: pickFirstText(item.roomType, item.room?.type, item.room?.roomType),
-    startTime: item.startTime || undefined,
-    endTime: item.endTime || undefined,
-    date: item.endTime || item.startTime || undefined,
+    startTime: item.startTime || item.startDate || undefined,
+    endTime: item.endTime || item.endDate || undefined,
+    date: item.endTime || item.endDate || item.startTime || item.startDate || undefined,
     status: String(item.status || ""),
   };
 };
@@ -335,27 +375,34 @@ export const adminService = {
     size: number;
   }> {
     const params: Record<string, string | number> = { page, size };
-    if (filters?.startTime) {
-      params.startTime = filters.startTime;
-      params.fromTime = filters.startTime;
+    if (filters?.startDate) {
+      params.startDate = filters.startDate;
+      params.startTime = filters.startDate;
     }
-    if (filters?.endTime) {
-      params.endTime = filters.endTime;
-      params.toTime = filters.endTime;
+    if (filters?.endDate) {
+      params.endDate = filters.endDate;
+      params.endTime = filters.endDate;
+    }
+    if (filters?.userName) {
+      params.userName = filters.userName;
+      params.username = filters.userName;
+    }
+    if (filters?.userEmail) {
+      params.userEmail = filters.userEmail;
+      params.email = filters.userEmail;
+    }
+    if (filters?.roomName) {
+      params.roomName = filters.roomName;
+    }
+    if (filters?.floorName) {
+      params.floorName = filters.floorName;
     }
     if (filters?.buildingName) {
       params.buildingName = filters.buildingName;
-      params.building = filters.buildingName;
     }
     if (filters?.status) {
       params.status = filters.status;
-      params.statuses = filters.status;
     }
-
-    console.log("=== ADMIN BOOKING SEARCH ===");
-    console.log("Endpoint:", API_ENDPOINTS.DASHBOARD.ALL_RESERVATIONS);
-    console.log("Query Params:", params);
-    console.log("Request URL:", `${API_ENDPOINTS.DASHBOARD.ALL_RESERVATIONS}?${new URLSearchParams(params as any).toString()}`);
 
     const res = await api.get<any>(API_ENDPOINTS.DASHBOARD.ALL_RESERVATIONS, {
       params,
