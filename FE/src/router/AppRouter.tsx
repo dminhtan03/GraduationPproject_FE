@@ -31,6 +31,7 @@ const ChangePasswordPage = React.lazy(
 );
 const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
 const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
+const AdminDashboardPage = React.lazy(() => import("../pages/AdminDashboard"));
 const AdminUserManagementPage = React.lazy(
   () => import("../pages/AdminUserManagement"),
 );
@@ -215,6 +216,17 @@ export const router = createBrowserRouter([
   },
   {
     path: ROUTES.ADMIN_DASHBOARD,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminDashboardPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_USER_MANAGEMENT,
     element: (
       <ProtectedRoute mode="admin-only">
         <SuspenseWrapper>
@@ -418,5 +430,11 @@ export const routeDefinitions = [
     path: ROUTES.ADMIN_DASHBOARD,
     label: "Dashboard",
     icon: "dashboard",
+  },
+  {
+    key: "user-management",
+    path: ROUTES.ADMIN_USER_MANAGEMENT,
+    label: "User Management",
+    icon: "users",
   },
 ] as const;

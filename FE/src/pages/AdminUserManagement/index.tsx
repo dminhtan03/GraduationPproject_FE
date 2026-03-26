@@ -19,6 +19,9 @@ import { logout } from "../../services/authService";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
+import AnimatedDropdown, {
+  type AnimatedDropdownOption,
+} from "../../components/common/AnimatedDropdown";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import CustomMessage, {
   type MessageType,
@@ -38,6 +41,12 @@ type ApiFieldError = {
 };
 
 const PAGE_SIZE = 10;
+
+const statusFilterOptions: Array<AnimatedDropdownOption<StatusFilter>> = [
+  { value: "ALL", label: "All Status" },
+  { value: "ACTIVE", label: "Active" },
+  { value: "LOCKED", label: "Locked" },
+];
 
 const normalizeRole = (value?: string) => {
   const raw = String(value || "")
@@ -627,15 +636,14 @@ const AdminUserManagementPage: React.FC = () => {
               />
             </label>
 
-            <select
+            <AnimatedDropdown<StatusFilter>
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-            >
-              <option value="ALL">All Status</option>
-              <option value="ACTIVE">Active</option>
-              <option value="LOCKED">Locked</option>
-            </select>
+              options={statusFilterOptions}
+              onChange={(nextValue) => setStatusFilter(nextValue)}
+              className="md:w-48"
+              buttonClassName="h-11 border-slate-300 bg-white font-medium"
+              ariaLabel="Filter users by status"
+            />
           </div>
 
           <div className="hidden overflow-x-auto md:block">

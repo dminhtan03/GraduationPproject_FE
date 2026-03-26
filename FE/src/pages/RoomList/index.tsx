@@ -7,6 +7,9 @@ import { roomService } from "../../services/roomService";
 import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import DatePickerField from "../../components/common/DatePickerField";
+import AnimatedDropdown, {
+  type AnimatedDropdownOption,
+} from "../../components/common/AnimatedDropdown";
 import { useRealtimeClock } from "../../hooks";
 import {
   HOUR_OPTIONS,
@@ -57,6 +60,13 @@ interface RawMapBuilding {
 }
 
 const PAGE_SIZE = 10;
+
+const roomStatusFilterOptions: Array<AnimatedDropdownOption<FilterType>> = [
+  { value: "all", label: "All" },
+  { value: "available", label: "Available" },
+  { value: "unavailable", label: "Unavailable" },
+  { value: "broken", label: "Maintenance" },
+];
 
 const getStatusBadgeClass = (status: RoomListStatus) => {
   if (status === "AVAILABLE") return "bg-green-100 text-green-700";
@@ -314,6 +324,28 @@ const DashboardPage: React.FC = () => {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [rooms, selectedBuildingId]);
 
+  const buildingFilterOptions = useMemo<Array<AnimatedDropdownOption<string>>>(
+    () => [
+      { value: "all", label: "All buildings" },
+      ...buildingOptions.map((building) => ({
+        value: building.id,
+        label: building.name,
+      })),
+    ],
+    [buildingOptions],
+  );
+
+  const floorFilterOptions = useMemo<Array<AnimatedDropdownOption<string>>>(
+    () => [
+      { value: "all", label: "All floors" },
+      ...floorOptions.map((floor) => ({
+        value: floor.id,
+        label: floor.name,
+      })),
+    ],
+    [floorOptions],
+  );
+
   const locationFilteredRooms = useMemo(() => {
     return rooms.filter((room) => {
       if (
@@ -485,67 +517,54 @@ const DashboardPage: React.FC = () => {
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
               Status
             </div>
-            <select
+            <AnimatedDropdown<FilterType>
               value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value as FilterType);
+              options={roomStatusFilterOptions}
+              onChange={(nextValue) => {
+                setFilter(nextValue);
                 setPage(0);
               }}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-            >
-              <option value="all">All</option>
-              <option value="available">Available</option>
-              <option value="unavailable">Unavailable</option>
-              <option value="broken">Maintenance</option>
-            </select>
+              buttonClassName="h-[42px] border-gray-200 bg-white"
+              ariaLabel="Filter rooms by status"
+            />
           </div>
 
           <div>
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
               Building
             </div>
-            <select
+            <AnimatedDropdown<string>
               value={selectedBuildingId}
-              onChange={(e) => {
-                setSelectedBuildingId(e.target.value);
+              options={buildingFilterOptions}
+              onChange={(nextValue) => {
+                setSelectedBuildingId(nextValue);
                 setSelectedFloorId("all");
                 setPage(0);
                 setTimeFilterActive(false);
                 setTimeStatusOverrides({});
               }}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-            >
-              <option value="all">All buildings</option>
-              {buildingOptions.map((building) => (
-                <option key={building.id} value={building.id}>
-                  {building.name}
-                </option>
-              ))}
-            </select>
+              buttonClassName="h-[42px] border-gray-200 bg-white"
+              ariaLabel="Filter rooms by building"
+            />
           </div>
 
           <div>
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
               Floor
             </div>
-            <select
+            <AnimatedDropdown<string>
               value={selectedFloorId}
-              onChange={(e) => {
-                setSelectedFloorId(e.target.value);
+              options={floorFilterOptions}
+              onChange={(nextValue) => {
+                setSelectedFloorId(nextValue);
                 setPage(0);
                 setTimeFilterActive(false);
                 setTimeStatusOverrides({});
               }}
               disabled={selectedBuildingId === "all"}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:bg-gray-100 disabled:text-gray-500"
-            >
-              <option value="all">All floors</option>
-              {floorOptions.map((floor) => (
-                <option key={floor.id} value={floor.id}>
-                  {floor.name}
-                </option>
-              ))}
-            </select>
+              buttonClassName="h-[42px] border-gray-200 bg-white"
+              ariaLabel="Filter rooms by floor"
+            />
           </div>
         </div>
 
