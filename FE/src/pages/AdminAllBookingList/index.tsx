@@ -65,7 +65,6 @@ const toDatePart = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const DEFAULT_FILTER_DATE = toDatePart(new Date());
 const DEFAULT_START_CLOCK = "00:00";
 const DEFAULT_END_CLOCK = "23:59";
 
@@ -87,12 +86,13 @@ const getClockMinute = (clock: string) => {
 const getStatusColor = (status: string) => {
   const normalized = status?.toUpperCase() || "";
   if (normalized === "PENDING") return "gold";
-  if (normalized === "CONFIRMED") return "green";
-  if (normalized === "CHECKED_IN" || normalized === "IN_USE") return "blue";
+  if (normalized === "RESERVED") return "green";
+  if (normalized === "IN_USE") return "blue";
   if (normalized === "COMPLETED") return "cyan";
   if (normalized === "CANCELLED") return "red";
+  if (normalized === "FORCE_CANCELLED") return "volcano";
   if (normalized === "NO_SHOW") return "orange";
-  if (normalized === "REJECTED") return "volcano";
+  if (normalized === "FAILED") return "orange";
   return "default";
 };
 
@@ -140,8 +140,8 @@ const AdminAllBookingListPage: React.FC = () => {
   } | null>(null);
   // Filter form states
   const [statusFilter, setStatusFilter] = useState<string>("All");
-  const [startDate, setStartDate] = useState<string>(DEFAULT_FILTER_DATE);
-  const [endDate, setEndDate] = useState<string>(DEFAULT_FILTER_DATE);
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   const [startClock, setStartClock] = useState<string>(DEFAULT_START_CLOCK);
   const [endClock, setEndClock] = useState<string>(DEFAULT_END_CLOCK);
   const [userNameFilter, setUserNameFilter] = useState<string>("");
@@ -253,26 +253,33 @@ const AdminAllBookingListPage: React.FC = () => {
   ]);
 
   const handleApplyFilters = () => {
-    const startDateTime = combineDateTime(startDate, startClock);
-    const endDateTime = combineDateTime(endDate, endClock);
-    const normalizedStart = normalizeDateTimeForApi(startDateTime);
-    const normalizedEnd = normalizeDateTimeForApi(endDateTime);
-    const parsedStart = parseDate(normalizedStart);
-    const parsedEnd = parseDate(normalizedEnd);
+    let normalizedStart = "";
+    let normalizedEnd = "";
 
-    if (!normalizedStart || !normalizedEnd) {
-      showToast("warning", "Please select both start time and end time");
+    // If both dates are provided, validate them
+    if (startDate && endDate) {
+      const startDateTime = combineDateTime(startDate, startClock);
+      const endDateTime = combineDateTime(endDate, endClock);
+      normalizedStart = normalizeDateTimeForApi(startDateTime) || "";
+      normalizedEnd = normalizeDateTimeForApi(endDateTime) || "";
+      const parsedStart = parseDate(normalizedStart);
+      const parsedEnd = parseDate(normalizedEnd);
+
+      if (parsedStart && parsedEnd && parsedEnd <= parsedStart) {
+        showToast("warning", "End time must be later than Start time");
+        return;
+      }
+    }
+    // If only one date is provided, show warning
+    else if ((startDate && !endDate) || (!startDate && endDate)) {
+      showToast("warning", "Please select both start and end dates, or leave both empty to show all");
       return;
     }
-
-    if (parsedStart && parsedEnd && parsedEnd <= parsedStart) {
-      showToast("warning", "End time must be later than Start time");
-      return;
-    }
+    // If both are empty, that's OK - will show all bookings
 
     setAppliedStatus(statusFilter);
-    setAppliedStartDate(startDateTime);
-    setAppliedEndDate(endDateTime);
+    setAppliedStartDate(normalizedStart);
+    setAppliedEndDate(normalizedEnd);
     setAppliedUserName(userNameFilter.trim());
     setAppliedUserEmail(userEmailFilter.trim());
     setAppliedRoomName(roomNameFilter.trim());
@@ -283,8 +290,8 @@ const AdminAllBookingListPage: React.FC = () => {
 
   const handleResetFilters = () => {
     setStatusFilter("All");
-    setStartDate(DEFAULT_FILTER_DATE);
-    setEndDate(DEFAULT_FILTER_DATE);
+    setStartDate("");
+    setEndDate("");
     setStartClock(DEFAULT_START_CLOCK);
     setEndClock(DEFAULT_END_CLOCK);
     setUserNameFilter("");
@@ -330,34 +337,21 @@ const AdminAllBookingListPage: React.FC = () => {
       return;
     }
 
-    const headers = [
-      "BOOKING ID",
-      "USER NAME",
-      "ROOM NAME",
-      "START TIME",
-      "END TIME",
-      "STATUS",
-    ];
-    const rows = bookings.map((booking) => [
-      booking.reservationId || booking.bookingId || booking.id || "-",
-      booking.userName || booking.user || "-",
-      booking.roomName || booking.room || "-",
-      booking.startTime ? new Date(booking.startTime).toLocaleString() : "-",
-      (booking.endTime || booking.date) ? new Date(booking.endTime || booking.date || "").toLocaleString() : "-",
-      booking.status || "-",
-    ]);
-
     const csvContent = [
-      headers.join(","),
-      ...rows.map((row) =>
-        row
-          .map((cell) =>
-            typeof cell === "string" && cell.includes(",")
-              ? `"${cell}"`
-              : cell,
-          )
-          .join(","),
-      ),
+      ["USER NAME", "ROOM NAME", "START TIME", "END TIME", "STATUS"].join(","),
+      ...bookings.map((booking) => [
+        booking.userName || booking.user || "-",
+        booking.roomName || booking.room || "-",
+        booking.startTime ? new Date(booking.startTime).toLocaleString() : "-",
+        (booking.endTime || booking.date) ? new Date(booking.endTime || booking.date || "").toLocaleString() : "-",
+        booking.status || "-",
+      ]
+        .map((cell) =>
+          typeof cell === "string" && cell.includes(",")
+            ? `"${cell}"`
+            : cell,
+        )
+        .join(",")),
     ].join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv" });
@@ -394,11 +388,10 @@ const AdminAllBookingListPage: React.FC = () => {
           </style>
         </head>
         <body>
-          <h1>All Bookings Master List</h1>
+          <h1>All Bookings List</h1>
           <div class="print-date">Generated: ${new Date().toLocaleString()}</div>
           <table>
             <tr>
-              <th>BOOKING ID</th>
               <th>USER NAME</th>
               <th>ROOM NAME</th>
               <th>START TIME</th>
@@ -409,7 +402,6 @@ const AdminAllBookingListPage: React.FC = () => {
               .map(
                 (booking) => `
               <tr>
-                <td>${booking.reservationId || booking.bookingId || booking.id || "-"}</td>
                 <td>${booking.userName || booking.user || "-"}</td>
                 <td>${booking.roomName || booking.room || "-"}</td>
                 <td>${booking.startTime ? new Date(booking.startTime).toLocaleString() : "-"}</td>
@@ -432,31 +424,23 @@ const AdminAllBookingListPage: React.FC = () => {
 
   const columns: ColumnsType<BookingRow> = [
     {
-      title: "RESERVATION ID",
-      dataIndex: "bookingId",
-      key: "bookingId",
-      width: "10%",
-      render: (value, record) =>
-        record.reservationId || value || record.id || "-",
-    },
-    {
       title: "USER NAME",
       dataIndex: "userName",
       key: "userName",
-      width: "12%",
+      width: "14%",
       render: (value, record) => value || record.user || "-",
     },
     {
       title: "ROOM NAME",
       dataIndex: "roomName",
       key: "roomName",
-      width: "12%",
+      width: "14%",
       render: (value, record) => value || record.room || "-",
     },
     {
       title: "START TIME",
       key: "startTime",
-      width: "14%",
+      width: "15%",
       render: (_, record) => {
         const dateStr = record.startTime;
         return dateStr ? new Date(dateStr).toLocaleString() : "-";
@@ -465,7 +449,7 @@ const AdminAllBookingListPage: React.FC = () => {
     {
       title: "END TIME",
       key: "endTime",
-      width: "14%",
+      width: "15%",
       render: (_, record) => {
         const dateStr = record.endTime || record.date;
         return dateStr ? new Date(dateStr).toLocaleString() : "-";
@@ -475,7 +459,7 @@ const AdminAllBookingListPage: React.FC = () => {
       title: "STATUS",
       dataIndex: "status",
       key: "status",
-      width: "11%",
+      width: "13%",
       render: (status: string) => (
         <Tag color={getStatusColor(status)}>{status || "-"}</Tag>
       ),
@@ -483,7 +467,7 @@ const AdminAllBookingListPage: React.FC = () => {
     {
       title: "ACTIONS",
       key: "actions",
-      width: "11%",
+      width: "13%",
       render: (_, record) => (
         <Space>
           <Tooltip title="View details">
@@ -523,7 +507,7 @@ const AdminAllBookingListPage: React.FC = () => {
               <Bars3Icon className="w-6 h-6" />
             </button>
             <h1 className="text-2xl font-bold text-gray-900">
-              All Bookings Master List
+              All Bookings List
             </h1>
           </div>
 
@@ -539,17 +523,18 @@ const AdminAllBookingListPage: React.FC = () => {
         {/* Main Content */}
         <main className="flex-1 overflow-auto p-6">
           {/* Filters Section */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6">
-              Filter Bookings
+          <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-5">
+              Search & Filter
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            {/* First Row - Start/End Time */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pb-4 border-b border-gray-200">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   Start Time
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <DatePickerField
                     value={startDate}
                     onChange={(nextDate) => {
@@ -559,147 +544,129 @@ const AdminAllBookingListPage: React.FC = () => {
                       }
                     }}
                   />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Select
-                      value={getClockHour(startClock) || undefined}
-                      onChange={(nextHour) => {
-                        const currentMinute = getClockMinute(startClock) || "00";
-                        setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
-                      }}
-                      placeholder="Hour"
-                      listHeight={160}
-                      className="w-full"
-                      options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
-                    />
-                    <select
-                      value={getClockMinute(startClock)}
-                      onChange={(event) => {
-                        const nextMinute = event.target.value;
-                        const currentHour = getClockHour(startClock) || "00";
-                        setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
-                      }}
-                      className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    >
-                      <option value="">Minute</option>
-                      {MINUTE_OPTIONS.map((minute) => (
-                        <option key={minute} value={minute}>
-                          {minute}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <Select
+                    value={getClockHour(startClock) || undefined}
+                    onChange={(nextHour) => {
+                      const currentMinute = getClockMinute(startClock) || "00";
+                      setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                    }}
+                    placeholder="Hour"
+                    listHeight={160}
+                    className="w-full"
+                    options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                  />
+                  <select
+                    value={getClockMinute(startClock)}
+                    onChange={(event) => {
+                      const nextMinute = event.target.value;
+                      const currentHour = getClockHour(startClock) || "00";
+                      setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                    }}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  >
+                    <option value="">Min</option>
+                    {MINUTE_OPTIONS.map((minute) => (
+                      <option key={minute} value={minute}>
+                        {minute}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   End Time
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <DatePickerField
                     value={endDate}
                     minDate={startDate}
                     onChange={setEndDate}
                   />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Select
-                      value={getClockHour(endClock) || undefined}
-                      onChange={(nextHour) => {
-                        const currentMinute = getClockMinute(endClock) || "00";
-                        setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
-                      }}
-                      placeholder="Hour"
-                      listHeight={160}
-                      className="w-full"
-                      options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
-                    />
-                    <select
-                      value={getClockMinute(endClock)}
-                      onChange={(event) => {
-                        const nextMinute = event.target.value;
-                        const currentHour = getClockHour(endClock) || "00";
-                        setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
-                      }}
-                      className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    >
-                      <option value="">Minute</option>
-                      {MINUTE_OPTIONS.map((minute) => (
-                        <option key={minute} value={minute}>
-                          {minute}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <Select
+                    value={getClockHour(endClock) || undefined}
+                    onChange={(nextHour) => {
+                      const currentMinute = getClockMinute(endClock) || "00";
+                      setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                    }}
+                    placeholder="Hour"
+                    listHeight={160}
+                    className="w-full"
+                    options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                  />
+                  <select
+                    value={getClockMinute(endClock)}
+                    onChange={(event) => {
+                      const nextMinute = event.target.value;
+                      const currentHour = getClockHour(endClock) || "00";
+                      setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                    }}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  >
+                    <option value="">Min</option>
+                    {MINUTE_OPTIONS.map((minute) => (
+                      <option key={minute} value={minute}>
+                        {minute}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
+            </div>
 
+            {/* Second Row - User Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 pb-4 border-b border-gray-200">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   User Name
                 </label>
                 <Input
                   value={userNameFilter}
                   onChange={(event) => setUserNameFilter(event.target.value)}
-                  placeholder="Enter user name"
+                  placeholder="Search user..."
+                  className="rounded-lg"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   User Email
                 </label>
                 <Input
                   value={userEmailFilter}
                   onChange={(event) => setUserEmailFilter(event.target.value)}
-                  placeholder="Enter user email"
+                  placeholder="Search email..."
+                  className="rounded-lg"
                 />
               </div>
+            </div>
 
+            {/* Third Row - Room/Floor/Building/Status */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   Room Name
                 </label>
                 <Input
                   value={roomNameFilter}
                   onChange={(event) => setRoomNameFilter(event.target.value)}
-                  placeholder="Enter room name"
+                  placeholder="Search room..."
+                  className="rounded-lg"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   Floor Name
                 </label>
                 <Input
                   value={floorNameFilter}
                   onChange={(event) => setFloorNameFilter(event.target.value)}
-                  placeholder="Enter floor name"
+                  placeholder="Search floor..."
+                  className="rounded-lg"
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Status
-                </label>
-                <Select
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  className="w-full"
-                  options={[
-                    { label: "All Statuses", value: "All" },
-                    { label: "Pending", value: "PENDING" },
-                    { label: "Confirmed", value: "CONFIRMED" },
-                    { label: "Checked In", value: "CHECKED_IN" },
-                    { label: "Completed", value: "COMPLETED" },
-                    { label: "Cancelled", value: "CANCELLED" },
-                    { label: "No Show", value: "NO_SHOW" },
-                  ]}
-                />
-              </div>
-
-              <div className="md:col-span-2 lg:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Building Name
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                  Building
                 </label>
                 <Select
                   value={buildingNameFilter || undefined}
@@ -710,17 +677,44 @@ const AdminAllBookingListPage: React.FC = () => {
                   options={buildingOptions}
                 />
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                  Status
+                </label>
+                <Select
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  className="w-full"
+                  options={[
+                    { label: "All", value: "All" },
+                    { label: "Pending", value: "PENDING" },
+                    { label: "Reserved", value: "RESERVED" },
+                    { label: "In Use", value: "IN_USE" },
+                    { label: "Completed", value: "COMPLETED" },
+                    { label: "Cancelled", value: "CANCELLED" },
+                    { label: "Force Cancelled", value: "FORCE_CANCELLED" },
+                    { label: "No Show", value: "NO_SHOW" },
+                    { label: "Failed", value: "FAILED" },
+                  ]}
+                />
+              </div>
             </div>
 
-            <div className="flex gap-2">
+            {/* Action Buttons */}
+            <div className="flex gap-3 justify-end">
+              <Button 
+                onClick={handleResetFilters}
+                className="px-6 py-2 rounded-lg border-gray-300 hover:bg-gray-50"
+              >
+                Clear
+              </Button>
               <Button
                 type="primary"
                 onClick={handleApplyFilters}
-                className="bg-orange-500 hover:bg-orange-600"
+                className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium"
               >
-                Apply Filters
+                Search
               </Button>
-              <Button onClick={handleResetFilters}>Reset</Button>
             </div>
           </div>
 
