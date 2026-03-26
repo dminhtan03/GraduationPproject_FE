@@ -84,6 +84,7 @@ export const API_ENDPOINTS = {
   },
 
   DASHBOARD: {
+    OVERVIEW_STATS: "/api/v1/dashboard/overview-stats",
     ALL_USERS: "/api/v1/dashboard/all-users",
     LOCK_USER: "/api/v1/dashboard/lock-user/:userId",
     UNLOCK_USER: "/api/v1/dashboard/unlock-user/:userId",

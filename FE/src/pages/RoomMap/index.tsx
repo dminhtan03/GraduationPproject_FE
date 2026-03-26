@@ -33,6 +33,9 @@ import {
   toTotalMinutes,
 } from "../../utils";
 import DatePickerField from "../../components/common/DatePickerField";
+import AnimatedDropdown, {
+  type AnimatedDropdownOption,
+} from "../../components/common/AnimatedDropdown";
 import BookingLockCountdown from "../../components/common/BookingLockCountdown";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import { useRealtimeClock, useRoomStatusWebSocket } from "../../hooks";
@@ -105,6 +108,15 @@ const formatCheckInDateTime = (value?: string | null) => {
 
 const ROOM_LAYOUT_STORAGE_KEY = "room-map-layout-order";
 const FEEDBACK_PAGE_SIZE = 5;
+
+const roomMapStatusFilterOptions: Array<
+  AnimatedDropdownOption<"ALL" | MapRoomStatus>
+> = [
+  { value: "ALL", label: "All" },
+  { value: "AVAILABLE", label: "Available" },
+  { value: "UNAVAILABLE", label: "In Use" },
+  { value: "BROKEN", label: "Maintenance" },
+];
 
 const chunkRooms = <T,>(rooms: T[], size: number) => {
   const result: T[][] = [];
@@ -782,18 +794,14 @@ const RoomMapPage: React.FC = () => {
             <div className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase mb-1">
               Status
             </div>
-            <select
+            <AnimatedDropdown<"ALL" | MapRoomStatus>
               value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as "ALL" | MapRoomStatus)
-              }
-              className="w-full max-w-[240px] lg:w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-            >
-              <option value="ALL">All</option>
-              <option value="AVAILABLE">Available</option>
-              <option value="UNAVAILABLE">In Use</option>
-              <option value="BROKEN">Maintenance</option>
-            </select>
+              options={roomMapStatusFilterOptions}
+              onChange={(nextValue) => setStatusFilter(nextValue)}
+              className="w-full max-w-[240px] lg:w-40"
+              buttonClassName="h-10 border-slate-200 bg-white shadow-sm"
+              ariaLabel="Filter map rooms by status"
+            />
           </div>
 
           <div className="w-full lg:w-auto">
@@ -1067,180 +1075,184 @@ const RoomMapPage: React.FC = () => {
                 ) : (
                   <>
                     {layoutVariant === "gamma" && (
-                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[640px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner flex flex-col">
-                    <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-b border-slate-100">
-                      {top.map((room) => renderRoomTile(room, "h-16"))}
-                    </div>
-
-                    <div className="flex-1 grid grid-cols-[80px_minmax(0,_1fr)_80px] gap-2 px-3 py-4">
-                      <div className="flex flex-col gap-2">
-                        {left.map((room) =>
-                          renderRoomTile(room, "flex-1 min-h-[52px]"),
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-center">
-                        <div className="w-full max-w-xs h-32 sm:h-40 rounded-2xl border border-dashed border-slate-300 bg-sky-50 flex flex-col items-center justify-center text-xs text-sky-800">
-                          <span className="font-semibold mb-1">
-                            Common Area
-                          </span>
-                          <span className="text-[10px] text-sky-700">
-                            Collaboration & waiting space
-                          </span>
+                      <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[640px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner flex flex-col">
+                        <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-b border-slate-100">
+                          {top.map((room) => renderRoomTile(room, "h-16"))}
                         </div>
-                      </div>
 
-                      <div className="flex flex-col gap-2">
-                        {right.map((room) =>
-                          renderRoomTile(room, "flex-1 min-h-[52px]"),
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-t border-slate-100">
-                      {bottom.map((room) => renderRoomTile(room, "h-16"))}
-                    </div>
-                  </div>
-                )}
-
-                {layoutVariant === "alphaStyle" && (
-                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-rows-[auto_minmax(0,_1fr)_auto] gap-2">
-                    <div className="grid grid-cols-4 gap-2">
-                      {filteredRooms
-                        .slice(0, 4)
-                        .map((room) => renderRoomTile(room, "h-14"))}
-                    </div>
-
-                    <div className="grid grid-cols-[88px_minmax(0,_1fr)_88px] gap-2">
-                      <div className="flex flex-col gap-2">
-                        {filteredRooms
-                          .slice(4, 8)
-                          .map((room) =>
-                            renderRoomTile(room, "flex-1 min-h-[48px]"),
-                          )}
-                      </div>
-
-                      <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 flex flex-col items-center justify-center text-indigo-700">
-                        <span className="text-xs font-semibold">Atrium</span>
-                        <span className="text-[10px] opacity-80">
-                          Alpha Wing Hub
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        {filteredRooms
-                          .slice(8, 12)
-                          .map((room) =>
-                            renderRoomTile(room, "flex-1 min-h-[48px]"),
-                          )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-4 gap-2">
-                      {filteredRooms
-                        .slice(12, 16)
-                        .map((room) => renderRoomTile(room, "h-14"))}
-                    </div>
-                  </div>
-                )}
-
-                {layoutVariant === "betaStyle" && (
-                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-cols-[1fr_minmax(0,_1.15fr)_1fr] gap-3">
-                    <div className="grid grid-cols-1 gap-2">
-                      {filteredRooms
-                        .filter((_, index) => index % 2 === 0)
-                        .slice(0, 8)
-                        .map((room) => renderRoomTile(room, "h-[46px]"))}
-                    </div>
-
-                    <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/70 p-3">
-                      <div className="text-[11px] font-semibold tracking-wide uppercase text-emerald-700 mb-2">
-                        Main Corridor
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {filteredRooms
-                          .slice(16, 24)
-                          .map((room) =>
-                            renderRoomTile(
-                              room,
-                              "h-[52px]",
-                              "text-[10px] sm:text-[11px]",
-                            ),
-                          )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-2">
-                      {filteredRooms
-                        .filter((_, index) => index % 2 === 1)
-                        .slice(0, 8)
-                        .map((room) => renderRoomTile(room, "h-[46px]"))}
-                    </div>
-                  </div>
-                )}
-
-                {layoutVariant === "deltaStyle" && (
-                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {chunkRooms(filteredRooms, 3).map((pod, podIndex) => (
-                        <div
-                          key={`pod-${podIndex}`}
-                          className="rounded-2xl border border-amber-200 bg-amber-50/60 p-2.5"
-                        >
-                          <div className="text-[10px] font-semibold tracking-wide uppercase text-amber-700 mb-1.5">
-                            Cluster {podIndex + 1}
+                        <div className="flex-1 grid grid-cols-[80px_minmax(0,_1fr)_80px] gap-2 px-3 py-4">
+                          <div className="flex flex-col gap-2">
+                            {left.map((room) =>
+                              renderRoomTile(room, "flex-1 min-h-[52px]"),
+                            )}
                           </div>
-                          <div className="grid grid-cols-1 gap-1.5">
-                            {pod.map((room) =>
-                              renderRoomTile(
-                                room,
-                                "h-[44px]",
-                                "text-[10px] sm:text-[11px]",
-                              ),
+
+                          <div className="flex items-center justify-center">
+                            <div className="w-full max-w-xs h-32 sm:h-40 rounded-2xl border border-dashed border-slate-300 bg-sky-50 flex flex-col items-center justify-center text-xs text-sky-800">
+                              <span className="font-semibold mb-1">
+                                Common Area
+                              </span>
+                              <span className="text-[10px] text-sky-700">
+                                Collaboration & waiting space
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            {right.map((room) =>
+                              renderRoomTile(room, "flex-1 min-h-[52px]"),
                             )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
-                {layoutVariant === "epsilonStyle" && (
-                  <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
-                    <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-3 h-full overflow-y-auto">
-                      <div className="text-[11px] font-semibold tracking-wide uppercase text-rose-700 mb-2">
-                        Zigzag Route
+                        <div className="flex-0 grid grid-cols-5 gap-2 p-3 border-t border-slate-100">
+                          {bottom.map((room) => renderRoomTile(room, "h-16"))}
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        {chunkRooms(filteredRooms, 5).map((row, rowIndex) => {
-                          const renderedRow =
-                            rowIndex % 2 === 1 ? [...row].reverse() : row;
+                    )}
 
-                          return (
-                            <div
-                              key={`zigzag-${rowIndex}`}
-                              className="grid grid-cols-5 gap-2"
-                            >
-                              {renderedRow.map((room) =>
+                    {layoutVariant === "alphaStyle" && (
+                      <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-rows-[auto_minmax(0,_1fr)_auto] gap-2">
+                        <div className="grid grid-cols-4 gap-2">
+                          {filteredRooms
+                            .slice(0, 4)
+                            .map((room) => renderRoomTile(room, "h-14"))}
+                        </div>
+
+                        <div className="grid grid-cols-[88px_minmax(0,_1fr)_88px] gap-2">
+                          <div className="flex flex-col gap-2">
+                            {filteredRooms
+                              .slice(4, 8)
+                              .map((room) =>
+                                renderRoomTile(room, "flex-1 min-h-[48px]"),
+                              )}
+                          </div>
+
+                          <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/70 flex flex-col items-center justify-center text-indigo-700">
+                            <span className="text-xs font-semibold">
+                              Atrium
+                            </span>
+                            <span className="text-[10px] opacity-80">
+                              Alpha Wing Hub
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            {filteredRooms
+                              .slice(8, 12)
+                              .map((room) =>
+                                renderRoomTile(room, "flex-1 min-h-[48px]"),
+                              )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-4 gap-2">
+                          {filteredRooms
+                            .slice(12, 16)
+                            .map((room) => renderRoomTile(room, "h-14"))}
+                        </div>
+                      </div>
+                    )}
+
+                    {layoutVariant === "betaStyle" && (
+                      <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[680px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4 grid grid-cols-[1fr_minmax(0,_1.15fr)_1fr] gap-3">
+                        <div className="grid grid-cols-1 gap-2">
+                          {filteredRooms
+                            .filter((_, index) => index % 2 === 0)
+                            .slice(0, 8)
+                            .map((room) => renderRoomTile(room, "h-[46px]"))}
+                        </div>
+
+                        <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/70 p-3">
+                          <div className="text-[11px] font-semibold tracking-wide uppercase text-emerald-700 mb-2">
+                            Main Corridor
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {filteredRooms
+                              .slice(16, 24)
+                              .map((room) =>
                                 renderRoomTile(
                                   room,
-                                  "h-[46px]",
+                                  "h-[52px]",
                                   "text-[10px] sm:text-[11px]",
                                 ),
                               )}
-                            </div>
-                          );
-                        })}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-2">
+                          {filteredRooms
+                            .filter((_, index) => index % 2 === 1)
+                            .slice(0, 8)
+                            .map((room) => renderRoomTile(room, "h-[46px]"))}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
+                    )}
+
+                    {layoutVariant === "deltaStyle" && (
+                      <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          {chunkRooms(filteredRooms, 3).map((pod, podIndex) => (
+                            <div
+                              key={`pod-${podIndex}`}
+                              className="rounded-2xl border border-amber-200 bg-amber-50/60 p-2.5"
+                            >
+                              <div className="text-[10px] font-semibold tracking-wide uppercase text-amber-700 mb-1.5">
+                                Cluster {podIndex + 1}
+                              </div>
+                              <div className="grid grid-cols-1 gap-1.5">
+                                {pod.map((room) =>
+                                  renderRoomTile(
+                                    room,
+                                    "h-[44px]",
+                                    "text-[10px] sm:text-[11px]",
+                                  ),
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {layoutVariant === "epsilonStyle" && (
+                      <div className="relative min-w-[560px] sm:min-w-0 w-full max-w-[700px] aspect-[4/3] bg-white rounded-2xl border border-slate-200 shadow-inner p-3 sm:p-4">
+                        <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-3 h-full overflow-y-auto">
+                          <div className="text-[11px] font-semibold tracking-wide uppercase text-rose-700 mb-2">
+                            Zigzag Route
+                          </div>
+                          <div className="space-y-2">
+                            {chunkRooms(filteredRooms, 5).map(
+                              (row, rowIndex) => {
+                                const renderedRow =
+                                  rowIndex % 2 === 1 ? [...row].reverse() : row;
+
+                                return (
+                                  <div
+                                    key={`zigzag-${rowIndex}`}
+                                    className="grid grid-cols-5 gap-2"
+                                  >
+                                    {renderedRow.map((room) =>
+                                      renderRoomTile(
+                                        room,
+                                        "h-[46px]",
+                                        "text-[10px] sm:text-[11px]",
+                                      ),
+                                    )}
+                                  </div>
+                                );
+                              },
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
-      </div>
 
         {/* Room details panel */}
         <aside className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 flex flex-col gap-4">

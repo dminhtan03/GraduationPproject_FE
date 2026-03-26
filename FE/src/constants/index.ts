@@ -16,6 +16,7 @@ export const ROUTES = {
   FORGOT_PASSWORD: "/forgot-password",
   ABOUT: "/about",
   ADMIN_DASHBOARD: "/admin/dashboard",
+  ADMIN_USER_MANAGEMENT: "/admin/user-management",
   ADMIN_ALL_BOOKINGS: "/admin/all-bookings",
   ROOM_LIST: "/room-list",
   ROOM_MAP: "/room-map",

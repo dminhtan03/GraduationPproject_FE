@@ -24,6 +24,18 @@ export type RegisterUserPayload = {
   role: string;
 };
 
+export type AdminOverviewStatItem = {
+  value: number;
+  change: number;
+};
+
+export type AdminOverviewStats = {
+  totalBookings: AdminOverviewStatItem;
+  activeUsers: AdminOverviewStatItem;
+  utilizationRate: AdminOverviewStatItem;
+  todaysBookings: AdminOverviewStatItem;
+};
+
 type BackendPage<T> = {
   content?: T[];
   totalElements?: number;
@@ -206,7 +218,9 @@ const normalizeBooking = (item: BackendReservation): AdminBooking => {
 
   return {
     id: String(item.id || item.reservationId || item.bookingId || ""),
-    reservationId: String(item.reservationId || item.id || item.bookingId || ""),
+    reservationId: String(
+      item.reservationId || item.id || item.bookingId || "",
+    ),
     bookingId: String(item.bookingId || item.reservationId || item.id || ""),
     user: userName,
     userName,
@@ -220,11 +234,32 @@ const normalizeBooking = (item: BackendReservation): AdminBooking => {
     roomName,
     floorName: pickFirstText(item.floorName, item.floor?.name),
     buildingName: pickFirstText(item.buildingName, item.building?.name),
-    roomType: pickFirstText(item.roomType, item.room?.type, item.room?.roomType),
+    roomType: pickFirstText(
+      item.roomType,
+      item.room?.type,
+      item.room?.roomType,
+    ),
     startTime: item.startTime || item.startDate || undefined,
     endTime: item.endTime || item.endDate || undefined,
-    date: item.endTime || item.endDate || item.startTime || item.startDate || undefined,
+    date:
+      item.endTime ||
+      item.endDate ||
+      item.startTime ||
+      item.startDate ||
+      undefined,
     status: String(item.status || ""),
+  };
+};
+
+const normalizeOverviewStatItem = (item: unknown): AdminOverviewStatItem => {
+  if (!item || typeof item !== "object") {
+    return { value: 0, change: 0 };
+  }
+
+  const stat = item as { value?: unknown; change?: unknown };
+  return {
+    value: Number(stat.value ?? 0),
+    change: Number(stat.change ?? 0),
   };
 };
 
@@ -265,6 +300,18 @@ const extractUsersAndMeta = (
 };
 
 export const adminService = {
+  async getOverviewStats(): Promise<AdminOverviewStats> {
+    const res = await api.get<any>(API_ENDPOINTS.DASHBOARD.OVERVIEW_STATS);
+    const payload = res.data?.data ?? res.data ?? {};
+
+    return {
+      totalBookings: normalizeOverviewStatItem(payload.totalBookings),
+      activeUsers: normalizeOverviewStatItem(payload.activeUsers),
+      utilizationRate: normalizeOverviewStatItem(payload.utilizationRate),
+      todaysBookings: normalizeOverviewStatItem(payload.todaysBookings),
+    };
+  },
+
   async getAllUsers(
     page = 0,
     size = 100,

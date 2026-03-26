@@ -2,12 +2,10 @@ import React from "react";
 import {
   ArrowRightOnRectangleIcon,
   ShieldCheckIcon,
+  ChartBarSquareIcon,
   UsersIcon,
   BookOpenIcon,
-  // start add icons
   BuildingOfficeIcon,
-  MapIcon,
-  // end add icons
 } from "@heroicons/react/24/outline";
 import { Link, useLocation } from "react-router-dom";
 import { ROUTES } from "../../constants";
@@ -76,7 +74,20 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
             to={ROUTES.ADMIN_DASHBOARD}
             className={[
               "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
-              location.pathname.includes(ROUTES.ADMIN_DASHBOARD)
+              location.pathname === ROUTES.ADMIN_DASHBOARD
+                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
+                : "text-slate-600 hover:bg-slate-50",
+            ].join(" ")}
+          >
+            <ChartBarSquareIcon className="h-5 w-5" />
+            Dashboard
+          </Link>
+
+          <Link
+            to={ROUTES.ADMIN_USER_MANAGEMENT}
+            className={[
+              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
+              location.pathname.includes(ROUTES.ADMIN_USER_MANAGEMENT)
                 ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
                 : "text-slate-600 hover:bg-slate-50",
             ].join(" ")}
