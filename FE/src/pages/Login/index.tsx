@@ -11,6 +11,7 @@ import type { ApiError } from "../../types";
 import CustomMessage, {
   MessageType,
 } from "../../components/common/CustomMessage";
+import { extractApiMessage } from "../../utils/errorHandlers";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import "../../styles/Login.css";
 
@@ -89,8 +90,9 @@ const LoginPage: React.FC = () => {
       } else {
         showPopup("error", res.message || "Login failed");
       }
-    } catch (err) {
-      showPopup("error", (err as ApiError).message || "Login failed");
+    } catch (err: unknown) {
+      const backendMessage = extractApiMessage(err, "Login failed");
+      showPopup("error", backendMessage);
     } finally {
       setLoading(false);
     }

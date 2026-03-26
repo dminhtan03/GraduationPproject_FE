@@ -71,12 +71,16 @@ const createAxiosInstance = (): AxiosInstance => {
       const originalRequest: any = error.config || {};
       const requestUrl = String(originalRequest?.url || "");
       const isRefreshRequest = requestUrl.includes(API_ENDPOINTS.AUTH.REFRESH);
+      const isLoginRequest =
+        requestUrl.includes(API_ENDPOINTS.AUTH.LOGIN) ||
+        requestUrl.includes(API_ENDPOINTS.AUTH.GOOGLE_LOGIN);
 
       // Nếu 401 lần đầu tiên, thử gọi refresh token
       if (
         apiError.status === 401 &&
         !originalRequest._retry &&
-        !isRefreshRequest
+        !isRefreshRequest &&
+        !isLoginRequest
       ) {
         originalRequest._retry = true;
         try {
@@ -107,7 +111,7 @@ const createAxiosInstance = (): AxiosInstance => {
       }
 
       // Nếu vẫn 401 hoặc refresh thất bại, xoá token và đưa về login
-      if (apiError.status === 401) {
+      if (apiError.status === 401 && !isLoginRequest) {
         localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
         window.location.href = "/login";
       }
