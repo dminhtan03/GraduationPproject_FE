@@ -52,8 +52,14 @@ const AdminBuildingFloorsPage: React.FC = () => {
       await adminService.importRoomsExcel(file, floorId);
       setToastPopup({ type: "success", message: "Rooms imported successfully" });
       loadFloors();
-    } catch (err) {
-      setToastPopup({ type: "error", message: "Failed to import rooms" });
+    } catch (err: any) {
+      const errorMsg = err.message || "Failed to import rooms";
+      // If error code is ROOM_409 (ROOM_ALREADY_EXISTS), show as warning
+      const isWarning = err.code === "ROOM_409";
+      setToastPopup({
+        type: isWarning ? "warning" : "error",
+        message: errorMsg,
+      });
     } finally {
       setImportingFloorId(null);
       event.target.value = "";

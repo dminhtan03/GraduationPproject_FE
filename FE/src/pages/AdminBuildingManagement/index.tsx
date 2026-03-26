@@ -49,8 +49,9 @@ const AdminBuildingManagementPage: React.FC = () => {
       setShowAddModal(false);
       setNewBuilding({ name: "", address: "", totalFloors: 1 });
       loadBuildings();
-    } catch (err) {
-      setToastPopup({ type: "error", message: "Failed to create building" });
+    } catch (err: any) {
+      const errorMsg = err.message || "Failed to create building";
+      setToastPopup({ type: "error", message: errorMsg });
     }
   };
 

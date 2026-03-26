@@ -79,8 +79,9 @@ const AdminFloorLayoutPage: React.FC = () => {
       }));
       await roomService.updateFloorLayout(floorId, payload);
       setToastPopup({ type: "success", message: "Layout saved successfully" });
-    } catch (err) {
-      setToastPopup({ type: "error", message: "Failed to save layout" });
+    } catch (err: any) {
+      const errorMsg = err.message || "Failed to save layout";
+      setToastPopup({ type: "error", message: errorMsg });
     } finally {
       setSaving(false);
     }
