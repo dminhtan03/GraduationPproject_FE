@@ -29,6 +29,8 @@ export const API_ENDPOINTS = {
     // start add layout endpoint
     UPDATE_LAYOUT: "/api/v1/rooms/floors/:floorId/layout",
     IMPORT_EXCEL: "/api/v1/rooms/import-excel",
+    CREATE: "/api/v1/rooms",
+    GET_AMENITIES: "/api/v1/rooms/amenities",
     // end add layout endpoint
     // start add building endpoints
     ADMIN_BUILDINGS: "/api/v1/dashboard/all-buildings",

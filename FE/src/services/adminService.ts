@@ -401,6 +401,31 @@ export const adminService = {
     return (res.data as any)?.data || res.data;
   },
 
+  async getAllAmenities(): Promise<any> {
+    const res = await api.get(API_ENDPOINTS.ROOMS.GET_AMENITIES);
+    return (res.data as any)?.data || res.data;
+  },
+
+  async createRoom(payload: {
+    locationCode: string;
+    status: string;
+    capacity: number;
+    score?: number;
+    floorId: string;
+    amenityIds?: string[];
+  }): Promise<void> {
+    await api.post(API_ENDPOINTS.ROOMS.CREATE, payload);
+  },
+
+  async updateRoom(payload: {
+    roomId: string;
+    capacity: number;
+    status: string;
+    amenityIds: string[];
+  }): Promise<void> {
+    await api.put(API_ENDPOINTS.ROOMS.CREATE, payload);
+  },
+
   async createBuilding(payload: {
     name: string;
     address: string;

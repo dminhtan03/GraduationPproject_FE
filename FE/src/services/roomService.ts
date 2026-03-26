@@ -196,7 +196,7 @@ export const roomService = {
     const arr = Array.isArray(list) ? list : [];
 
     return arr.map((item: any) => ({
-      roomId: item.seatId ?? item.roomId,
+      id: item.id ?? item.roomId ?? item.seatId,
       locationCode: item.locationCode,
       status: (item.status as MapRoomStatus) ?? "AVAILABLE",
       score:
@@ -232,16 +232,25 @@ export const roomService = {
   async updateFloorLayout(
     floorId: string,
     items: {
-      roomId: string;
+      id: string;
       x: number;
       y: number;
       width: number;
       height: number;
     }[],
   ): Promise<void> {
+    const payload = {
+      items: items.map(item => ({
+        roomId: item.id,
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+      }))
+    };
     await api.put(
       buildUrl(API_ENDPOINTS.ROOMS.UPDATE_LAYOUT, { floorId }),
-      { items },
+      payload,
     );
   },
   // end add updateLayout method

@@ -4,6 +4,9 @@ import {
   ArrowLeftIcon,
   ArrowUpTrayIcon,
   MapIcon,
+  ListBulletIcon,
+  PlusIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useNavigate, useParams } from "react-router-dom";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
@@ -112,17 +115,14 @@ const AdminBuildingFloorsPage: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-3">
-                      <label className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm">
-                        <ArrowUpTrayIcon className="h-4 w-4" />
-                        {importingFloorId === floor.id ? "Importing..." : "Import Rooms"}
-                        <input
-                          type="file"
-                          accept=".xlsx,.xls"
-                          className="hidden"
-                          onChange={(e) => handleImportExcel(floor.id, e)}
-                          disabled={!!importingFloorId}
-                        />
-                      </label>
+                      <button
+                        onClick={() => navigate(`/admin/buildings/${buildingId}/floors/${floor.id}/rooms`)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+                        title="View Room List"
+                      >
+                        <ListBulletIcon className="h-4 w-4" />
+                        Rooms Management
+                      </button>
                       <button
                         onClick={() => navigate(`/admin/buildings/${buildingId}/floors/${floor.id}/layout`)}
                         className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-orange-600 transition-colors shadow-sm"
