@@ -43,6 +43,7 @@ import CustomMessage, {
 } from "../../components/common/CustomMessage";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import DatePickerField from "../../components/common/DatePickerField";
+import { HOUR_OPTIONS, MINUTE_OPTIONS, buildDateTime } from "../../utils";
 
 const { Title, Paragraph } = Typography;
 
@@ -65,6 +66,11 @@ interface ReservationRealtimePayload {
 }
 
 interface BuildingFilterOption {
+  value: string;
+  label: string;
+}
+
+interface FloorFilterOption {
   value: string;
   label: string;
 }
@@ -93,23 +99,98 @@ const normalizeBuildingOptions = (payload: unknown): BuildingFilterOption[] => {
     .filter((item): item is BuildingFilterOption => !!item);
 };
 
+const normalizeFloorOptions = (payload: unknown): FloorFilterOption[] => {
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as { data?: unknown[] })?.data)
+      ? ((payload as { data?: unknown[] }).data as unknown[])
+      : [];
+
+  const parseFloorNumber = (text: string) => {
+    const matched = text.match(/(\d+)/);
+    if (!matched) return null;
+    const value = Number(matched[1]);
+    return Number.isFinite(value) ? value : null;
+  };
+
+  const mapped = list
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const raw = item as Record<string, unknown>;
+      const value =
+        (raw.id != null ? String(raw.id) : "") ||
+        (raw.floorId != null ? String(raw.floorId) : "");
+      const label =
+        (typeof raw.name === "string" ? raw.name : "") ||
+        (typeof raw.floorName === "string" ? raw.floorName : "");
+
+      if (!value || !label) return null;
+      const floorNumber = parseFloorNumber(label);
+      if (floorNumber != null && floorNumber >= 1 && floorNumber <= 5) {
+        return {
+          value,
+          label: `Tầng ${floorNumber}`,
+          floorNumber,
+        };
+      }
+
+      return {
+        value,
+        label,
+        floorNumber: null,
+      };
+    })
+    .filter(
+      (
+        item,
+      ): item is FloorFilterOption & {
+        floorNumber: number | null;
+      } => !!item,
+    );
+
+  const unique = Array.from(
+    new Map(
+      mapped.map((item) => [
+        item.floorNumber != null ? `num-${item.floorNumber}` : `value-${item.value}`,
+        item,
+      ]),
+    ).values(),
+  );
+
+  return unique
+    .sort((left, right) => {
+      if (left.floorNumber != null && right.floorNumber != null) {
+        return left.floorNumber - right.floorNumber;
+      }
+      if (left.floorNumber != null) return -1;
+      if (right.floorNumber != null) return 1;
+      return left.label.localeCompare(right.label);
+    })
+    .map(({ value, label }) => ({ value, label }));
+};
+
 const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
-  ongoing: ["PENDING", "RESERVED", "IN_USE", "CHECKED_IN"],
-  history: ["COMPLETED", "CANCELLED", "REJECTED", "FAILED", "NO_SHOW"],
+  ongoing: ["RESERVED", "IN_USE"],
+  history: ["NO_SHOW", "CANCELLED", "COMPLETED", "FORCE_CANCELLED", "FAILED"],
 };
 
 const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey) => {
-  const historyStatuses = TAB_STATUS_FILTERS.history;
+  const allowedStatuses = [
+    ...TAB_STATUS_FILTERS.ongoing,
+    ...TAB_STATUS_FILTERS.history,
+  ];
 
   if (tabKey === "history") {
-    return items.filter((item) =>
-      historyStatuses.includes((item.status || "").toUpperCase()),
-    );
+    return items.filter((item) => {
+      const status = (item.status || "").toUpperCase();
+      return TAB_STATUS_FILTERS.history.includes(status);
+    });
   }
 
-  return items.filter(
-    (item) => !historyStatuses.includes((item.status || "").toUpperCase()),
-  );
+  return items.filter((item) => {
+    const status = (item.status || "").toUpperCase();
+    return TAB_STATUS_FILTERS.ongoing.includes(status) || !allowedStatuses.includes(status);
+  });
 };
 
 const parseBookingDateTime = (value?: string) => {
@@ -138,27 +219,6 @@ const formatTimePart = (value?: string) => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
-const isSameDay = (value: string | undefined, targetDate: string) => {
-  const parsed = parseBookingDateTime(value);
-  if (!parsed || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) return false;
-
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
-  const day = String(parsed.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}` === targetDate;
-};
-
-const toApiDayRange = (
-  value: string,
-): { startTime?: string; endTime?: string } => {
-  if (!value.trim()) return {};
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return {};
-
-  const startTime = `${value}T00:00:00`;
-  const endTime = `${value}T23:59:59`;
-  return { startTime, endTime };
-};
-
 const isInvalidDateFormatError = (error: unknown) => {
   const message = extractApiMessage(error, "").toLowerCase();
   return (
@@ -167,28 +227,6 @@ const isInvalidDateFormatError = (error: unknown) => {
     message.includes("invalid date") ||
     message.includes("định dạng ngày")
   );
-};
-
-const buildDateRangeCandidates = (value: string) => {
-  const normalized = value.trim();
-  if (!normalized || !/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    return [{} as { startTime?: string; endTime?: string }];
-  }
-
-  return [
-    {
-      startTime: `${normalized}T00:00:00`,
-      endTime: `${normalized}T23:59:59`,
-    },
-    {
-      startTime: `${normalized} 00:00:00`,
-      endTime: `${normalized} 23:59:59`,
-    },
-    {
-      startTime: normalized,
-      endTime: undefined,
-    },
-  ];
 };
 
 const extractBackendSuccessMessage = (
@@ -321,8 +359,8 @@ const getStatusColor = (status: string) => {
   if (normalized === "IN_USE" || normalized === "CHECKED_IN") return "blue";
   if (normalized === "COMPLETED") return "cyan";
   if (normalized === "CANCELLED") return "red";
+  if (normalized === "FORCE_CANCELLED") return "volcano";
   if (normalized === "NO_SHOW") return "orange";
-  if (normalized === "REJECTED") return "volcano";
   if (normalized === "FAILED") return "magenta";
   return "default";
 };
@@ -522,9 +560,23 @@ const MyBookingsPage: React.FC = () => {
     message: string;
   } | null>(null);
   const [buildingOptions, setBuildingOptions] = useState<BuildingFilterOption[]>([]);
+  const [floorOptions, setFloorOptions] = useState<FloorFilterOption[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("all");
+  const [selectedFloorId, setSelectedFloorId] = useState<string>("all");
   const [locationCodeFilter, setLocationCodeFilter] = useState<string>("");
-  const [searchDate, setSearchDate] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [startDateFilter, setStartDateFilter] = useState<string>("");
+  const [startHourFilter, setStartHourFilter] = useState<string>("00");
+  const [startMinuteFilter, setStartMinuteFilter] = useState<string>("00");
+  const [endDateFilter, setEndDateFilter] = useState<string>("");
+  const [endHourFilter, setEndHourFilter] = useState<string>("23");
+  const [endMinuteFilter, setEndMinuteFilter] = useState<string>("59");
+  const [appliedBuildingId, setAppliedBuildingId] = useState<string>("all");
+  const [appliedFloorId, setAppliedFloorId] = useState<string>("all");
+  const [appliedLocationCode, setAppliedLocationCode] = useState<string>("");
+  const [appliedStatusFilter, setAppliedStatusFilter] = useState<string>("all");
+  const [appliedStartTimeFilter, setAppliedStartTimeFilter] = useState<string>("");
+  const [appliedEndTimeFilter, setAppliedEndTimeFilter] = useState<string>("");
   const [cancelReason, setCancelReason] = useState<string>("");
 
   // start add currentTime state for auto-enabling buttons
@@ -570,6 +622,28 @@ const MyBookingsPage: React.FC = () => {
     void loadBuildings();
   }, []);
 
+  useEffect(() => {
+    const loadFloors = async () => {
+      if (!selectedBuildingId || selectedBuildingId === "all") {
+        setFloorOptions([]);
+        setSelectedFloorId("all");
+        return;
+      }
+
+      try {
+        const response = await adminService.getFloorsByBuilding(selectedBuildingId);
+        const options = normalizeFloorOptions(response);
+        setFloorOptions(options);
+        setSelectedFloorId("all");
+      } catch {
+        setFloorOptions([]);
+        setSelectedFloorId("all");
+      }
+    };
+
+    void loadFloors();
+  }, [selectedBuildingId]);
+
   const showToast = (type: MessageType, nextMessage: string) => {
     setToastPopup({ type, message: nextMessage });
     window.setTimeout(() => {
@@ -585,8 +659,11 @@ const MyBookingsPage: React.FC = () => {
       nextSize: number,
       tabKey: BookingTabKey,
       buildingId: string,
-      dateFilter: string,
+      floorId: string,
       locationCode: string,
+      statusValue: string,
+      startTimeValue: string,
+      endTimeValue: string,
     ) => {
       setLoading(true);
       setError(null);
@@ -595,9 +672,22 @@ const MyBookingsPage: React.FC = () => {
           buildingId !== "all"
             ? buildingOptions.find((item) => item.value === buildingId)
             : null;
+        const selectedFloor =
+          floorId !== "all"
+            ? floorOptions.find((item) => item.value === floorId)
+            : null;
 
-        if (dateFilter) {
-          // Avoid sending date params because backend currently rejects date format on this endpoint.
+        const normalizedStatus = statusValue.trim().toUpperCase();
+        const requestedStatuses =
+          normalizedStatus && normalizedStatus !== "ALL"
+            ? [normalizedStatus]
+            : TAB_STATUS_FILTERS[tabKey];
+
+        const hasTimeRange = Boolean(startTimeValue && endTimeValue);
+        const requiresClientFiltering = hasTimeRange || floorId !== "all";
+
+        if (requiresClientFiltering) {
+          // Fetch full data then apply FE filters for floor/time compatibility.
           const largePageSize = 1000;
           let allItems: Reservation[] = [];
 
@@ -605,7 +695,7 @@ const MyBookingsPage: React.FC = () => {
             const result = await reservationService.getMyBookings({
               page: 0,
               size: largePageSize,
-              statuses: TAB_STATUS_FILTERS[tabKey],
+              statuses: requestedStatuses,
               buildingId: buildingId !== "all" ? buildingId : undefined,
               locationCode: locationCode.trim() || undefined,
             });
@@ -617,7 +707,12 @@ const MyBookingsPage: React.FC = () => {
               buildingId: buildingId !== "all" ? buildingId : undefined,
               locationCode: locationCode.trim() || undefined,
             });
-            allItems = filterItemsByTab(fallbackResult.items, tabKey);
+            allItems =
+              normalizedStatus && normalizedStatus !== "ALL"
+                ? fallbackResult.items.filter(
+                    (item) => (item.status || "").toUpperCase() === normalizedStatus,
+                  )
+                : filterItemsByTab(fallbackResult.items, tabKey);
           }
 
           if (selectedBuilding?.label) {
@@ -627,20 +722,41 @@ const MyBookingsPage: React.FC = () => {
             });
           }
 
-          const dateMatched = allItems.filter((item) => isSameDay(item.startTime, dateFilter));
+          if (selectedFloor?.label) {
+            allItems = allItems.filter((item) => {
+              const floorName = String(item.floor || "").toLowerCase();
+              return floorName.includes(selectedFloor.label.toLowerCase());
+            });
+          }
+
+          if (hasTimeRange) {
+            const start = parseBookingDateTime(startTimeValue);
+            const end = parseBookingDateTime(endTimeValue);
+
+            if (start && end) {
+              allItems = allItems.filter((item) => {
+                const itemStart = parseBookingDateTime(item.startTime);
+                if (!itemStart) return false;
+                return itemStart >= start && itemStart <= end;
+              });
+            }
+          }
+
           const startIndex = Math.max(nextPage - 1, 0) * nextSize;
-          const paged = dateMatched.slice(startIndex, startIndex + nextSize);
+          const paged = allItems.slice(startIndex, startIndex + nextSize);
 
           setBookings(paged);
-          setTotal(dateMatched.length);
+          setTotal(allItems.length);
         } else {
           try {
             const result = await reservationService.getMyBookings({
               page: Math.max(nextPage - 1, 0),
               size: nextSize,
-              statuses: TAB_STATUS_FILTERS[tabKey],
+              statuses: requestedStatuses,
               buildingId: buildingId !== "all" ? buildingId : undefined,
               locationCode: locationCode.trim() || undefined,
+              startTime: startTimeValue || undefined,
+              endTime: endTimeValue || undefined,
             });
             setBookings(result.items);
             setTotal(result.total);
@@ -651,7 +767,12 @@ const MyBookingsPage: React.FC = () => {
               buildingId: buildingId !== "all" ? buildingId : undefined,
               locationCode: locationCode.trim() || undefined,
             });
-            let filteredItems = filterItemsByTab(fallbackResult.items, tabKey);
+            let filteredItems =
+              normalizedStatus && normalizedStatus !== "ALL"
+                ? fallbackResult.items.filter(
+                    (item) => (item.status || "").toUpperCase() === normalizedStatus,
+                  )
+                : filterItemsByTab(fallbackResult.items, tabKey);
             if (selectedBuilding?.label) {
               filteredItems = filteredItems.filter((item) => {
                 const buildingName = (item.buildingName || item.address || "").toLowerCase();
@@ -673,18 +794,31 @@ const MyBookingsPage: React.FC = () => {
         setLoading(false);
       }
     },
-    [buildingOptions],
+    [buildingOptions, floorOptions],
   );
 
   useEffect(() => {
-    loadBookings(1, pageSize, activeTab, selectedBuildingId, searchDate, locationCodeFilter);
+    loadBookings(
+      1,
+      pageSize,
+      activeTab,
+      appliedBuildingId,
+      appliedFloorId,
+      appliedLocationCode,
+      appliedStatusFilter,
+      appliedStartTimeFilter,
+      appliedEndTimeFilter,
+    );
   }, [
     loadBookings,
     pageSize,
     activeTab,
-    searchDate,
-    selectedBuildingId,
-    locationCodeFilter,
+    appliedBuildingId,
+    appliedFloorId,
+    appliedLocationCode,
+    appliedStatusFilter,
+    appliedStartTimeFilter,
+    appliedEndTimeFilter,
   ]);
 
   useEffect(() => {
@@ -740,19 +874,25 @@ const MyBookingsPage: React.FC = () => {
       page,
       pageSize,
       activeTab,
-      selectedBuildingId,
-      searchDate,
-      locationCodeFilter,
+      appliedBuildingId,
+      appliedFloorId,
+      appliedLocationCode,
+      appliedStatusFilter,
+      appliedStartTimeFilter,
+      appliedEndTimeFilter,
     );
   }, [
     activeTab,
+    appliedBuildingId,
+    appliedFloorId,
+    appliedLocationCode,
+    appliedStatusFilter,
+    appliedStartTimeFilter,
+    appliedEndTimeFilter,
     lastMessage,
     loadBookings,
     page,
     pageSize,
-    searchDate,
-    selectedBuildingId,
-    locationCodeFilter,
   ]);
 
   const openActionModal = (type: BookingActionType, booking: Reservation) => {
@@ -811,9 +951,12 @@ const MyBookingsPage: React.FC = () => {
         page,
         pageSize,
         activeTab,
-        selectedBuildingId,
-        searchDate,
-        locationCodeFilter,
+        appliedBuildingId,
+        appliedFloorId,
+        appliedLocationCode,
+        appliedStatusFilter,
+        appliedStartTimeFilter,
+        appliedEndTimeFilter,
       );
     } catch (err) {
       message.error(extractApiMessage(err, "Unable to submit feedback"));
@@ -940,9 +1083,12 @@ const MyBookingsPage: React.FC = () => {
         page,
         pageSize,
         activeTab,
-        selectedBuildingId,
-        searchDate,
-        locationCodeFilter,
+        appliedBuildingId,
+        appliedFloorId,
+        appliedLocationCode,
+        appliedStatusFilter,
+        appliedStartTimeFilter,
+        appliedEndTimeFilter,
       );
     } catch (err) {
       const actionErrorMessage = extractApiMessage(
@@ -969,21 +1115,150 @@ const MyBookingsPage: React.FC = () => {
     setPage(1);
   };
 
-  const handleTableChange = (pagination: TablePaginationConfig) => {
+  const handleTableChange = (
+    pagination: TablePaginationConfig,
+    _filters: unknown,
+    _sorter: unknown,
+    extra: { action?: string },
+  ) => {
+    // Keep filter/sort on current page data in FE; only reload from API when paginating.
+    if (extra?.action && extra.action !== "paginate") {
+      return;
+    }
+
     const nextPage = pagination.current || 1;
     const nextSize = pagination.pageSize || pageSize;
-    loadBookings(nextPage, nextSize, activeTab, selectedBuildingId, searchDate, locationCodeFilter);
+    loadBookings(
+      nextPage,
+      nextSize,
+      activeTab,
+      appliedBuildingId,
+      appliedFloorId,
+      appliedLocationCode,
+      appliedStatusFilter,
+      appliedStartTimeFilter,
+      appliedEndTimeFilter,
+    );
   };
 
   const handleBuildingFilterChange = (value: string) => {
     setSelectedBuildingId(value);
+  };
+
+  const handleFloorFilterChange = (value: string) => {
+    setSelectedFloorId(value);
+  };
+
+  const statusSearchOptions = useMemo(
+    () => [
+      { value: "all", label: "All status" },
+      ...TAB_STATUS_FILTERS[activeTab].map((item) => ({
+        value: item,
+        label: item,
+      })),
+    ],
+    [activeTab],
+  );
+
+  const timeRangeMessage = useMemo(() => {
+    const startValue = startDateFilter
+      ? buildDateTime(startDateFilter, startHourFilter, startMinuteFilter)
+      : "";
+    const endValue = endDateFilter
+      ? buildDateTime(endDateFilter, endHourFilter, endMinuteFilter)
+      : "";
+
+    if (!startValue && !endValue) return null;
+
+    if (!startValue || !endValue) {
+      return {
+        type: "warning" as const,
+        text: "Vui lòng nhập đầy đủ cả Start time và End time.",
+      };
+    }
+
+    const start = parseBookingDateTime(startValue);
+    const end = parseBookingDateTime(endValue);
+
+    if (!start || !end) {
+      return {
+        type: "error" as const,
+        text: "Định dạng thời gian không hợp lệ.",
+      };
+    }
+
+    if (end <= start) {
+      return {
+        type: "error" as const,
+        text: "Vui lòng chọn lại End time lớn hơn Start time.",
+      };
+    }
+
+    return null;
+  }, [
+    endDateFilter,
+    endHourFilter,
+    endMinuteFilter,
+    startDateFilter,
+    startHourFilter,
+    startMinuteFilter,
+  ]);
+
+  const handleApplyFilters = () => {
+    const normalizedStart = startDateFilter
+      ? buildDateTime(startDateFilter, startHourFilter, startMinuteFilter)
+      : "";
+    const normalizedEnd = endDateFilter
+      ? buildDateTime(endDateFilter, endHourFilter, endMinuteFilter)
+      : "";
+
+    if ((normalizedStart && !normalizedEnd) || (!normalizedStart && normalizedEnd)) {
+      message.warning("Vui lòng nhập đầy đủ cả Start time và End time để lọc theo thời gian.");
+      return;
+    }
+
+    if (normalizedStart && normalizedEnd) {
+      const start = parseBookingDateTime(normalizedStart);
+      const end = parseBookingDateTime(normalizedEnd);
+
+      if (!start || !end) {
+        message.warning("Định dạng thời gian không hợp lệ.");
+        return;
+      }
+
+      if (end <= start) {
+        message.warning("Vui lòng chọn lại End time lớn hơn Start time.");
+        return;
+      }
+    }
+
+    setAppliedStartTimeFilter(normalizedStart);
+    setAppliedEndTimeFilter(normalizedEnd);
+    setAppliedLocationCode(locationCodeFilter.trim());
+    setAppliedBuildingId(selectedBuildingId);
+    setAppliedFloorId(selectedFloorId);
+    setAppliedStatusFilter(statusFilter);
     setPage(1);
   };
 
   const handleClearStartTimeSearch = () => {
-    setSearchDate("");
+    setStartDateFilter("");
+    setStartHourFilter("00");
+    setStartMinuteFilter("00");
+    setEndDateFilter("");
+    setEndHourFilter("23");
+    setEndMinuteFilter("59");
     setLocationCodeFilter("");
-    loadBookings(1, pageSize, activeTab, selectedBuildingId, "", "");
+    setSelectedBuildingId("all");
+    setSelectedFloorId("all");
+    setStatusFilter("all");
+    setAppliedStartTimeFilter("");
+    setAppliedEndTimeFilter("");
+    setAppliedLocationCode("");
+    setAppliedBuildingId("all");
+    setAppliedFloorId("all");
+    setAppliedStatusFilter("all");
+    setPage(1);
   };
 
   const tabItems = useMemo(
@@ -994,12 +1269,55 @@ const MyBookingsPage: React.FC = () => {
     [],
   );
 
+  const locationCodeColumnFilters = useMemo(
+    () =>
+      Array.from(
+        new Set(bookings.map((item) => String(item.locationCode || "").trim()).filter(Boolean)),
+      ).map((value) => ({ text: value, value })),
+    [bookings],
+  );
+
+  const floorColumnFilters = useMemo(
+    () =>
+      Array.from(
+        new Set(bookings.map((item) => String(item.floor || "").trim()).filter(Boolean)),
+      ).map((value) => ({ text: value, value })),
+    [bookings],
+  );
+
+  const buildingColumnFilters = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          bookings
+            .map((item) => String(item.buildingName || item.address || "").trim())
+            .filter(Boolean),
+        ),
+      ).map((value) => ({ text: value, value })),
+    [bookings],
+  );
+
+  const statusColumnFilters = useMemo(
+    () =>
+      Array.from(
+        new Set(bookings.map((item) => String(item.status || "").trim()).filter(Boolean)),
+      ).map((value) => ({ text: value, value })),
+    [bookings],
+  );
+
   const columns: ColumnsType<Reservation> = [
     {
       title: "LOCATION CODE",
       dataIndex: "locationCode",
       key: "locationCode",
       width: "17%",
+      sorter: (a, b) =>
+        String(a.locationCode || "").localeCompare(String(b.locationCode || "")),
+      filters: locationCodeColumnFilters,
+      onFilter: (value, record) =>
+        String(record.locationCode || "")
+          .toLowerCase()
+          .includes(String(value).toLowerCase()),
       render: (value: string | undefined) => value || "-",
     },
     {
@@ -1007,6 +1325,12 @@ const MyBookingsPage: React.FC = () => {
       dataIndex: "floor",
       key: "floor",
       width: "10%",
+      sorter: (a, b) => String(a.floor || "").localeCompare(String(b.floor || "")),
+      filters: floorColumnFilters,
+      onFilter: (value, record) =>
+        String(record.floor || "")
+          .toLowerCase()
+          .includes(String(value).toLowerCase()),
       render: (value: string | undefined) => value || "-",
     },
     {
@@ -1014,6 +1338,15 @@ const MyBookingsPage: React.FC = () => {
       dataIndex: "buildingName",
       key: "buildingName",
       width: "17%",
+      sorter: (a, b) =>
+        String(a.buildingName || a.address || "").localeCompare(
+          String(b.buildingName || b.address || ""),
+        ),
+      filters: buildingColumnFilters,
+      onFilter: (value, record) =>
+        String(record.buildingName || record.address || "")
+          .toLowerCase()
+          .includes(String(value).toLowerCase()),
       render: (_: string | undefined, record: Reservation) =>
         record.buildingName || record.address || "-",
     },
@@ -1038,6 +1371,11 @@ const MyBookingsPage: React.FC = () => {
       title: "TIME",
       key: "time",
       width: "22%",
+      sorter: (a, b) => {
+        const left = parseBookingDateTime(a.startTime)?.getTime() || 0;
+        const right = parseBookingDateTime(b.startTime)?.getTime() || 0;
+        return left - right;
+      },
       render: (_: unknown, record: Reservation) => (
         <div className="text-xs space-y-1.5">
           <div className="flex items-center gap-2">
@@ -1064,6 +1402,12 @@ const MyBookingsPage: React.FC = () => {
       dataIndex: "status",
       key: "status",
       width: "11%",
+      sorter: (a, b) => String(a.status || "").localeCompare(String(b.status || "")),
+      filters: statusColumnFilters,
+      onFilter: (value, record) =>
+        String(record.status || "")
+          .toLowerCase()
+          .includes(String(value).toLowerCase()),
       render: (status: string | undefined) => (
         <Tag color={getStatusColor(status || "")}>{status || "-"}</Tag>
       ),
@@ -1176,81 +1520,207 @@ const MyBookingsPage: React.FC = () => {
         className="mb-2"
       />
 
-      <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-        <div className="mb-3 text-xs font-medium text-slate-500">
-          Filters auto-apply when you change date, location code, or building.
+      <div className="mb-5 rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 shadow-sm md:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-slate-700">Search Filters</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.ROOM_LIST)}
+            className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600"
+          >
+            Book a room
+          </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate(ROUTES.ROOM_LIST)}
-          className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600"
-        >
-          Book a room
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            loadBookings(
-              page,
-              pageSize,
-              activeTab,
-              selectedBuildingId,
-              searchDate,
-              locationCodeFilter,
-            )
-          }
-          className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
-          disabled={loading}
-        >
-          Refresh
-        </button>
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 xl:col-span-6">
+            <div className="mb-2 text-[11px] font-semibold tracking-wide uppercase text-slate-500">
+              Start time
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="min-w-0">
+                <DatePickerField
+                  value={startDateFilter}
+                  onChange={(nextDate) => setStartDateFilter(nextDate)}
+                />
+              </div>
+              <select
+                value={startHourFilter}
+                onChange={(event) => setStartHourFilter(event.target.value)}
+                className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              >
+                {HOUR_OPTIONS.map((hour) => (
+                  <option key={hour.value} value={hour.value}>
+                    {hour.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={startMinuteFilter}
+                onChange={(event) => setStartMinuteFilter(event.target.value)}
+                className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              >
+                {MINUTE_OPTIONS.map((minute) => (
+                  <option key={minute} value={minute}>
+                    {minute}m
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-        <div className="min-w-[260px]">
-          <DatePickerField
-            value={searchDate}
-            onChange={(nextDate) => {
-              setSearchDate(nextDate);
-              setPage(1);
-            }}
-            label="Start date"
-          />
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 xl:col-span-6">
+            <div className="mb-2 text-[11px] font-semibold tracking-wide uppercase text-slate-500">
+              End time
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="min-w-0">
+                <DatePickerField
+                  value={endDateFilter}
+                  minDate={startDateFilter || undefined}
+                  onChange={(nextDate) => setEndDateFilter(nextDate)}
+                />
+              </div>
+              <select
+                value={endHourFilter}
+                onChange={(event) => setEndHourFilter(event.target.value)}
+                className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              >
+                {HOUR_OPTIONS.map((hour) => (
+                  <option key={hour.value} value={hour.value}>
+                    {hour.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={endMinuteFilter}
+                onChange={(event) => setEndMinuteFilter(event.target.value)}
+                className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              >
+                {MINUTE_OPTIONS.map((minute) => (
+                  <option key={minute} value={minute}>
+                    {minute}m
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {timeRangeMessage && (
+            <div className="xl:col-span-12">
+              <div
+                className={`rounded-lg border px-3 py-2 text-sm ${
+                  timeRangeMessage.type === "warning"
+                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                    : "border-red-200 bg-red-50 text-red-700"
+                }`}
+              >
+                {timeRangeMessage.text}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              Location code
+            </label>
+            <Input
+              value={locationCodeFilter}
+              onChange={(event) => setLocationCodeFilter(event.target.value)}
+              placeholder="Search location code"
+              allowClear
+            />
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              Building
+            </label>
+            <Select
+              value={selectedBuildingId}
+              className="w-full"
+              onChange={handleBuildingFilterChange}
+              options={[
+                { value: "all", label: "All buildings" },
+                ...buildingOptions,
+              ]}
+              placeholder="Filter by building"
+            />
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              Floor
+            </label>
+            <Select
+              value={selectedFloorId}
+              className="w-full"
+              onChange={handleFloorFilterChange}
+              disabled={selectedBuildingId === "all"}
+              options={[
+                { value: "all", label: "All floors" },
+                ...floorOptions,
+              ]}
+              placeholder="Filter by floor"
+            />
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              Status
+            </label>
+            <Select
+              value={statusFilter}
+              className="w-full"
+              onChange={setStatusFilter}
+              options={statusSearchOptions}
+              placeholder="Filter by status"
+            />
+          </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleClearStartTimeSearch}
-          className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
-          disabled={loading}
-        >
-          Clear search
-        </button>
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
+          <button
+            type="button"
+            onClick={handleApplyFilters}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={loading}
+          >
+            Search
+          </button>
 
-        <div className="min-w-[220px]">
-          <Input
-            value={locationCodeFilter}
-            onChange={(event) => {
-              setLocationCodeFilter(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Search location code"
-            allowClear
-          />
-        </div>
+          <button
+            type="button"
+            onClick={handleClearStartTimeSearch}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={loading}
+          >
+            Clear search
+          </button>
 
-        <div className="min-w-[220px]">
-          <Select
-            value={selectedBuildingId}
-            className="w-full"
-            onChange={handleBuildingFilterChange}
-            options={[
-              { value: "all", label: "All buildings" },
-              ...buildingOptions,
-            ]}
-            placeholder="Filter by building"
-          />
-        </div>
+          <button
+            type="button"
+            onClick={() =>
+              loadBookings(
+                page,
+                pageSize,
+                activeTab,
+                appliedBuildingId,
+                appliedFloorId,
+                appliedLocationCode,
+                appliedStatusFilter,
+                appliedStartTimeFilter,
+                appliedEndTimeFilter,
+              )
+            }
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={loading}
+          >
+            Refresh
+          </button>
         </div>
       </div>
 

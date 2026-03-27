@@ -24,6 +24,10 @@ export type RegisterUserPayload = {
   role: string;
 };
 
+export type ForceCancelBookingPayload = {
+  reason: string;
+};
+
 export type AdminOverviewStatItem = {
   value: number;
   change: number;
@@ -64,9 +68,13 @@ type BackendUser = {
 };
 
 type BackendReservation = {
-  id?: string;
-  reservationId?: string;
-  bookingId?: string;
+  id?: string | number;
+  reservationId?: string | number;
+  reservationID?: string | number;
+  reservation_id?: string | number;
+  bookingId?: string | number;
+  bookingID?: string | number;
+  booking_id?: string | number;
   userName?: string | null;
   username?: string | null;
   fullName?: string | null;
@@ -79,6 +87,11 @@ type BackendReservation = {
   startDate?: string | null;
   endDate?: string | null;
   status?: string | null;
+  reservationStatus?: string | null;
+  bookingStatus?: string | null;
+  state?: string | null;
+  statusName?: string | null;
+  statuses?: Array<string | null> | null;
   roomType?: string | null;
   building?: {
     id?: string | null;
@@ -116,6 +129,10 @@ type BackendReservation = {
   } | null;
   createdBy?: string | null;
   createdByName?: string | null;
+  reservation?: {
+    id?: string | number | null;
+    reservationId?: string | number | null;
+  } | null;
 };
 
 type AdminBooking = {
@@ -134,6 +151,7 @@ type AdminBooking = {
   endTime?: string;
   date?: string;
   status: string;
+  rawData?: Record<string, unknown>;
 };
 
 type AdminBookingFilters = {
@@ -191,6 +209,20 @@ const pickFirstText = (...values: Array<unknown>): string => {
   return "";
 };
 
+const pickFirstScalar = (...values: Array<unknown>): string => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return "";
+};
+
 const normalizeBooking = (item: BackendReservation): AdminBooking => {
   const userName = pickFirstText(
     item.userName,
@@ -216,12 +248,41 @@ const normalizeBooking = (item: BackendReservation): AdminBooking => {
     item.room?.locationCode,
   );
 
+  const reservationKey = pickFirstScalar(
+    item.reservationId,
+    item.reservationID,
+    item.reservation_id,
+    item.bookingId,
+    item.bookingID,
+    item.booking_id,
+    item.id,
+    item.reservation?.reservationId,
+    item.reservation?.id,
+  );
+
+  const bookingKey = pickFirstScalar(
+    item.bookingId,
+    item.bookingID,
+    item.booking_id,
+    item.reservationId,
+    item.reservationID,
+    item.reservation_id,
+    item.id,
+  );
+
+  const normalizedStatus = pickFirstText(
+    item.status,
+    item.reservationStatus,
+    item.bookingStatus,
+    item.state,
+    item.statusName,
+    Array.isArray(item.statuses) ? item.statuses[0] : "",
+  );
+
   return {
-    id: String(item.id || item.reservationId || item.bookingId || ""),
-    reservationId: String(
-      item.reservationId || item.id || item.bookingId || "",
-    ),
-    bookingId: String(item.bookingId || item.reservationId || item.id || ""),
+    id: reservationKey || bookingKey || "",
+    reservationId: reservationKey || "",
+    bookingId: bookingKey || "",
     user: userName,
     userName,
     userEmail: pickFirstText(
@@ -247,7 +308,8 @@ const normalizeBooking = (item: BackendReservation): AdminBooking => {
       item.startTime ||
       item.startDate ||
       undefined,
-    status: String(item.status || ""),
+    status: String(normalizedStatus || ""),
+    rawData: item as unknown as Record<string, unknown>,
   };
 };
 
@@ -505,6 +567,21 @@ export const adminService = {
       page: Number(meta?.page ?? page) || 0,
       size: Number(meta?.size ?? size) || 20,
     };
+  },
+
+  async forceCancelBooking(
+    reservationId: string,
+    payload: ForceCancelBookingPayload,
+  ): Promise<string> {
+    const response = await api.put(
+      buildUrl(API_ENDPOINTS.ROOMS.FORCE_CANCEL_BOOKING, { id: reservationId }),
+      payload,
+    );
+
+    return extractSuccessMessage(
+      response.data,
+      "Force cancel success. User will receive an email notification.",
+    );
   },
   // end add admin booking list api
 };
