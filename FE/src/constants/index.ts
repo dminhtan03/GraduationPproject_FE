@@ -55,6 +55,10 @@ export const WS_MESSAGE_TYPES = {
   ERROR: "error",
 } as const;
 
+export const AUTH_EVENTS = {
+  TOKEN_CHANGED: "auth-token-changed",
+} as const;
+
 // App settings
 export const APP_CONFIG = {
   APP_NAME: "Base React App",

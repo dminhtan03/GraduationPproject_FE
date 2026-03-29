@@ -232,7 +232,8 @@ export const roomService = {
   async updateFloorLayout(
     floorId: string,
     items: {
-      id: string;
+      roomId?: string;
+      id?: string;
       x: number;
       y: number;
       width: number;
@@ -240,14 +241,39 @@ export const roomService = {
     }[],
   ): Promise<void> {
     const payload = {
-      items: items.map(item => ({
-        roomId: item.id,
-        x: item.x,
-        y: item.y,
-        width: item.width,
-        height: item.height,
-      }))
+      items: items
+        .map((item) => {
+          const normalizedRoomId = String(item.roomId ?? item.id ?? "").trim();
+          if (!normalizedRoomId) return null;
+
+          return {
+            roomId: normalizedRoomId,
+            x: Number(item.x),
+            y: Number(item.y),
+            width: Number(item.width),
+            height: Number(item.height),
+          };
+        })
+        .filter(
+          (
+            item,
+          ): item is {
+            roomId: string;
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+          } => item !== null,
+        ),
     };
+
+    if (payload.items.length === 0) {
+      throw {
+        message: "No valid room data to save layout.",
+        status: 400,
+      };
+    }
+
     await api.put(
       buildUrl(API_ENDPOINTS.ROOMS.UPDATE_LAYOUT, { floorId }),
       payload,

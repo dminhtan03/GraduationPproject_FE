@@ -14,7 +14,7 @@ import {
   BasicMessageResponse,
 } from "../types/api";
 import { API_ENDPOINTS } from "../constants/endpoints";
-import { ROUTES, STORAGE_KEYS } from "../constants";
+import { AUTH_EVENTS, ROUTES, STORAGE_KEYS } from "../constants";
 
 // Max-age cho refresh token trong cookie: 7 ngày (theo BE 604800000 ms)
 const REFRESH_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 604800
@@ -43,6 +43,11 @@ const getRefreshTokenFromCookie = (): string | null => {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(/(?:^|; )refresh_token=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : null;
+};
+
+const emitAuthTokenChanged = () => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(AUTH_EVENTS.TOKEN_CHANGED));
 };
 
 // Decode JWT để lấy thông tin user (email, fullName...) từ payload
@@ -121,6 +126,7 @@ export const loginWithEmail = async (
     if (refreshToken) {
       setRefreshTokenCookie(refreshToken);
     }
+    emitAuthTokenChanged();
   }
 
   return {
@@ -155,6 +161,7 @@ export const loginWithGoogle = async (
     if (refreshToken) {
       setRefreshTokenCookie(refreshToken);
     }
+    emitAuthTokenChanged();
   }
 
   const user = extractUserFromToken(accessToken);
@@ -180,6 +187,7 @@ export const logout = async (): Promise<void> => {
     clearRefreshTokenCookie();
     localStorage.removeItem("user");
     localStorage.removeItem("user_data");
+    emitAuthTokenChanged();
   }
 };
 
@@ -262,9 +270,12 @@ export const restoreSession = async (): Promise<User | null> => {
       setRefreshTokenCookie(newRefreshToken);
     }
 
+    emitAuthTokenChanged();
+
     return extractUserFromToken(accessToken);
   } catch {
     localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
+    emitAuthTokenChanged();
     return null;
   }
 };

@@ -26,11 +26,35 @@ import type { UserProfile } from "../../types";
 import { logout } from "../../services/authService";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNotifications } from "../../context/NotificationContext";
+import {
+  formatReservationStatusLabel,
+  getReservationStatusClass,
+} from "../../utils/reservationStatusStyles";
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
 
 const APP_NAME = "UniBooking";
+
+const formatNotificationTime = (iso: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString();
+};
 
 const Header: React.FC = () => {
   const navigate = useNavigate();
@@ -172,12 +196,19 @@ const Header: React.FC = () => {
         <div className="relative">
           <Button
             type="text"
-            icon={<BellOutlined className="text-lg" />}
+            icon={
+              <BellOutlined
+                className={`text-lg transition ${
+                  unreadCount > 0 ? "text-orange-500" : "text-slate-700"
+                }`}
+              />
+            }
             onClick={handleBellClick}
+            className={isNotificationOpen ? "bg-orange-50" : ""}
           />
           {unreadCount > 0 && (
-            <span className="absolute top-0 right-0 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 text-[10px] font-semibold text-white border border-white shadow-sm px-0.5">
-              {unreadCount > 9 ? "9+" : unreadCount}
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-semibold text-white ring-2 ring-white">
+              {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
         </div>
@@ -234,24 +265,37 @@ const Header: React.FC = () => {
       </div>
 
       {isNotificationOpen && (
-        <div className="absolute right-2 sm:right-4 top-14 sm:top-16 z-50 w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:w-[360px] md:w-[400px]">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">
-                Notifications
-              </p>
+        <div className="absolute right-2 top-14 z-50 w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:right-4 sm:top-16 sm:w-[380px] md:w-[420px]">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-orange-50 to-white px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">
+                  Notifications
+                </p>
+                <p className="text-xs text-slate-500">
+                  {unreadCount > 0
+                    ? `${unreadCount} unread notification${unreadCount > 1 ? "s" : ""}`
+                    : "All caught up"}
+                </p>
+              </div>
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={markAllAsRead}
+                  disabled={unreadCount === 0}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition ${
+                    unreadCount > 0
+                      ? "text-orange-600 hover:bg-orange-100"
+                      : "cursor-not-allowed text-slate-400"
+                  }`}
+                >
+                  Mark all as read
+                </button>
+              )}
             </div>
-            {notifications.length > 0 && (
-              <button
-                type="button"
-                onClick={markAllAsRead}
-                className="rounded-full px-2.5 py-1 text-xs font-medium text-orange-600 transition hover:bg-orange-50"
-              >
-                Mark all as read
-              </button>
-            )}
           </div>
-          <div className="max-h-80 space-y-2 overflow-y-auto bg-slate-50 px-3 py-3">
+
+          <div className="max-h-96 space-y-2 overflow-y-auto bg-slate-50 p-3">
             {latestNotifications.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
                 You have no notifications yet.
@@ -265,33 +309,49 @@ const Header: React.FC = () => {
                   className={`w-full rounded-xl border px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
                     n.read
                       ? "border-slate-200 bg-white"
-                      : "border-orange-200 bg-orange-50"
+                      : "border-orange-200 bg-orange-50/80"
                   }`}
                 >
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-slate-900">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-semibold text-slate-900">
                       {n.title}
                     </p>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className="text-[11px] text-slate-500">
+                        {formatNotificationTime(n.createdAt)}
+                      </span>
+                      {!n.read && (
+                        <span className="inline-flex h-2.5 w-2.5 rounded-full bg-orange-500" />
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="max-h-10 overflow-hidden text-xs leading-5 text-slate-600">
+                    {n.message}
+                  </p>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span
-                      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${getCategoryBadgeClass(
+                      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-none ${getCategoryBadgeClass(
                         n.category,
                       )}`}
                     >
                       {getCategoryLabel(n.category)}
                     </span>
-                  </div>
-                  <p className="max-h-10 overflow-hidden text-xs text-slate-600">
-                    {n.message}
-                  </p>
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
-                    <span>
-                      {new Date(n.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
+
+                    {n.reservationStatusAtNow && (
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-none ${getReservationStatusClass(
+                          n.reservationStatusAtNow,
+                        )}`}
+                      >
+                        {formatReservationStatusLabel(n.reservationStatusAtNow)}
+                      </span>
+                    )}
+
                     {!n.read && (
-                      <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 font-medium text-orange-700">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-orange-500 to-amber-500 px-1.5 py-0 text-[9px] font-semibold leading-tight uppercase tracking-[0.04em] text-white shadow-sm">
+                        <span className="inline-flex h-1 w-1 rounded-full bg-white/95 animate-pulse" />
                         New
                       </span>
                     )}
@@ -300,16 +360,19 @@ const Header: React.FC = () => {
               ))
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setIsNotificationOpen(false);
-              navigate(ROUTES.NOTIFICATIONS);
-            }}
-            className="w-full border-t border-slate-100 px-4 py-3 text-center text-sm font-semibold text-orange-600 transition hover:bg-orange-50"
-          >
-            See All Notifications
-          </button>
+
+          <div className="border-t border-slate-100 bg-white">
+            <button
+              type="button"
+              onClick={() => {
+                setIsNotificationOpen(false);
+                navigate(ROUTES.NOTIFICATIONS);
+              }}
+              className="w-full px-4 py-3 text-center text-sm font-semibold text-orange-600 transition hover:bg-orange-50"
+            >
+              See All Notifications
+            </button>
+          </div>
         </div>
       )}
     </AntHeader>

@@ -68,7 +68,11 @@ type BuildingLayoutVariant =
 
 type RawMapRoom = {
   roomId?: string;
+  id?: string;
+  roomID?: string;
+  room_id?: string;
   locationCode?: string;
+  roomName?: string;
   status?: string;
   score?: number | null;
 };
@@ -124,6 +128,22 @@ const chunkRooms = <T,>(rooms: T[], size: number) => {
     result.push(rooms.slice(index, index + size));
   }
   return result;
+};
+
+const resolveRoomId = (room: RawMapRoom): string => {
+  const candidates = [room.roomId, room.id, room.roomID, room.room_id];
+  const firstValid = candidates.find(
+    (value) => typeof value === "string" && value.trim().length > 0,
+  );
+  return typeof firstValid === "string" ? firstValid.trim() : "";
+};
+
+const resolveLocationCode = (room: RawMapRoom): string => {
+  const candidates = [room.locationCode, room.roomName, room.roomId, room.id];
+  const firstValid = candidates.find(
+    (value) => typeof value === "string" && value.trim().length > 0,
+  );
+  return typeof firstValid === "string" ? firstValid.trim() : "Unknown room";
 };
 
 const resolveLayoutVariant = (
@@ -209,7 +229,9 @@ const RoomMapPage: React.FC = () => {
           floors: (building.floors || []).map((floor) => ({
             ...floor,
             rooms: (floor.rooms || []).map((room) =>
-              String(room.roomId || "") === roomId
+              String(
+                room.roomId || room.id || room.roomID || room.room_id || "",
+              ) === roomId
                 ? {
                     ...room,
                     status: nextStatus,
@@ -433,11 +455,12 @@ const RoomMapPage: React.FC = () => {
 
     const rooms: MapRoom[] = Array.isArray(floor.rooms)
       ? floor.rooms.map((r) => {
+          const resolvedRoomId = resolveRoomId(r as RawMapRoom);
           const baseStatus = r.status as MapRoomStatus;
-          const override = overrideStatuses[String(r.roomId || "")];
+          const override = overrideStatuses[resolvedRoomId];
           return {
-            roomId: String(r.roomId || ""),
-            locationCode: String(r.locationCode || ""),
+            roomId: resolvedRoomId,
+            locationCode: resolveLocationCode(r as RawMapRoom),
             status: override ?? baseStatus,
             score: r.score,
             xPosition: r.x ?? r.xPosition ?? r.xposition ?? 0,
@@ -644,8 +667,12 @@ const RoomMapPage: React.FC = () => {
 
   const handleRoomClick = async (room: MapRoom) => {
     if (!currentBuilding || !currentFloor) return;
+
+    const normalizedRoomId = String(room.roomId || "").trim();
+
     setSelectedRoom({
       ...room,
+      roomId: normalizedRoomId,
       buildingName: currentBuilding.buildingName,
       floorName: currentFloor.floorName,
     });
@@ -658,8 +685,16 @@ const RoomMapPage: React.FC = () => {
     setRoomFeedbackPage(1);
     setRoomFeedbackError(null);
 
+    if (!normalizedRoomId) {
+      setRoomDetailLoading(false);
+      setRoomDetailError(
+        "Cannot load room details because room id is missing from map data.",
+      );
+      return;
+    }
+
     try {
-      const detail = await roomService.getRoomDetail(room.roomId);
+      const detail = await roomService.getRoomDetail(normalizedRoomId);
       setRoomDetail(detail as RoomDetail);
     } catch (e: unknown) {
       const message =
@@ -711,6 +746,15 @@ const RoomMapPage: React.FC = () => {
   const handleBooking = () => {
     if (!selectedRoom) return;
 
+    const normalizedRoomId = String(selectedRoom.roomId || "").trim();
+
+    if (!normalizedRoomId) {
+      message.warning(
+        "Cannot book this room because room id is missing. Please choose another room.",
+      );
+      return;
+    }
+
     if (selectedRoom.status !== "AVAILABLE") {
       message.warning(
         "Cannot book this room because it is currently unavailable.",
@@ -726,10 +770,10 @@ const RoomMapPage: React.FC = () => {
     }
 
     // Pass roomId in URL and full room data in state
-    navigate(ROUTES.BOOK_ROOM.replace(":roomId", selectedRoom.roomId), {
+    navigate(ROUTES.BOOK_ROOM.replace(":roomId", normalizedRoomId), {
       state: {
         room: {
-          id: selectedRoom.roomId,
+          id: normalizedRoomId,
           roomName: selectedRoom.locationCode,
           building: selectedRoom.buildingName,
           floorInfo: selectedRoom.floorName,
@@ -778,7 +822,7 @@ const RoomMapPage: React.FC = () => {
           </button>
           <button
             type="button"
-            disabled={!selectedRoom}
+            disabled={!selectedRoom || !selectedRoom.roomId}
             onClick={handleBooking}
             className="w-full sm:w-auto px-4 py-2 rounded-full text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           >

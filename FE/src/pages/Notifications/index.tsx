@@ -1,5 +1,9 @@
 import React from "react";
 import { useNotifications } from "../../context/NotificationContext";
+import {
+  formatReservationStatusLabel,
+  getReservationStatusClass,
+} from "../../utils/reservationStatusStyles";
 
 const formatTime = (iso: string): string => {
   const date = new Date(iso);
@@ -45,14 +49,26 @@ const NotificationsPage: React.FC = () => {
     <div className="page-container mx-auto max-w-5xl">
       <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold text-slate-900">
-            Notifications
-          </h1>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">
+              Notifications
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              {unreadCount > 0
+                ? `${unreadCount} unread notification${unreadCount > 1 ? "s" : ""}`
+                : "All notifications are read"}
+            </p>
+          </div>
           {notifications.length > 0 && (
             <button
               type="button"
               onClick={markAllAsRead}
-              className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-medium text-orange-700 transition hover:bg-orange-100"
+              disabled={unreadCount === 0}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                unreadCount > 0
+                  ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                  : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+              }`}
             >
               {unreadCount > 0 ? "Mark all as read" : "All caught up"}
             </button>
@@ -106,14 +122,13 @@ const NotificationsPage: React.FC = () => {
 
               {(n.reservationId || n.reservationStatusAtNow) && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                  {n.reservationId && (
-                    <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">
-                      Reservation: {n.reservationId}
-                    </span>
-                  )}
                   {n.reservationStatusAtNow && (
-                    <span className="rounded-md bg-sky-50 px-2 py-1 font-medium text-sky-700 ring-1 ring-sky-200">
-                      Status: {n.reservationStatusAtNow}
+                    <span
+                      className={`rounded-md px-2 py-1 font-medium ${getReservationStatusClass(
+                        n.reservationStatusAtNow,
+                      )}`}
+                    >
+                      {formatReservationStatusLabel(n.reservationStatusAtNow)}
                     </span>
                   )}
                 </div>

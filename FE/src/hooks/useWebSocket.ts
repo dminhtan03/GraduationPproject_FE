@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Client, type Frame, type IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import { WebSocketMessage } from "../types";
-import { API_CONFIG } from "../constants";
+import { API_CONFIG, AUTH_EVENTS, STORAGE_KEYS } from "../constants";
 import { API_ENDPOINTS } from "../constants/endpoints";
 import { logError } from "../utils/errorHandlers";
 import { api } from "../services/api";
@@ -94,10 +94,21 @@ export const useWebSocket = (url?: string) => {
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   const isUnmountedRef = useRef(false);
+  const reconnectTimerRef = useRef<number | null>(null);
 
   const websocketUrl = normalizeSockJsUrl(url);
 
+  const hasAccessToken = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean(localStorage.getItem(STORAGE_KEYS.USER_TOKEN));
+  }, []);
+
   const disconnect = useCallback(() => {
+    if (reconnectTimerRef.current != null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+
     const currentClient = clientRef.current;
     clientRef.current = null;
 
@@ -112,7 +123,50 @@ export const useWebSocket = (url?: string) => {
     }));
   }, []);
 
+  const scheduleReconnect = useCallback(
+    (reason: string) => {
+      if (isUnmountedRef.current || !hasAccessToken()) {
+        return;
+      }
+
+      if (reconnectAttempts.current >= maxReconnectAttempts) {
+        setState((prev) => ({
+          ...prev,
+          isConnecting: false,
+          error: prev.error || `WebSocket reconnect failed (${reason})`,
+        }));
+        return;
+      }
+
+      reconnectAttempts.current += 1;
+      const delayMs = Math.pow(2, reconnectAttempts.current) * 1000;
+
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+      }
+
+      reconnectTimerRef.current = window.setTimeout(() => {
+        if (!isUnmountedRef.current && hasAccessToken()) {
+          connect().catch((error) =>
+            logError(error, `WebSocket Reconnect (${reason})`),
+          );
+        }
+      }, delayMs);
+    },
+    [hasAccessToken],
+  );
+
   const connect = useCallback(async () => {
+    if (!hasAccessToken()) {
+      setState((prev) => ({
+        ...prev,
+        isConnected: false,
+        isConnecting: false,
+        error: null,
+      }));
+      return;
+    }
+
     if (clientRef.current?.active) {
       return;
     }
@@ -192,19 +246,7 @@ export const useWebSocket = (url?: string) => {
             isConnecting: false,
           }));
 
-          if (reconnectAttempts.current < maxReconnectAttempts) {
-            reconnectAttempts.current += 1;
-            window.setTimeout(
-              () => {
-                if (!isUnmountedRef.current) {
-                  connect().catch((error) =>
-                    logError(error, "WebSocket Reconnect"),
-                  );
-                }
-              },
-              Math.pow(2, reconnectAttempts.current) * 1000,
-            );
-          }
+          scheduleReconnect("close");
         },
         onStompError: (frame: Frame) => {
           setState((prev) => ({
@@ -213,6 +255,7 @@ export const useWebSocket = (url?: string) => {
             isConnecting: false,
           }));
           console.error("❌ STOMP Error:", frame);
+          scheduleReconnect("stomp-error");
         },
         onWebSocketError: (error: Event) => {
           setState((prev) => ({
@@ -221,6 +264,7 @@ export const useWebSocket = (url?: string) => {
             isConnecting: false,
           }));
           console.error("❌ WebSocket Error:", error);
+          scheduleReconnect("websocket-error");
         },
       });
 
@@ -236,8 +280,10 @@ export const useWebSocket = (url?: string) => {
             : "Failed to create WebSocket connection",
         isConnecting: false,
       }));
+
+      scheduleReconnect("connect-catch");
     }
-  }, [websocketUrl]);
+  }, [websocketUrl, hasAccessToken, scheduleReconnect]);
 
   const sendMessage = useCallback(
     (message: Omit<WebSocketMessage, "timestamp">) => {
@@ -260,13 +306,63 @@ export const useWebSocket = (url?: string) => {
 
   useEffect(() => {
     isUnmountedRef.current = false;
-    connect().catch((error) => logError(error, "WebSocket Initial Connect"));
+
+    if (hasAccessToken()) {
+      connect().catch((error) => logError(error, "WebSocket Initial Connect"));
+    }
+
+    const handleAuthTokenChanged = () => {
+      if (hasAccessToken()) {
+        reconnectAttempts.current = 0;
+        disconnect();
+        window.setTimeout(() => {
+          connect().catch((error) =>
+            logError(error, "WebSocket Auth Reconnect"),
+          );
+        }, 0);
+        return;
+      }
+
+      disconnect();
+      setState((prev) => ({
+        ...prev,
+        lastMessage: null,
+      }));
+    };
+
+    const handleWindowFocus = () => {
+      if (!hasAccessToken()) return;
+      if (clientRef.current?.connected || clientRef.current?.active) return;
+      connect().catch((error) => logError(error, "WebSocket Focus Reconnect"));
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      handleWindowFocus();
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== STORAGE_KEYS.USER_TOKEN) return;
+      handleAuthTokenChanged();
+    };
+
+    window.addEventListener(AUTH_EVENTS.TOKEN_CHANGED, handleAuthTokenChanged);
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       isUnmountedRef.current = true;
+      window.removeEventListener(
+        AUTH_EVENTS.TOKEN_CHANGED,
+        handleAuthTokenChanged,
+      );
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, [connect, disconnect, hasAccessToken]);
 
   return {
     ...state,
