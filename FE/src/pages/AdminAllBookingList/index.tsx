@@ -14,6 +14,7 @@ import {
   Space,
   Empty,
   Tooltip,
+  Modal,
 } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
 import { adminService } from "../../services/adminService";
@@ -30,7 +31,11 @@ import CustomMessage, {
 interface BookingRow {
   id?: string;
   reservationId?: string;
+  reservationID?: string;
+  reservation_id?: string;
   bookingId?: string;
+  bookingID?: string;
+  booking_id?: string;
   user?: string;
   userName?: string;
   userEmail?: string;
@@ -45,6 +50,7 @@ interface BookingRow {
   time?: string;
   timeSlot?: string;
   status?: string;
+  rawData?: Record<string, unknown>;
 }
 
 interface BuildingOption {
@@ -52,7 +58,19 @@ interface BuildingOption {
   value: string;
 }
 
+interface FloorOption {
+  label: string;
+  value: string;
+}
+
 const PAGE_SIZE = 10;
+const FLOOR_OPTIONS: FloorOption[] = [
+  { label: "Tầng 1", value: "1" },
+  { label: "Tầng 2", value: "2" },
+  { label: "Tầng 3", value: "3" },
+  { label: "Tầng 4", value: "4" },
+  { label: "Tầng 5", value: "5" },
+];
 
 const pad = (value: number) => value.toString().padStart(2, "0");
 const ALL_HOURS = Array.from({ length: 24 }, (_, index) => pad(index));
@@ -84,8 +102,7 @@ const getClockMinute = (clock: string) => {
 };
 
 const getStatusColor = (status: string) => {
-  const normalized = status?.toUpperCase() || "";
-  if (normalized === "PENDING") return "gold";
+  const normalized = status?.trim().toUpperCase() || "";
   if (normalized === "RESERVED") return "green";
   if (normalized === "IN_USE") return "blue";
   if (normalized === "COMPLETED") return "cyan";
@@ -110,6 +127,12 @@ const normalizeDateTimeForApi = (value?: string) => {
     return `${value}:00`;
   }
   return value;
+};
+
+const getTextFromUnknown = (value: unknown): string => {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
 };
 
 const formatDate = (dateStr?: string) => {
@@ -144,18 +167,22 @@ const AdminAllBookingListPage: React.FC = () => {
   const [endDate, setEndDate] = useState<string>("");
   const [startClock, setStartClock] = useState<string>(DEFAULT_START_CLOCK);
   const [endClock, setEndClock] = useState<string>(DEFAULT_END_CLOCK);
-  const [userNameFilter, setUserNameFilter] = useState<string>("");
   const [userEmailFilter, setUserEmailFilter] = useState<string>("");
   const [roomNameFilter, setRoomNameFilter] = useState<string>("");
   const [floorNameFilter, setFloorNameFilter] = useState<string>("");
   const [buildingNameFilter, setBuildingNameFilter] = useState<string>("");
   const [buildingOptions, setBuildingOptions] = useState<BuildingOption[]>([]);
+  const [forceCancelLoadingId, setForceCancelLoadingId] = useState<string | null>(
+    null,
+  );
+  const [forceCancelModalOpen, setForceCancelModalOpen] = useState(false);
+  const [forceCancelReservationId, setForceCancelReservationId] = useState("");
+  const [forceCancelReason, setForceCancelReason] = useState("");
 
   // Applied filter states (used for backend query)
   const [appliedStatus, setAppliedStatus] = useState<string>("All");
   const [appliedStartDate, setAppliedStartDate] = useState<string>("");
   const [appliedEndDate, setAppliedEndDate] = useState<string>("");
-  const [appliedUserName, setAppliedUserName] = useState<string>("");
   const [appliedUserEmail, setAppliedUserEmail] = useState<string>("");
   const [appliedRoomName, setAppliedRoomName] = useState<string>("");
   const [appliedFloorName, setAppliedFloorName] = useState<string>("");
@@ -221,7 +248,6 @@ const AdminAllBookingListPage: React.FC = () => {
       .getAllBookings(page - 1, pageSize, {
         startDate: normalizedStart,
         endDate: normalizedEnd,
-        userName: appliedUserName || undefined,
         userEmail: appliedUserEmail || undefined,
         roomName: appliedRoomName || undefined,
         floorName: appliedFloorName || undefined,
@@ -243,7 +269,6 @@ const AdminAllBookingListPage: React.FC = () => {
     appliedStatus,
     appliedStartDate,
     appliedEndDate,
-    appliedUserName,
     appliedUserEmail,
     appliedRoomName,
     appliedFloorName,
@@ -280,7 +305,6 @@ const AdminAllBookingListPage: React.FC = () => {
     setAppliedStatus(statusFilter);
     setAppliedStartDate(normalizedStart);
     setAppliedEndDate(normalizedEnd);
-    setAppliedUserName(userNameFilter.trim());
     setAppliedUserEmail(userEmailFilter.trim());
     setAppliedRoomName(roomNameFilter.trim());
     setAppliedFloorName(floorNameFilter.trim());
@@ -294,7 +318,6 @@ const AdminAllBookingListPage: React.FC = () => {
     setEndDate("");
     setStartClock(DEFAULT_START_CLOCK);
     setEndClock(DEFAULT_END_CLOCK);
-    setUserNameFilter("");
     setUserEmailFilter("");
     setRoomNameFilter("");
     setFloorNameFilter("");
@@ -302,7 +325,6 @@ const AdminAllBookingListPage: React.FC = () => {
     setAppliedStatus("All");
     setAppliedStartDate("");
     setAppliedEndDate("");
-    setAppliedUserName("");
     setAppliedUserEmail("");
     setAppliedRoomName("");
     setAppliedFloorName("");
@@ -329,6 +351,100 @@ const AdminAllBookingListPage: React.FC = () => {
         current && current.message === nextMessage ? null : current,
       );
     }, 3000);
+  };
+
+  const getReservationKey = (record: BookingRow): string =>
+    (() => {
+      const rawReservation = (record.rawData?.["reservation"] ||
+        null) as Record<string, unknown> | null;
+
+      return (
+        getTextFromUnknown(record.reservationId) ||
+        getTextFromUnknown(record.reservationID) ||
+        getTextFromUnknown(record.reservation_id) ||
+        getTextFromUnknown(record.bookingId) ||
+        getTextFromUnknown(record.bookingID) ||
+        getTextFromUnknown(record.booking_id) ||
+        getTextFromUnknown(record.id) ||
+        getTextFromUnknown(record.rawData?.["reservationId"]) ||
+        getTextFromUnknown(record.rawData?.["reservationID"]) ||
+        getTextFromUnknown(record.rawData?.["reservation_id"]) ||
+        getTextFromUnknown(record.rawData?.["bookingId"]) ||
+        getTextFromUnknown(record.rawData?.["bookingID"]) ||
+        getTextFromUnknown(record.rawData?.["booking_id"]) ||
+        getTextFromUnknown(record.rawData?.["reservationUuid"]) ||
+        getTextFromUnknown(record.rawData?.["uuid"]) ||
+        getTextFromUnknown(record.rawData?.["id"]) ||
+        getTextFromUnknown(rawReservation?.["reservationId"]) ||
+        getTextFromUnknown(rawReservation?.["id"]) ||
+        ""
+      );
+    })();
+
+  const canForceCancel = (status?: string) => {
+    const normalized = String(status || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[-\s]+/g, "_");
+    return normalized === "RESERVED" || normalized === "IN_USE";
+  };
+
+  const reloadBookings = async () => {
+    const normalizedStart = normalizeDateTimeForApi(appliedStartDate);
+    const normalizedEnd = normalizeDateTimeForApi(appliedEndDate);
+    const result = await adminService.getAllBookings(page - 1, pageSize, {
+      startDate: normalizedStart,
+      endDate: normalizedEnd,
+      userEmail: appliedUserEmail || undefined,
+      roomName: appliedRoomName || undefined,
+      floorName: appliedFloorName || undefined,
+      buildingName: appliedBuildingName || undefined,
+      status: appliedStatus !== "All" ? appliedStatus : undefined,
+    });
+    setBookings(result.items);
+    setTotal(result.total);
+  };
+
+  const handleForceCancel = (record: BookingRow) => {
+    if (!canForceCancel(record.status)) {
+      showToast(
+        "warning",
+        `Cannot force cancel booking with status: ${String(record.status || "UNKNOWN")}`,
+      );
+      return;
+    }
+
+    const initialReservationId = getReservationKey(record);
+    setForceCancelReservationId(initialReservationId);
+    setForceCancelReason("");
+    setForceCancelModalOpen(true);
+  };
+
+  const submitForceCancel = async () => {
+    const reservationId = forceCancelReservationId.trim();
+    if (!reservationId) {
+      showToast("error", "Reservation id is required");
+      return;
+    }
+
+    const reason = forceCancelReason.trim() || "Force cancel by admin";
+
+    try {
+      setForceCancelLoadingId(reservationId);
+      const message = await adminService.forceCancelBooking(reservationId, {
+        reason,
+      });
+      showToast(
+        "success",
+        message || "Force cancel success. User will receive an email notification.",
+      );
+      setForceCancelModalOpen(false);
+      await reloadBookings();
+    } catch (error: unknown) {
+      showToast("error", extractApiMessage(error, "Force cancel failed"));
+    } finally {
+      setForceCancelLoadingId(null);
+    }
   };
 
   const handleExportCSV = () => {
@@ -422,12 +538,41 @@ const AdminAllBookingListPage: React.FC = () => {
     showToast("success", "Print dialog opened");
   };
 
+  const userNameColumnFilters = Array.from(
+    new Set(
+      bookings
+        .map((item) => (item.userName || item.user || "").trim())
+        .filter(Boolean),
+    ),
+  ).map((value) => ({ text: value, value }));
+
+  const roomNameColumnFilters = Array.from(
+    new Set(
+      bookings
+        .map((item) => (item.roomName || item.room || "").trim())
+        .filter(Boolean),
+    ),
+  ).map((value) => ({ text: value, value }));
+
+  const statusColumnFilters = Array.from(
+    new Set(bookings.map((item) => String(item.status || "").trim()).filter(Boolean)),
+  ).map((value) => ({ text: value, value }));
+
   const columns: ColumnsType<BookingRow> = [
     {
       title: "USER NAME",
       dataIndex: "userName",
       key: "userName",
       width: "14%",
+      sorter: (a, b) =>
+        String(a.userName || a.user || "").localeCompare(
+          String(b.userName || b.user || ""),
+        ),
+      filters: userNameColumnFilters,
+      onFilter: (value, record) =>
+        String(record.userName || record.user || "")
+          .toLowerCase()
+          .includes(String(value).toLowerCase()),
       render: (value, record) => value || record.user || "-",
     },
     {
@@ -435,12 +580,26 @@ const AdminAllBookingListPage: React.FC = () => {
       dataIndex: "roomName",
       key: "roomName",
       width: "14%",
+      sorter: (a, b) =>
+        String(a.roomName || a.room || "").localeCompare(
+          String(b.roomName || b.room || ""),
+        ),
+      filters: roomNameColumnFilters,
+      onFilter: (value, record) =>
+        String(record.roomName || record.room || "")
+          .toLowerCase()
+          .includes(String(value).toLowerCase()),
       render: (value, record) => value || record.room || "-",
     },
     {
       title: "START TIME",
       key: "startTime",
       width: "15%",
+      sorter: (a, b) => {
+        const left = parseDate(a.startTime)?.getTime() || 0;
+        const right = parseDate(b.startTime)?.getTime() || 0;
+        return left - right;
+      },
       render: (_, record) => {
         const dateStr = record.startTime;
         return dateStr ? new Date(dateStr).toLocaleString() : "-";
@@ -450,6 +609,11 @@ const AdminAllBookingListPage: React.FC = () => {
       title: "END TIME",
       key: "endTime",
       width: "15%",
+      sorter: (a, b) => {
+        const left = parseDate(a.endTime || a.date)?.getTime() || 0;
+        const right = parseDate(b.endTime || b.date)?.getTime() || 0;
+        return left - right;
+      },
       render: (_, record) => {
         const dateStr = record.endTime || record.date;
         return dateStr ? new Date(dateStr).toLocaleString() : "-";
@@ -460,6 +624,13 @@ const AdminAllBookingListPage: React.FC = () => {
       dataIndex: "status",
       key: "status",
       width: "13%",
+      sorter: (a, b) =>
+        String(a.status || "").localeCompare(String(b.status || "")),
+      filters: statusColumnFilters,
+      onFilter: (value, record) =>
+        String(record.status || "")
+          .toLowerCase()
+          .includes(String(value).toLowerCase()),
       render: (status: string) => (
         <Tag color={getStatusColor(status)}>{status || "-"}</Tag>
       ),
@@ -481,6 +652,18 @@ const AdminAllBookingListPage: React.FC = () => {
               View
             </Button>
           </Tooltip>
+          {canForceCancel(record.status) && Boolean(getReservationKey(record)) && (
+            <Tooltip title="Force cancel booking">
+              <Button
+                danger
+                size="small"
+                loading={forceCancelLoadingId === getReservationKey(record)}
+                onClick={() => handleForceCancel(record)}
+              >
+                Force Cancel
+              </Button>
+            </Tooltip>
+          )}
         </Space>
       ),
     },
@@ -522,6 +705,37 @@ const AdminAllBookingListPage: React.FC = () => {
 
         {/* Main Content */}
         <main className="flex-1 overflow-auto p-6">
+          <Modal
+            title="Are you sure to cancel booking?"
+            open={forceCancelModalOpen}
+            onCancel={() => setForceCancelModalOpen(false)}
+            onOk={submitForceCancel}
+            okText="Force Cancel"
+            cancelText="Close"
+            okButtonProps={{
+              danger: true,
+              loading: Boolean(forceCancelLoadingId),
+            }}
+          >
+            <div className="mt-2 space-y-3">
+              <p className="text-sm text-gray-600">
+                This action will force cancel the booking and a notification email will be sent to the user.
+              </p>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase text-gray-600">
+                  Reason
+                </label>
+                <Input.TextArea
+                  value={forceCancelReason}
+                  placeholder="Reason for force cancel"
+                  autoSize={{ minRows: 3, maxRows: 5 }}
+                  maxLength={500}
+                  onChange={(event) => setForceCancelReason(event.target.value)}
+                />
+              </div>
+            </div>
+          </Modal>
+
           {/* Filters Section */}
           <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6">
             <h2 className="text-xl font-bold text-gray-900 mb-5">
@@ -614,16 +828,32 @@ const AdminAllBookingListPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Second Row - User Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 pb-4 border-b border-gray-200">
+            {/* Second Row - Main Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 pb-4 border-b border-gray-200">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                  User Name
+                  Building
+                </label>
+                <Select
+                  value={buildingNameFilter || undefined}
+                  onChange={(value) => {
+                    setBuildingNameFilter(value || "");
+                    setFloorNameFilter("");
+                  }}
+                  allowClear
+                  placeholder="Select building"
+                  className="w-full"
+                  options={buildingOptions}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                  Room Name
                 </label>
                 <Input
-                  value={userNameFilter}
-                  onChange={(event) => setUserNameFilter(event.target.value)}
-                  placeholder="Search user..."
+                  value={roomNameFilter}
+                  onChange={(event) => setRoomNameFilter(event.target.value)}
+                  placeholder="Search room..."
                   className="rounded-lg"
                 />
               </div>
@@ -638,45 +868,6 @@ const AdminAllBookingListPage: React.FC = () => {
                   className="rounded-lg"
                 />
               </div>
-            </div>
-
-            {/* Third Row - Room/Floor/Building/Status */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                  Room Name
-                </label>
-                <Input
-                  value={roomNameFilter}
-                  onChange={(event) => setRoomNameFilter(event.target.value)}
-                  placeholder="Search room..."
-                  className="rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                  Floor Name
-                </label>
-                <Input
-                  value={floorNameFilter}
-                  onChange={(event) => setFloorNameFilter(event.target.value)}
-                  placeholder="Search floor..."
-                  className="rounded-lg"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                  Building
-                </label>
-                <Select
-                  value={buildingNameFilter || undefined}
-                  onChange={(value) => setBuildingNameFilter(value || "")}
-                  allowClear
-                  placeholder="Select building"
-                  className="w-full"
-                  options={buildingOptions}
-                />
-              </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   Status
@@ -687,7 +878,6 @@ const AdminAllBookingListPage: React.FC = () => {
                   className="w-full"
                   options={[
                     { label: "All", value: "All" },
-                    { label: "Pending", value: "PENDING" },
                     { label: "Reserved", value: "RESERVED" },
                     { label: "In Use", value: "IN_USE" },
                     { label: "Completed", value: "COMPLETED" },
@@ -699,6 +889,25 @@ const AdminAllBookingListPage: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* Third Row - Floor (show after building) */}
+            {buildingNameFilter && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                    Floor
+                  </label>
+                  <Select
+                    value={floorNameFilter || undefined}
+                    onChange={(value) => setFloorNameFilter(value || "")}
+                    allowClear
+                    placeholder="Select floor"
+                    className="w-full"
+                    options={FLOOR_OPTIONS}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex gap-3 justify-end">

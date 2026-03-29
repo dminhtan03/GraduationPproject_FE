@@ -33,6 +33,7 @@ export const ROUTES = {
   // start add admin building routes
   ADMIN_BUILDING_MANAGEMENT: "/admin/buildings",
   ADMIN_BUILDING_FLOORS: "/admin/buildings/:buildingId/floors",
+  ADMIN_ROOM_MANAGEMENT: "/admin/buildings/:buildingId/floors/:floorId/rooms",
   ADMIN_FLOOR_LAYOUT: "/admin/buildings/:buildingId/floors/:floorId/layout",
   // end add admin building routes
 } as const;
@@ -52,6 +53,10 @@ export const WS_MESSAGE_TYPES = {
   UPDATE_DATA: "update_data",
   NOTIFICATION: "notification",
   ERROR: "error",
+} as const;
+
+export const AUTH_EVENTS = {
+  TOKEN_CHANGED: "auth-token-changed",
 } as const;
 
 // App settings

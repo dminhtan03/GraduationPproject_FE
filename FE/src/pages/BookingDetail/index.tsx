@@ -83,7 +83,6 @@ const statusColor = (status?: string) => {
   if (normalized === "COMPLETED") return "cyan";
   if (normalized === "CANCELLED") return "red";
   if (normalized === "NO_SHOW") return "volcano";
-  if (normalized === "REJECTED") return "volcano";
   return "default";
 };
 

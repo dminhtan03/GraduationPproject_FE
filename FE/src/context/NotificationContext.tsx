@@ -4,8 +4,10 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { AUTH_EVENTS, STORAGE_KEYS } from "../constants";
 import type {
   AppNotification,
   NotificationCategory,
@@ -29,6 +31,10 @@ const NotificationContext = createContext<NotificationContextValue | undefined>(
   undefined,
 );
 
+const MAX_NOTIFICATIONS = 50;
+const SERVER_SYNC_DELAY_MS = 700;
+const POLL_REFRESH_INTERVAL_MS = 15000;
+
 const createId = () =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
@@ -49,7 +55,11 @@ const inferCategory = (
     source.includes("reservation") ||
     source.includes("booking") ||
     source.includes("check-in") ||
-    source.includes("check in")
+    source.includes("check in") ||
+    source.includes("dat phong") ||
+    source.includes("phong hop") ||
+    source.includes("gia han") ||
+    source.includes("huy")
   ) {
     return "booking";
   }
@@ -112,15 +122,15 @@ const mapMessageToNotification = (
         ? raw.ReservationId
         : undefined;
 
+  const createdAtSource = raw.createdAt ?? raw.time ?? message.timestamp;
+  const createdAt = String(createdAtSource || message.timestamp);
+
   const id =
     typeof raw.id === "string" && raw.id.trim().length > 0
       ? raw.id
-      : reservationId && reservationId.trim().length > 0
-        ? `reservation-${reservationId}`
-        : createId();
-
-  const createdAtSource = raw.createdAt ?? raw.time ?? message.timestamp;
-  const createdAt = String(createdAtSource || message.timestamp);
+      : `ws-${new Date(createdAt).getTime() || Date.now()}-${createId()}${
+          reservationId ? `-${reservationId}` : ""
+        }`;
 
   const categorySource = raw.category;
   const category =
@@ -159,36 +169,89 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const syncTimerRef = useRef<number | null>(null);
 
   const { lastMessage } = useWebSocket();
 
+  const hasAccessToken = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean(localStorage.getItem(STORAGE_KEYS.USER_TOKEN));
+  }, []);
+
+  const refreshNotifications = useCallback(async () => {
+    if (!hasAccessToken()) {
+      setNotifications([]);
+      return;
+    }
+
+    try {
+      const items = await notificationService.getAll(0, MAX_NOTIFICATIONS);
+      const mapped = sortByCreatedAtDesc(
+        items.map((item) => mapApiItemToNotification(item)),
+      );
+      setNotifications(mapped);
+    } catch (error) {
+      logError(error, "Load Notifications");
+    }
+  }, [hasAccessToken]);
+
+  const scheduleServerSync = useCallback(() => {
+    if (syncTimerRef.current != null) {
+      window.clearTimeout(syncTimerRef.current);
+    }
+
+    syncTimerRef.current = window.setTimeout(() => {
+      refreshNotifications().catch((error) =>
+        logError(error, "Sync Notifications After Realtime"),
+      );
+    }, SERVER_SYNC_DELAY_MS);
+  }, [refreshNotifications]);
+
   useEffect(() => {
-    let active = true;
-
-    const loadInitialNotifications = async () => {
-      try {
-        const items = await notificationService.getAll(0, 50);
-        if (!active) {
-          return;
-        }
-
-        const mapped = sortByCreatedAtDesc(
-          items.map((item) => mapApiItemToNotification(item)),
-        );
-        setNotifications(mapped);
-      } catch (error) {
-        logError(error, "Load Notifications");
-      }
-    };
-
-    loadInitialNotifications().catch((error) =>
+    refreshNotifications().catch((error) =>
       logError(error, "Load Notifications"),
     );
+  }, [refreshNotifications]);
+
+  useEffect(() => {
+    const handleAuthTokenChanged = () => {
+      refreshNotifications().catch((error) =>
+        logError(error, "Refresh Notifications After Auth Change"),
+      );
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== STORAGE_KEYS.USER_TOKEN) return;
+      handleAuthTokenChanged();
+    };
+
+    window.addEventListener(AUTH_EVENTS.TOKEN_CHANGED, handleAuthTokenChanged);
+    window.addEventListener("storage", handleStorage);
 
     return () => {
-      active = false;
+      window.removeEventListener(
+        AUTH_EVENTS.TOKEN_CHANGED,
+        handleAuthTokenChanged,
+      );
+      window.removeEventListener("storage", handleStorage);
     };
-  }, []);
+  }, [refreshNotifications]);
+
+  useEffect(() => {
+    if (!hasAccessToken()) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        refreshNotifications().catch((error) =>
+          logError(error, "Poll Notifications"),
+        );
+      }
+    }, POLL_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasAccessToken, refreshNotifications]);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -209,9 +272,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({
         return sortByCreatedAtDesc(updated);
       }
 
-      return sortByCreatedAtDesc([mapped, ...prev]).slice(0, 50);
+      return sortByCreatedAtDesc([mapped, ...prev]).slice(0, MAX_NOTIFICATIONS);
     });
-  }, [lastMessage]);
+
+    scheduleServerSync();
+  }, [lastMessage, scheduleServerSync]);
+
+  useEffect(() => {
+    return () => {
+      if (syncTimerRef.current != null) {
+        window.clearTimeout(syncTimerRef.current);
+      }
+    };
+  }, []);
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
