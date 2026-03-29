@@ -159,6 +159,38 @@ const Header: React.FC = () => {
     setIsNotificationOpen((prev) => !prev);
   };
 
+  const handleNotificationItemClick = (notificationId: string) => {
+    const notification = notifications.find(
+      (item) => item.id === notificationId,
+    );
+    markAsRead(notificationId);
+
+    const bookingId = notification?.reservationId?.trim();
+    if (!bookingId) {
+      return;
+    }
+
+    setIsNotificationOpen(false);
+    navigate(
+      ROUTES.BOOKING_DETAIL.replace(
+        ":bookingId",
+        encodeURIComponent(bookingId),
+      ),
+      {
+        state: {
+          booking: {
+            id: bookingId,
+            status: notification?.reservationStatusAtNow,
+            rawData: {
+              reservationStatusAtNow: notification?.reservationStatusAtNow,
+              status: notification?.reservationStatusAtNow,
+            },
+          },
+        },
+      },
+    );
+  };
+
   return (
     <AntHeader
       className={`relative h-auto py-2 px-3 sm:px-4 flex flex-wrap items-center gap-3 ${
@@ -305,7 +337,7 @@ const Header: React.FC = () => {
                 <button
                   type="button"
                   key={n.id}
-                  onClick={() => markAsRead(n.id)}
+                  onClick={() => handleNotificationItemClick(n.id)}
                   className={`w-full rounded-xl border px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
                     n.read
                       ? "border-slate-200 bg-white"
