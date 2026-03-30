@@ -5,6 +5,7 @@ import {
   BuildingOfficeIcon,
   MapPinIcon,
   ChevronRightIcon,
+  PencilIcon,
 } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
@@ -19,6 +20,8 @@ const AdminBuildingManagementPage: React.FC = () => {
   const [buildings, setBuildings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingBuilding, setEditingBuilding] = useState<any>(null);
   const [newBuilding, setNewBuilding] = useState({ name: "", address: "", totalFloors: 1 });
   const [toastPopup, setToastPopup] = useState<{ type: MessageType; message: string } | null>(null);
 
@@ -51,6 +54,21 @@ const AdminBuildingManagementPage: React.FC = () => {
       loadBuildings();
     } catch (err: any) {
       const errorMsg = err.message || "Failed to create building";
+      setToastPopup({ type: "error", message: errorMsg });
+    }
+  };
+
+  const handleUpdateBuilding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBuilding) return;
+    try {
+      await adminService.updateBuilding(editingBuilding.id, editingBuilding.name);
+      setToastPopup({ type: "success", message: "Building updated successfully" });
+      setShowEditModal(false);
+      setEditingBuilding(null);
+      loadBuildings();
+    } catch (err: any) {
+      const errorMsg = err.message || "Failed to update building";
       setToastPopup({ type: "error", message: errorMsg });
     }
   };
@@ -92,14 +110,27 @@ const AdminBuildingManagementPage: React.FC = () => {
           {buildings.map((building) => (
             <div
               key={building.id}
-              className="group bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer"
+              className="group bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-all cursor-pointer relative"
               onClick={() => navigate(`/admin/buildings/${building.id}/floors`)}
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="p-3 rounded-xl bg-orange-50 text-orange-600 group-hover:bg-orange-500 group-hover:text-white transition-colors">
                   <BuildingOfficeIcon className="h-6 w-6" />
                 </div>
-                <ChevronRightIcon className="h-5 w-5 text-slate-400" />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingBuilding(building);
+                      setShowEditModal(true);
+                    }}
+                    className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-orange-600 transition-colors"
+                    title="Edit Building Name"
+                  >
+                    <PencilIcon className="h-5 w-5" />
+                  </button>
+                  <ChevronRightIcon className="h-5 w-5 text-slate-400" />
+                </div>
               </div>
               <h3 className="text-lg font-bold text-slate-900 mb-1">{building.name}</h3>
               <div className="flex items-center gap-2 text-sm text-slate-500 mb-3">
@@ -173,6 +204,44 @@ const AdminBuildingManagementPage: React.FC = () => {
                   className="px-4 py-2 bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-orange-600 shadow-sm"
                 >
                   Create Building
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900 mb-4">Edit Building Name</h3>
+            <form onSubmit={handleUpdateBuilding} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Building Name</label>
+                <input
+                  required
+                  type="text"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-2 focus:ring-2 focus:ring-orange-500 outline-none"
+                  value={editingBuilding?.name || ""}
+                  onChange={(e) => setEditingBuilding({ ...editingBuilding, name: e.target.value })}
+                />
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingBuilding(null);
+                  }}
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-orange-600 shadow-sm"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>

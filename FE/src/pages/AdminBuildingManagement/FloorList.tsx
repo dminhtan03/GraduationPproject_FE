@@ -46,6 +46,21 @@ const AdminBuildingFloorsPage: React.FC = () => {
     loadFloors();
   }, [buildingId]);
 
+  const handleCreateFloor = async () => {
+    if (!buildingId) return;
+    setLoading(true);
+    try {
+      await adminService.createFloor(buildingId, ""); // Backend sẽ tự xử lý tên tầng
+      setToastPopup({ type: "success", message: "Floor added successfully" });
+      loadFloors();
+    } catch (err: any) {
+      const errorMsg = err.message || "Failed to add floor";
+      setToastPopup({ type: "error", message: errorMsg });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleImportExcel = async (floorId: string, event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -91,6 +106,14 @@ const AdminBuildingFloorsPage: React.FC = () => {
             <h1 className="text-2xl font-bold text-slate-900">Floors Management</h1>
             <p className="text-sm text-slate-500">Import rooms and manage layouts for each floor</p>
           </div>
+          <button
+            onClick={handleCreateFloor}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600 transition-colors disabled:opacity-50"
+          >
+            <PlusIcon className="h-5 w-5" />
+            {loading ? "Adding..." : "Add Floor"}
+          </button>
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">

@@ -48,6 +48,7 @@ export const API_ENDPOINTS = {
     CREATE_BUILDING: "/api/v1/dashboard/buildings",
     UPDATE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
     DELETE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
+    CREATE_FLOOR: "/api/v1/dashboard/buildings/:buildingId/add-floor",
   },
   // end add building endpoints
 

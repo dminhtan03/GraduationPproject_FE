@@ -445,20 +445,20 @@ export const adminService = {
 
   // start add building management api calls
   async getAllBuildings(): Promise<any> {
-    const res = await api.get(API_ENDPOINTS.ROOMS.ADMIN_BUILDINGS);
+    const res = await api.get(API_ENDPOINTS.BUILDINGS.ADMIN_BUILDINGS);
     return (res.data as any)?.data || res.data;
   },
 
   async getFloorsByBuilding(buildingId: string): Promise<any> {
     const res = await api.get(
-      buildUrl(API_ENDPOINTS.ROOMS.ADMIN_FLOORS, { buildingId }),
+      buildUrl(API_ENDPOINTS.BUILDINGS.ADMIN_FLOORS, { buildingId }),
     );
     return (res.data as any)?.data || res.data;
   },
 
   async getRoomsByFloor(floorId: string): Promise<any> {
     const res = await api.get(
-      buildUrl(API_ENDPOINTS.ROOMS.ADMIN_ROOMS_BY_FLOOR, { floorId }),
+      buildUrl(API_ENDPOINTS.BUILDINGS.ADMIN_ROOMS_BY_FLOOR, { floorId }),
     );
     return (res.data as any)?.data || res.data;
   },
@@ -536,7 +536,21 @@ export const adminService = {
     address: string;
     totalFloors: number;
   }): Promise<void> {
-    await api.post(API_ENDPOINTS.ROOMS.CREATE_BUILDING, payload);
+    await api.post(API_ENDPOINTS.BUILDINGS.CREATE_BUILDING, payload);
+  },
+
+  async updateBuilding(buildingId: string, name: string): Promise<void> {
+    await api.put(
+      buildUrl(API_ENDPOINTS.BUILDINGS.UPDATE_BUILDING, { buildingId }),
+      { name },
+    );
+  },
+
+  async createFloor(buildingId: string, name: string): Promise<void> {
+    await api.post(
+      buildUrl(API_ENDPOINTS.BUILDINGS.CREATE_FLOOR, { buildingId }),
+      { name },
+    );
   },
   // end add building management api calls
 
