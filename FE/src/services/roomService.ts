@@ -47,15 +47,13 @@ export interface RoomStatusItem {
   score: number | null;
 }
 
-type UnknownRecord = Record<string, unknown>;
-
-const extractData = (raw: unknown): unknown => {
+const extractData = (raw: unknown): any => {
   if (!raw || typeof raw !== "object") return raw;
-  const body = raw as UnknownRecord;
+  const body = raw as Record<string, any>;
   const firstData = body.data;
 
   if (firstData && typeof firstData === "object") {
-    const nested = (firstData as UnknownRecord).data;
+    const nested = (firstData as Record<string, any>).data;
     return nested ?? firstData;
   }
 
@@ -92,7 +90,7 @@ const normalizeRoomImages = (
     .map((item) => {
       if (!item || typeof item !== "object") return undefined;
 
-      const image = item as UnknownRecord;
+      const image = item as Record<string, any>;
       const imageUrl = toAbsoluteImageUrl(
         image.imageUrl ?? image.url ?? image.image ?? image.path,
       );
@@ -107,10 +105,10 @@ const normalizeRoomImages = (
     );
 };
 
-const normalizeRoomDetail = (detail: unknown): UnknownRecord => {
+const normalizeRoomDetail = (detail: unknown): Record<string, any> => {
   if (!detail || typeof detail !== "object") return {};
 
-  const mapped = detail as UnknownRecord;
+  const mapped = detail as Record<string, any>;
   return {
     ...mapped,
     images: normalizeRoomImages(mapped.images),
@@ -196,7 +194,7 @@ export const roomService = {
     const arr = Array.isArray(list) ? list : [];
 
     return arr.map((item: any) => ({
-      id: item.id ?? item.roomId ?? item.seatId,
+      roomId: item.id ?? item.roomId ?? item.seatId,
       locationCode: item.locationCode,
       status: (item.status as MapRoomStatus) ?? "AVAILABLE",
       score:

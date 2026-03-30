@@ -48,7 +48,7 @@ const AdminFloorLayoutPage: React.FC = () => {
       const floorRooms = Array.isArray(data) ? data : [];
       
       setItems(floorRooms.map((r: any) => ({
-        roomId: r.roomId || r.id,
+        roomId: r.id || r.roomId,
         locationCode: r.locationCode,
         x: r.x ?? r.xPosition ?? r.xposition ?? 0,
         y: r.y ?? r.yPosition ?? r.yposition ?? 0,
