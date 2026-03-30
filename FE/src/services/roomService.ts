@@ -232,7 +232,8 @@ export const roomService = {
   async updateFloorLayout(
     floorId: string,
     items: {
-      id: string;
+      id?: string;
+      roomId?: string;
       x: number;
       y: number;
       width: number;
@@ -241,7 +242,7 @@ export const roomService = {
   ): Promise<void> {
     const payload = {
       items: items.map(item => ({
-        roomId: item.id,
+        roomId: item.id ?? item.roomId,
         x: item.x,
         y: item.y,
         width: item.width,
