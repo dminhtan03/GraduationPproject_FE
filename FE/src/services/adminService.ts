@@ -413,8 +413,33 @@ export const adminService = {
     score?: number;
     floorId: string;
     amenityIds?: string[];
+    image?: File;
   }): Promise<void> {
-    await api.post(API_ENDPOINTS.ROOMS.CREATE, payload);
+    const formData = new FormData();
+    const roomBlob = new Blob(
+      [
+        JSON.stringify({
+          locationCode: payload.locationCode,
+          status: payload.status,
+          capacity: payload.capacity,
+          score: payload.score,
+          floorId: payload.floorId,
+          amenityIds: payload.amenityIds,
+        }),
+      ],
+      { type: "application/json" },
+    );
+
+    formData.append("room", roomBlob);
+    if (payload.image) {
+      formData.append("image", payload.image);
+    }
+
+    await api.post(API_ENDPOINTS.ROOMS.CREATE, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
   },
 
   async updateRoom(payload: {

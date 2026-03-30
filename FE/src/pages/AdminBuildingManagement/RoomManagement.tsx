@@ -29,6 +29,8 @@ const AdminRoomManagementPage: React.FC = () => {
   // Add Room Modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addingRoom, setAddingRoom] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [addRoomForm, setAddRoomForm] = useState({
     locationCode: "",
     status: "AVAILABLE",
@@ -79,6 +81,18 @@ const AdminRoomManagementPage: React.FC = () => {
     loadAmenities();
   }, [floorId]);
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !floorId) return;
@@ -109,6 +123,8 @@ const AdminRoomManagementPage: React.FC = () => {
       score: 0,
       amenityIds: [],
     });
+    setSelectedImage(null);
+    setImagePreview(null);
     setIsAddModalOpen(true);
   };
 
@@ -120,6 +136,7 @@ const AdminRoomManagementPage: React.FC = () => {
       await adminService.createRoom({
         ...addRoomForm,
         floorId: floorId,
+        image: selectedImage || undefined,
       });
       setToastPopup({ type: "success", message: "Room added successfully" });
       setIsAddModalOpen(false);
@@ -240,7 +257,20 @@ const AdminRoomManagementPage: React.FC = () => {
                 rooms.map((room) => (
                   <tr key={room.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
-                      <span className="font-semibold text-slate-900">{room.locationCode}</span>
+                      <div className="flex items-center gap-3">
+                        {room.amenities && room.amenities.length > 0 && room.images && room.images[0] ? (
+                          <img 
+                            src={room.images[0].imageUrl} 
+                            alt={room.locationCode} 
+                            className="h-10 w-10 rounded-lg object-cover border border-slate-100 shadow-sm"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">
+                            <PlusIcon className="h-5 w-5" />
+                          </div>
+                        )}
+                        <span className="font-semibold text-slate-900">{room.locationCode}</span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-slate-600 font-medium">{room.capacity} slots</span>
@@ -306,7 +336,7 @@ const AdminRoomManagementPage: React.FC = () => {
       {/* Add Room Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Add New Room</h3>
@@ -320,7 +350,34 @@ const AdminRoomManagementPage: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleAddRoomSubmit}>
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-4 hover:border-orange-500 transition-colors cursor-pointer group"
+                     onClick={() => document.getElementById("room-image-input")?.click()}>
+                  {imagePreview ? (
+                    <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-md">
+                      <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <PlusIcon className="h-8 w-8 text-white" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-8 flex flex-col items-center gap-2">
+                      <div className="p-3 bg-orange-50 rounded-full text-orange-500">
+                        <ArrowUpTrayIcon className="h-6 w-6" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-700">Click to upload room image</p>
+                      <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">JPG, PNG, WEBP up to 5MB</p>
+                    </div>
+                  )}
+                  <input 
+                    id="room-image-input"
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleImageChange}
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">Room Name / Location Code</label>
                   <input
