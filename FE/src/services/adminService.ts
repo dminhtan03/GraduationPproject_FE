@@ -463,6 +463,24 @@ export const adminService = {
     return (res.data as any)?.data || res.data;
   },
 
+  // Amenity Management
+  async listAmenities(): Promise<any[]> {
+    const res = await api.get(API_ENDPOINTS.AMENITIES.LIST);
+    return (res.data as any)?.data || res.data || [];
+  },
+
+  async createAmenity(name: string): Promise<void> {
+    await api.post(API_ENDPOINTS.AMENITIES.CREATE, { name });
+  },
+
+  async updateAmenity(id: string, name: string): Promise<void> {
+    await api.put(buildUrl(API_ENDPOINTS.AMENITIES.UPDATE, { id }), { name });
+  },
+
+  async deleteAmenity(id: string): Promise<void> {
+    await api.delete(buildUrl(API_ENDPOINTS.AMENITIES.DELETE, { id }));
+  },
+
   async getAllAmenities(): Promise<any> {
     const res = await api.get(API_ENDPOINTS.ROOMS.GET_AMENITIES);
     return (res.data as any)?.data || res.data;

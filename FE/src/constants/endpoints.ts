@@ -33,15 +33,23 @@ export const API_ENDPOINTS = {
     CREATE: "/api/v1/rooms",
     GET_AMENITIES: "/api/v1/rooms/amenities",
     // end add layout endpoint
-    // start add building endpoints
+  },
+  AMENITIES: {
+    LIST: "/api/v1/amenities",
+    CREATE: "/api/v1/amenities",
+    UPDATE: "/api/v1/amenities/:id",
+    DELETE: "/api/v1/amenities/:id",
+  },
+  // start add building endpoints
+  BUILDINGS: {
     ADMIN_BUILDINGS: "/api/v1/dashboard/all-buildings",
     ADMIN_FLOORS: "/api/v1/dashboard/all-floors-by-buildingId/:buildingId",
     ADMIN_ROOMS_BY_FLOOR: "/api/v1/dashboard/all-room-by-floorId/:floorId",
     CREATE_BUILDING: "/api/v1/dashboard/buildings",
     UPDATE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
     DELETE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
-    // end add building endpoints
   },
+  // end add building endpoints
 
   // User endpoints
   USERS: {

@@ -47,6 +47,9 @@ const AdminBuildingFloorsPage = React.lazy(
 const AdminRoomManagementPage = React.lazy(
   () => import("../pages/AdminBuildingManagement/RoomManagement"),
 );
+const AdminAmenityManagementPage = React.lazy(
+  () => import("../pages/AdminAmenityManagement"),
+);
 const AdminFloorLayoutPage = React.lazy(
   () => import("../pages/AdminFloorLayout"),
 );
@@ -278,6 +281,17 @@ export const router = createBrowserRouter([
       <ProtectedRoute mode="admin-only">
         <SuspenseWrapper>
           <AdminRoomManagementPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_AMENITY_MANAGEMENT,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminAmenityManagementPage />
         </SuspenseWrapper>
       </ProtectedRoute>
     ),

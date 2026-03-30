@@ -34,6 +34,7 @@ export const ROUTES = {
   ADMIN_BUILDING_MANAGEMENT: "/admin/buildings",
   ADMIN_BUILDING_FLOORS: "/admin/buildings/:buildingId/floors",
   ADMIN_ROOM_MANAGEMENT: "/admin/buildings/:buildingId/floors/:floorId/rooms",
+  ADMIN_AMENITY_MANAGEMENT: "/admin/amenities",
   ADMIN_FLOOR_LAYOUT: "/admin/buildings/:buildingId/floors/:floorId/layout",
   // end add admin building routes
 } as const;
