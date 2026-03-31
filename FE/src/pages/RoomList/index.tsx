@@ -26,8 +26,8 @@ import {
 
 const { Title, Text } = Typography;
 
-type RoomListStatus = "AVAILABLE" | "UNAVAILABLE" | "BROKEN";
-type FilterType = "all" | "available" | "unavailable" | "broken";
+type RoomListStatus = "AVAILABLE" | "UNAVAILABLE" | "BROKEN" | "LEARNING";
+type FilterType = "all" | "available" | "unavailable" | "broken" | "learning";
 
 interface RoomListItem {
   id: string;
@@ -66,11 +66,13 @@ const roomStatusFilterOptions: Array<AnimatedDropdownOption<FilterType>> = [
   { value: "available", label: "Available" },
   { value: "unavailable", label: "Unavailable" },
   { value: "broken", label: "Maintenance" },
+  { value: "learning", label: "Classroom" },
 ];
 
 const getStatusBadgeClass = (status: RoomListStatus) => {
   if (status === "AVAILABLE") return "bg-green-100 text-green-700";
   if (status === "BROKEN") return "bg-slate-200 text-slate-700";
+  if (status === "LEARNING") return "bg-purple-100 text-purple-700";
   return "bg-red-100 text-red-600";
 };
 
@@ -214,7 +216,9 @@ const DashboardPage: React.FC = () => {
                 ? "BROKEN"
                 : rawStatus === "UNAVAILABLE"
                   ? "UNAVAILABLE"
-                  : "AVAILABLE";
+                  : rawStatus === "LEARNING"
+                    ? "LEARNING"
+                    : "AVAILABLE";
 
             flattened.push({
               id: roomId,
@@ -264,7 +268,7 @@ const DashboardPage: React.FC = () => {
       width: "35%",
     },
     {
-      title: "STATUS",
+      title: "Status",
       dataIndex: "status",
       key: "status",
       width: "20%",
@@ -272,12 +276,12 @@ const DashboardPage: React.FC = () => {
         <span
           className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClass(status)}`}
         >
-          {status}
+          {status === "LEARNING" ? "LEARNING" : status}
         </span>
       ),
-    },
-    {
-      title: "ACTION",
+      },
+      {
+        title: "ACTION",
       key: "action",
       width: "15%",
       render: (_: unknown, record: RoomListItem) => {
@@ -380,6 +384,9 @@ const DashboardPage: React.FC = () => {
     if (filter === "broken") {
       return roomsWithTimeStatus.filter((r) => r.status === "BROKEN");
     }
+    if (filter === "learning") {
+      return roomsWithTimeStatus.filter((r) => r.status === "LEARNING");
+    }
     return roomsWithTimeStatus;
   }, [roomsWithTimeStatus, filter]);
 
@@ -456,15 +463,15 @@ const DashboardPage: React.FC = () => {
 
           return {
             key: `${pair.buildingId}|${pair.floorId}`,
-            availableSet: new Set(
-              availableRooms.map((room) => room.roomId).filter(Boolean),
+            statusMap: new Map(
+              availableRooms.map((room) => [room.roomId, room.status]),
             ),
           };
         }),
       );
 
       const floorAvailability = new Map(
-        floorResults.map((item) => [item.key, item.availableSet]),
+        floorResults.map((item) => [item.key, item.statusMap]),
       );
 
       const overrides: Record<string, RoomListStatus> = {};
@@ -475,11 +482,13 @@ const DashboardPage: React.FC = () => {
         }
 
         const key = `${room.buildingId}|${room.floorId}`;
-        const availableSet = floorAvailability.get(key);
+        const statusMap = floorAvailability.get(key);
 
-        overrides[room.id] = availableSet?.has(room.id)
-          ? "AVAILABLE"
-          : "UNAVAILABLE";
+        if (statusMap?.has(room.id)) {
+          overrides[room.id] = statusMap.get(room.id) as RoomListStatus;
+        } else {
+          overrides[room.id] = "UNAVAILABLE";
+        }
       });
 
       setTimeStatusOverrides(overrides);

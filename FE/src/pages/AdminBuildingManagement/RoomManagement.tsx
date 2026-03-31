@@ -115,6 +115,23 @@ const AdminRoomManagementPage: React.FC = () => {
     }
   };
 
+  const handleImportAcademicSchedule = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      await adminService.importAcademicSchedules(file);
+      setToastPopup({ type: "success", message: "Lịch học đã được nhập thành công" });
+    } catch (err) {
+      console.error(err);
+      setToastPopup({ type: "error", message: "Không thể nhập lịch học" });
+    } finally {
+      setImporting(false);
+      event.target.value = "";
+    }
+  };
+
   const handleOpenAddModal = () => {
     setAddRoomForm({
       locationCode: "",
@@ -215,6 +232,17 @@ const AdminRoomManagementPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <label className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm">
               <ArrowUpTrayIcon className="h-5 w-5" />
+              {importing ? "Importing..." : "Import Academic Schedule"}
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={handleImportAcademicSchedule}
+                disabled={importing}
+              />
+            </label>
+            <label className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm">
+              <ArrowUpTrayIcon className="h-5 w-5" />
               {importing ? "Importing..." : "Import Rooms"}
               <input
                 type="file"
@@ -281,9 +309,11 @@ const AdminRoomManagementPage: React.FC = () => {
                           ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
                           : room.status === "BROKEN"
                           ? "bg-red-50 text-red-700 ring-red-600/20"
+                          : room.status === "LEARNING"
+                          ? "bg-purple-50 text-purple-700 ring-purple-600/20"
                           : "bg-slate-50 text-slate-700 ring-slate-600/20"
                       }`}>
-                        {room.status}
+                        {room.status === "LEARNING" ? "LEARNING" : room.status}
                       </span>
                     </td>
                     <td className="px-6 py-4">

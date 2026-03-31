@@ -100,7 +100,7 @@ export interface AppNotification {
 }
 
 // ===== ROOM (Campus Room Inventory) =====
-export type RoomStatus = "AVAILABLE" | "OCCUPIED";
+export type RoomStatus = "AVAILABLE" | "OCCUPIED" | "UNAVAILABLE" | "BROKEN" | "LEARNING";
 
 export interface Room {
   id: string;

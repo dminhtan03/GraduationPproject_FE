@@ -441,6 +441,25 @@ export const adminService = {
       },
     });
   },
+
+  async importAcademicSchedules(file: File): Promise<void> {
+    const formData = new FormData();
+    formData.append("file", file);
+    await api.post("/api/v1/academic-schedules/import", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+
+  async getAcademicSchedulesByRoom(roomId: string): Promise<any> {
+    const res = await api.get(`/api/v1/academic-schedules/room/${roomId}`);
+    return (res.data as any)?.data || res.data;
+  },
+
+  async deleteAcademicSchedule(scheduleId: string): Promise<void> {
+    await api.delete(`/api/v1/academic-schedules/${scheduleId}`);
+  },
   // end add admin api calls
 
   // start add building management api calls

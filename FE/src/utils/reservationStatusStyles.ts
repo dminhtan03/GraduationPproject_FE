@@ -34,6 +34,10 @@ export const getReservationStatusClass = (status?: string) => {
     return "bg-fuchsia-50 text-fuchsia-700 ring-1 ring-fuchsia-200";
   }
 
+  if (normalized === "LEARNING") {
+    return "bg-purple-50 text-purple-700 ring-1 ring-purple-200";
+  }
+
   return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
 };
 

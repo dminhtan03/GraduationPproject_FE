@@ -1,7 +1,7 @@
 import type { RoomStatus } from "../types";
 
-// Extended status used in FE map (BE also has UNAVAILABLE, BROKEN)
-export type MapRoomStatus = RoomStatus | "UNAVAILABLE" | "BROKEN";
+// Extended status used in FE map (BE also has UNAVAILABLE, BROKEN, LEARNING)
+export type MapRoomStatus = RoomStatus | "UNAVAILABLE" | "BROKEN" | "LEARNING";
 
 export interface MapRoom {
   roomId: string;
@@ -60,6 +60,9 @@ export function getStatusStyles(status: MapRoomStatus) {
   }
   if (status === "BROKEN") {
     return "border-slate-300 bg-slate-50 text-slate-600";
+  }
+  if (status === "LEARNING") {
+    return "border-purple-300 bg-purple-50 text-purple-700";
   }
   return "border-slate-200 bg-white text-slate-700";
 }
