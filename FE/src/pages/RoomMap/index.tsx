@@ -181,6 +181,7 @@ const RoomMapPage: React.FC = () => {
   const clockTick = useRealtimeClock();
 
   const [buildings, setBuildings] = useState<RoomsMapBuilding[]>([]);
+  const [decorations, setDecorations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -440,6 +441,24 @@ const RoomMapPage: React.FC = () => {
 
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const fetchDecorations = async () => {
+      if (!selectedFloorId) {
+        setDecorations([]);
+        return;
+      }
+      try {
+        const decorData = await roomService.getFloorDecorations(selectedFloorId);
+        setDecorations(decorData || []);
+      } catch (err) {
+        console.error("Failed to load decorations:", err);
+        setDecorations([]);
+      }
+    };
+
+    fetchDecorations();
+  }, [selectedFloorId]);
 
   const currentBuilding = useMemo(
     () => buildings.find((b) => b.buildingId === selectedBuildingId) || null,
@@ -1100,6 +1119,29 @@ const RoomMapPage: React.FC = () => {
                 {currentFloor.rooms.some((r) => r.positioned) ? (
                   <div className="w-full flex justify-center py-4 bg-slate-50 rounded-2xl">
                     <div className="relative w-[1000px] h-[600px] bg-white rounded-2xl border-2 border-slate-200 shadow-sm overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:20px_20px]">
+                      {/* Render decorations first so they are in the background */}
+                      {decorations.map((decor) => (
+                        <div
+                          key={decor.id}
+                          className={`absolute rounded-2xl border-2 border-dashed flex flex-col items-center justify-center p-4 transition-all ${
+                            decor.type === "LOBBY"
+                              ? "bg-blue-50/50 border-blue-200 text-blue-400"
+                              : "bg-slate-50/50 border-slate-200 text-slate-400"
+                          }`}
+                          style={{
+                            left: decor.x,
+                            top: decor.y,
+                            width: decor.width,
+                            height: decor.height,
+                            zIndex: 0,
+                          }}
+                        >
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40 select-none">
+                            {decor.label}
+                          </span>
+                        </div>
+                      ))}
+
                       {currentFloor.rooms.map((room) => (
                         <div
                           key={room.roomId}
@@ -1109,6 +1151,7 @@ const RoomMapPage: React.FC = () => {
                             top: room.yPosition || 0,
                             width: room.width || 80,
                             height: room.height || 50,
+                            zIndex: 10,
                           }}
                         >
                           {renderRoomTile(room, "w-full h-full", "text-[10px]")}

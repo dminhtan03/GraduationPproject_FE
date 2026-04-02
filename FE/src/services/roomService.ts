@@ -237,6 +237,14 @@ export const roomService = {
       width: number;
       height: number;
     }[],
+    decorations?: {
+      type: string;
+      label: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }[],
   ): Promise<void> {
     const payload = {
       items: items
@@ -263,19 +271,18 @@ export const roomService = {
             height: number;
           } => item !== null,
         ),
+      decorations: decorations || [],
     };
-
-    if (payload.items.length === 0) {
-      throw {
-        message: "No valid room data to save layout.",
-        status: 400,
-      };
-    }
 
     await api.put(
       buildUrl(API_ENDPOINTS.ROOMS.UPDATE_LAYOUT, { floorId }),
       payload,
     );
+  },
+
+  async getFloorDecorations(floorId: string): Promise<any[]> {
+    const res = await api.get<any>(`/api/v1/rooms/floors/${floorId}/decorations`);
+    return res.data?.data || [];
   },
   // end add updateLayout method
 };
