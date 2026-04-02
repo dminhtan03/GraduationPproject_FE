@@ -345,6 +345,20 @@ const BookingDetailPage: React.FC = () => {
   const noteLabel = toDisplayText(mergedDetail.note);
   const cancelReasonLabel = toDisplayText(mergedDetail.cancelReason || mergedDetail.reason);
   const statusLabel = toDisplayText(mergedDetail.status);
+  
+  // Extract feedback from detail.feedback
+  const feedbackLabel = useMemo(() => {
+    const feedbackNode = detail?.feedback && typeof detail.feedback === "object"
+      ? (detail.feedback as Record<string, unknown>)
+      : null;
+    
+    if (feedbackNode && feedbackNode.description) {
+      return toDisplayText(feedbackNode.description);
+    }
+    
+    return notFoundText;
+  }, [detail?.feedback]);
+  
   const firstImageUrl = imageUrls[0] || "";
 
   return (
@@ -435,9 +449,9 @@ const BookingDetailPage: React.FC = () => {
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-lg font-semibold text-slate-900">Meeting Description</p>
+            <p className="text-lg font-semibold text-slate-900">Feedback</p>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-              {noteLabel}
+              {feedbackLabel}
             </p>
 
             {cancelReasonLabel !== notFoundText && (

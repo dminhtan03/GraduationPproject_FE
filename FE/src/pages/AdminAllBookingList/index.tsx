@@ -56,6 +56,7 @@ interface BookingRow {
 interface BuildingOption {
   label: string;
   value: string;
+  name: string;
 }
 
 interface FloorOption {
@@ -64,12 +65,10 @@ interface FloorOption {
 }
 
 const PAGE_SIZE = 10;
-const FLOOR_OPTIONS: FloorOption[] = [
-  { label: "Tầng 1", value: "1" },
-  { label: "Tầng 2", value: "2" },
-  { label: "Tầng 3", value: "3" },
-  { label: "Tầng 4", value: "4" },
-  { label: "Tầng 5", value: "5" },
+const FORCE_CANCEL_QUICK_ACTIONS = [
+  "Reclaimed for a university event",
+  "Scheduled maintenance",
+  "Already booked in advance",
 ];
 
 const pad = (value: number) => value.toString().padStart(2, "0");
@@ -135,6 +134,13 @@ const getTextFromUnknown = (value: unknown): string => {
   return "";
 };
 
+const parseFloorNumber = (text: string): number | null => {
+  const matched = text.match(/(\d+)/);
+  if (!matched) return null;
+  const value = Number(matched[1]);
+  return Number.isFinite(value) ? value : null;
+};
+
 const formatDate = (dateStr?: string) => {
   const date = parseDate(dateStr);
   if (!date) return "-";
@@ -171,13 +177,21 @@ const AdminAllBookingListPage: React.FC = () => {
   const [roomNameFilter, setRoomNameFilter] = useState<string>("");
   const [floorNameFilter, setFloorNameFilter] = useState<string>("");
   const [buildingNameFilter, setBuildingNameFilter] = useState<string>("");
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>("");
   const [buildingOptions, setBuildingOptions] = useState<BuildingOption[]>([]);
+  const [floorOptions, setFloorOptions] = useState<FloorOption[]>([]);
   const [forceCancelLoadingId, setForceCancelLoadingId] = useState<string | null>(
     null,
   );
   const [forceCancelModalOpen, setForceCancelModalOpen] = useState(false);
   const [forceCancelReservationId, setForceCancelReservationId] = useState("");
   const [forceCancelReason, setForceCancelReason] = useState("");
+  const [forceCancelReasonOptions] = useState<Array<{ label: string; value: string }>>(
+    FORCE_CANCEL_QUICK_ACTIONS.map((reason) => ({
+      label: reason,
+      value: reason,
+    })),
+  );
 
   // Applied filter states (used for backend query)
   const [appliedStatus, setAppliedStatus] = useState<string>("All");
@@ -216,9 +230,10 @@ const AdminAllBookingListPage: React.FC = () => {
 
       const mapped = buildings
         .map((item: any) => {
-          const name = String(item?.name || "").trim();
-          if (!name) return null;
-          return { label: name, value: name };
+          const id = String(item?.id ?? item?.buildingId ?? "").trim();
+          const name = String(item?.name ?? item?.buildingName ?? "").trim();
+          if (!id || !name) return null;
+          return { label: name, value: id, name };
         })
         .filter(Boolean) as BuildingOption[];
 
@@ -226,9 +241,70 @@ const AdminAllBookingListPage: React.FC = () => {
         new Map(mapped.map((option) => [option.value, option])).values(),
       );
 
-      setBuildingOptions(uniqueByValue);
+      setBuildingOptions(
+        uniqueByValue.sort((left, right) =>
+          left.label.localeCompare(right.label, undefined, { numeric: true }),
+        ),
+      );
     } catch {
       setBuildingOptions([]);
+    }
+  }, []);
+
+  const loadFloorOptions = useCallback(async (buildingId: string) => {
+    const normalizedBuildingId = String(buildingId || "").trim();
+    if (!normalizedBuildingId) {
+      setFloorOptions([]);
+      return;
+    }
+
+    try {
+      const response = await adminService.getFloorsByBuilding(normalizedBuildingId);
+      const floors = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.items)
+          ? response.items
+          : Array.isArray(response?.content)
+            ? response.content
+            : [];
+
+      const mapped = floors
+        .map((item: any) => {
+          const rawName = String(item?.name ?? item?.floorName ?? "").trim();
+          if (!rawName) return null;
+          const floorNumber = parseFloorNumber(rawName);
+          return {
+            label: rawName,
+            value: rawName,
+            floorNumber,
+          };
+        })
+        .filter(
+          (
+            item,
+          ): item is FloorOption & {
+            floorNumber: number | null;
+          } => !!item,
+        );
+
+      const unique = Array.from(
+        new Map(mapped.map((item) => [item.value, item])).values(),
+      );
+
+      const sorted = unique
+        .sort((left, right) => {
+          if (left.floorNumber != null && right.floorNumber != null) {
+            return left.floorNumber - right.floorNumber;
+          }
+          if (left.floorNumber != null) return -1;
+          if (right.floorNumber != null) return 1;
+          return left.label.localeCompare(right.label, undefined, { numeric: true });
+        })
+        .map(({ label, value }) => ({ label, value }));
+
+      setFloorOptions(sorted);
+    } catch {
+      setFloorOptions([]);
     }
   }, []);
 
@@ -236,6 +312,15 @@ const AdminAllBookingListPage: React.FC = () => {
     loadAdminProfile();
     loadBuildingOptions();
   }, [loadBuildingOptions]);
+
+  useEffect(() => {
+    if (!selectedBuildingId) {
+      setFloorOptions([]);
+      return;
+    }
+
+    void loadFloorOptions(selectedBuildingId);
+  }, [loadFloorOptions, selectedBuildingId]);
 
   useEffect(() => {
     setLoading(true);
@@ -321,6 +406,8 @@ const AdminAllBookingListPage: React.FC = () => {
     setUserEmailFilter("");
     setRoomNameFilter("");
     setFloorNameFilter("");
+    setSelectedBuildingId("");
+    setFloorOptions([]);
     setBuildingNameFilter("");
     setAppliedStatus("All");
     setAppliedStartDate("");
@@ -416,7 +503,7 @@ const AdminAllBookingListPage: React.FC = () => {
 
     const initialReservationId = getReservationKey(record);
     setForceCancelReservationId(initialReservationId);
-    setForceCancelReason("");
+    setForceCancelReason(forceCancelReasonOptions[0]?.value || "");
     setForceCancelModalOpen(true);
   };
 
@@ -723,6 +810,18 @@ const AdminAllBookingListPage: React.FC = () => {
               </p>
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase text-gray-600">
+                  Quick action
+                </label>
+                <Select
+                  value={forceCancelReason || undefined}
+                  onChange={(value) => setForceCancelReason(value || "")}
+                  className="w-full"
+                  placeholder="Choose a quick reason"
+                  options={forceCancelReasonOptions}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase text-gray-600">
                   Reason
                 </label>
                 <Input.TextArea
@@ -748,97 +847,115 @@ const AdminAllBookingListPage: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   Start Time
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <DatePickerField
-                    value={startDate}
-                    onChange={(nextDate) => {
-                      setStartDate(nextDate);
-                      if (endDate && nextDate > endDate) {
-                        setEndDate(nextDate);
-                      }
-                    }}
-                  />
-                  <Select
-                    value={getClockHour(startClock) || undefined}
-                    onChange={(nextHour) => {
-                      const currentMinute = getClockMinute(startClock) || "00";
-                      setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
-                    }}
-                    placeholder="Hour"
-                    listHeight={160}
-                    className="w-full"
-                    options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
-                  />
-                  <select
-                    value={getClockMinute(startClock)}
-                    onChange={(event) => {
-                      const nextMinute = event.target.value;
-                      const currentHour = getClockHour(startClock) || "00";
-                      setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
-                    }}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  >
-                    <option value="">Min</option>
-                    {MINUTE_OPTIONS.map((minute) => (
-                      <option key={minute} value={minute}>
-                        {minute}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
+                  <div>
+                    <DatePickerField
+                      value={startDate}
+                      onChange={(nextDate) => {
+                        setStartDate(nextDate);
+                        if (endDate && nextDate > endDate) {
+                          setEndDate(nextDate);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Select
+                      value={getClockHour(startClock) || undefined}
+                      onChange={(nextHour) => {
+                        const currentMinute = getClockMinute(startClock) || "00";
+                        setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                      }}
+                      placeholder="Hour"
+                      listHeight={160}
+                      className="w-full"
+                      options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                    />
+                  </div>
+                  <div>
+                    <select
+                      value={getClockMinute(startClock)}
+                      onChange={(event) => {
+                        const nextMinute = event.target.value;
+                        const currentHour = getClockHour(startClock) || "00";
+                        setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                      }}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                      <option value="">Min</option>
+                      {MINUTE_OPTIONS.map((minute) => (
+                        <option key={minute} value={minute}>
+                          {minute}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   End Time
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <DatePickerField
-                    value={endDate}
-                    minDate={startDate}
-                    onChange={setEndDate}
-                  />
-                  <Select
-                    value={getClockHour(endClock) || undefined}
-                    onChange={(nextHour) => {
-                      const currentMinute = getClockMinute(endClock) || "00";
-                      setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
-                    }}
-                    placeholder="Hour"
-                    listHeight={160}
-                    className="w-full"
-                    options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
-                  />
-                  <select
-                    value={getClockMinute(endClock)}
-                    onChange={(event) => {
-                      const nextMinute = event.target.value;
-                      const currentHour = getClockHour(endClock) || "00";
-                      setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
-                    }}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  >
-                    <option value="">Min</option>
-                    {MINUTE_OPTIONS.map((minute) => (
-                      <option key={minute} value={minute}>
-                        {minute}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
+                  <div>
+                    <DatePickerField
+                      value={endDate}
+                      minDate={startDate}
+                      onChange={setEndDate}
+                    />
+                  </div>
+                  <div>
+                    <Select
+                      value={getClockHour(endClock) || undefined}
+                      onChange={(nextHour) => {
+                        const currentMinute = getClockMinute(endClock) || "00";
+                        setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                      }}
+                      placeholder="Hour"
+                      listHeight={160}
+                      className="w-full"
+                      options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                    />
+                  </div>
+                  <div>
+                    <select
+                      value={getClockMinute(endClock)}
+                      onChange={(event) => {
+                        const nextMinute = event.target.value;
+                        const currentHour = getClockHour(endClock) || "00";
+                        setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                      }}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                      <option value="">Min</option>
+                      {MINUTE_OPTIONS.map((minute) => (
+                        <option key={minute} value={minute}>
+                          {minute}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Second Row - Main Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 pb-4 border-b border-gray-200">
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4 pb-4 border-b border-gray-200">
+              <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   Building
                 </label>
                 <Select
-                  value={buildingNameFilter || undefined}
+                  value={selectedBuildingId || undefined}
                   onChange={(value) => {
-                    setBuildingNameFilter(value || "");
+                    const buildingId = String(value || "");
+                    const matched = buildingOptions.find(
+                      (option) => option.value === buildingId,
+                    );
+                    setSelectedBuildingId(buildingId);
+                    setBuildingNameFilter(matched?.name || "");
                     setFloorNameFilter("");
+                    setFloorOptions([]);
                   }}
                   allowClear
                   placeholder="Select building"
@@ -846,7 +963,25 @@ const AdminAllBookingListPage: React.FC = () => {
                   options={buildingOptions}
                 />
               </div>
-              <div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                  Floor
+                </label>
+                <Select
+                  value={floorNameFilter || undefined}
+                  onChange={(value) => setFloorNameFilter(value || "")}
+                  allowClear
+                  disabled={!selectedBuildingId}
+                  placeholder={
+                    selectedBuildingId
+                      ? "Select floor"
+                      : "Select building first"
+                  }
+                  className="w-full"
+                  options={floorOptions}
+                />
+              </div>
+              <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   Room Name
                 </label>
@@ -857,7 +992,7 @@ const AdminAllBookingListPage: React.FC = () => {
                   className="rounded-lg"
                 />
               </div>
-              <div>
+              <div className="md:col-span-4">
                 <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   User Email
                 </label>
@@ -868,7 +1003,7 @@ const AdminAllBookingListPage: React.FC = () => {
                   className="rounded-lg"
                 />
               </div>
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
                   Status
                 </label>
@@ -889,25 +1024,6 @@ const AdminAllBookingListPage: React.FC = () => {
                 />
               </div>
             </div>
-
-            {/* Third Row - Floor (show after building) */}
-            {buildingNameFilter && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
-                    Floor
-                  </label>
-                  <Select
-                    value={floorNameFilter || undefined}
-                    onChange={(value) => setFloorNameFilter(value || "")}
-                    allowClear
-                    placeholder="Select floor"
-                    className="w-full"
-                    options={FLOOR_OPTIONS}
-                  />
-                </div>
-              </div>
-            )}
 
             {/* Action Buttons */}
             <div className="flex gap-3 justify-end">

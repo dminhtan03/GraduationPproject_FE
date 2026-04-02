@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
     LIST: "/api/v1/rooms-map",
     SEARCH: "/api/v1/rooms/search",
     DETAIL: "/api/v1/rooms/:id",
+    DETAIL_RESERVATION: "/api/v1/reservations/detail-reservation/:id",
     BOOK: "/api/v1/reservations",
     MY_STATUS: "/api/v1/reservations/my-status",
     CHECK_IN: "/api/v1/reservations/check-in/:id",

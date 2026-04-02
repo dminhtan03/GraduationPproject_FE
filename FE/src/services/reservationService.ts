@@ -287,6 +287,108 @@ export const reservationService = {
       throw { message: "Missing reservation id", status: 400 };
     }
 
+    const normalizeDetailPayload = (
+      payload: any,
+    ): Record<string, unknown> | null => {
+      const source = payload?.data ?? payload;
+
+      if (source && typeof source === "object") {
+        const reservationNode =
+          source.reservation && typeof source.reservation === "object"
+            ? (source.reservation as Record<string, unknown>)
+            : null;
+
+        if (reservationNode) {
+          return {
+            ...(source as Record<string, unknown>),
+            ...reservationNode,
+            reservation: reservationNode,
+            feedback:
+              source.feedback && typeof source.feedback === "object"
+                ? source.feedback
+                : reservationNode.feedback,
+            roomImages: Array.isArray(source.roomImages)
+              ? source.roomImages
+              : reservationNode.roomImages,
+            history: Array.isArray(source.history) ? source.history : [],
+          };
+        }
+
+        if (source.id != null || source.reservationId != null) {
+          return source as Record<string, unknown>;
+        }
+      }
+
+      return null;
+    };
+
+    // Try PUT endpoint first (correct endpoint)
+    try {
+      const endpoint = buildUrl(API_ENDPOINTS.ROOMS.DETAIL_RESERVATION, {
+        id: normalizedId,
+      });
+      const response = await api.put<any>(endpoint);
+      const normalizedDetail = normalizeDetailPayload(response.data || {});
+      if (normalizedDetail) {
+        return normalizedDetail;
+      }
+    } catch (error) {
+      // Fall through to other endpoints if this fails
+    }
+
+    const directDetailRequests: Array<{
+      endpoint: string;
+      params?: Record<string, string | number>;
+    }> = [
+      { endpoint: `${API_ENDPOINTS.ROOMS.BOOK}/${normalizedId}` },
+      { endpoint: `${API_ENDPOINTS.ROOMS.BOOK}/detail/${normalizedId}` },
+      { endpoint: `${API_ENDPOINTS.ROOMS.MY_STATUS}/${normalizedId}` },
+      {
+        endpoint: API_ENDPOINTS.ROOMS.BOOK,
+        params: { reservationId: normalizedId, page: 0, size: 1 },
+      },
+      {
+        endpoint: API_ENDPOINTS.ROOMS.BOOK,
+        params: { reservationID: normalizedId, page: 0, size: 1 },
+      },
+      {
+        endpoint: API_ENDPOINTS.ROOMS.MY_STATUS,
+        params: { reservationId: normalizedId, page: 0, size: 1 },
+      },
+      {
+        endpoint: API_ENDPOINTS.ROOMS.MY_STATUS,
+        params: { reservationID: normalizedId, page: 0, size: 1 },
+      },
+    ];
+
+    let directDetailError: unknown;
+    for (const request of directDetailRequests) {
+      try {
+        const response = await api.get<any>(request.endpoint, {
+          params: request.params,
+        });
+        const normalizedDetail = normalizeDetailPayload(response.data || {});
+        if (normalizedDetail) {
+          const detailIdCandidates = [
+            normalizedDetail.id,
+            normalizedDetail.reservationId,
+            normalizedDetail.reservationID,
+            normalizedDetail.bookingId,
+            normalizedDetail.bookingID,
+            (normalizedDetail.reservation as Record<string, unknown> | undefined)?.id,
+          ]
+            .map((value) => (value != null ? String(value) : ""))
+            .filter(Boolean);
+
+          if (detailIdCandidates.length === 0 || detailIdCandidates.includes(normalizedId)) {
+            return normalizedDetail;
+          }
+        }
+      } catch (error) {
+        directDetailError = error;
+      }
+    }
+
     const endpointCandidates = [API_ENDPOINTS.ROOMS.MY_STATUS, API_ENDPOINTS.ROOMS.BOOK];
 
     let lastError: unknown;
@@ -296,19 +398,41 @@ export const reservationService = {
           params: {
             page: 0,
             size: 100,
+            reservationId: normalizedId,
           },
         });
 
         const payload = response.data || {};
+        const normalizedDetail = normalizeDetailPayload(payload);
+        if (normalizedDetail) {
+          const normalizedIdFromDetail =
+            normalizedDetail.id != null
+              ? String(normalizedDetail.id)
+              : normalizedDetail.reservationId != null
+                ? String(normalizedDetail.reservationId)
+                : normalizedDetail.bookingId != null
+                  ? String(normalizedDetail.bookingId)
+                  : "";
+
+          if (normalizedIdFromDetail === normalizedId) {
+            return normalizedDetail;
+          }
+        }
+
         const items = toArray(payload);
         const found = items.find((item) => {
-          const itemId =
-            item?.id != null
-              ? String(item.id)
-              : item?.reservationId != null
-                ? String(item.reservationId)
-                : "";
-          return itemId === normalizedId;
+          const itemIdCandidates = [
+            item?.id,
+            item?.reservationId,
+            item?.reservationID,
+            item?.bookingId,
+            item?.bookingID,
+            item?.reservation?.id,
+          ]
+            .map((value) => (value != null ? String(value) : ""))
+            .filter(Boolean);
+
+          return itemIdCandidates.includes(normalizedId);
         });
 
         if (found && typeof found === "object") {
@@ -319,7 +443,13 @@ export const reservationService = {
       }
     }
 
-    throw lastError || { message: "Unable to load booking detail", status: 404 };
+    throw (
+      lastError ||
+      directDetailError || {
+        message: "Unable to load booking detail",
+        status: 404,
+      }
+    );
   },
 
   async getRoomImagesByRoomId(roomId: string): Promise<string[]> {
