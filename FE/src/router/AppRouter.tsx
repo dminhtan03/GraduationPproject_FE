@@ -53,6 +53,9 @@ const AdminAmenityManagementPage = React.lazy(
 const AdminFloorLayoutPage = React.lazy(
   () => import("../pages/AdminFloorLayout"),
 );
+const AdminAcademicSchedulePage = React.lazy(
+  () => import("../pages/AdminAcademicSchedule"),
+);
 const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
 const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 
@@ -303,6 +306,17 @@ export const router = createBrowserRouter([
       <ProtectedRoute mode="admin-only">
         <SuspenseWrapper>
           <AdminFloorLayoutPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_ACADEMIC_SCHEDULE,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminAcademicSchedulePage />
         </SuspenseWrapper>
       </ProtectedRoute>
     ),

@@ -445,7 +445,7 @@ export const adminService = {
   async importAcademicSchedules(file: File): Promise<void> {
     const formData = new FormData();
     formData.append("file", file);
-    await api.post("/api/v1/academic-schedules/import", formData, {
+    await api.post(API_ENDPOINTS.ACADEMIC_SCHEDULES.IMPORT, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
@@ -453,12 +453,34 @@ export const adminService = {
   },
 
   async getAcademicSchedulesByRoom(roomId: string): Promise<any> {
-    const res = await api.get(`/api/v1/academic-schedules/room/${roomId}`);
+    const res = await api.get(
+      buildUrl(API_ENDPOINTS.ACADEMIC_SCHEDULES.BY_ROOM, { roomId }),
+    );
     return (res.data as any)?.data || res.data;
   },
 
   async deleteAcademicSchedule(scheduleId: string): Promise<void> {
-    await api.delete(`/api/v1/academic-schedules/${scheduleId}`);
+    await api.delete(
+      buildUrl(API_ENDPOINTS.ACADEMIC_SCHEDULES.DELETE, { id: scheduleId }),
+    );
+  },
+
+  async searchAcademicSchedules(params: any): Promise<any> {
+    const res = await api.get(API_ENDPOINTS.ACADEMIC_SCHEDULES.LIST, {
+      params,
+    });
+    return res.data;
+  },
+
+  async createAcademicSchedule(payload: any): Promise<void> {
+    await api.post(API_ENDPOINTS.ACADEMIC_SCHEDULES.CREATE, payload);
+  },
+
+  async updateAcademicSchedule(id: string, payload: any): Promise<void> {
+    await api.put(
+      buildUrl(API_ENDPOINTS.ACADEMIC_SCHEDULES.UPDATE, { id }),
+      payload,
+    );
   },
   // end add admin api calls
 
