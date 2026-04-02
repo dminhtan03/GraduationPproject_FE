@@ -36,6 +36,7 @@ export const ROUTES = {
   ADMIN_ROOM_MANAGEMENT: "/admin/buildings/:buildingId/floors/:floorId/rooms",
   ADMIN_AMENITY_MANAGEMENT: "/admin/amenities",
   ADMIN_FLOOR_LAYOUT: "/admin/buildings/:buildingId/floors/:floorId/layout",
+  ADMIN_ACADEMIC_SCHEDULE: "/admin/academic-schedules",
   // end add admin building routes
 } as const;
 

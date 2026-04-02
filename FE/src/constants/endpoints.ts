@@ -95,6 +95,15 @@ export const API_ENDPOINTS = {
     MARK_AS_READ: "/api/v1/notifications/markAsRead/:notificationId",
   },
 
+  ACADEMIC_SCHEDULES: {
+    LIST: "/api/v1/academic-schedules",
+    CREATE: "/api/v1/academic-schedules",
+    UPDATE: "/api/v1/academic-schedules/:id",
+    DELETE: "/api/v1/academic-schedules/:id",
+    IMPORT: "/api/v1/academic-schedules/import",
+    BY_ROOM: "/api/v1/academic-schedules/room/:roomId",
+  },
+
   DASHBOARD: {
     OVERVIEW_STATS: "/api/v1/dashboard/overview-stats",
     ALL_USERS: "/api/v1/dashboard/all-users",
