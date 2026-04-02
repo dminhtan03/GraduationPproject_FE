@@ -34,7 +34,24 @@ const AdminBuildingFloorsPage: React.FC = () => {
     setLoading(true);
     try {
       const data = await adminService.getFloorsByBuilding(buildingId);
-      setFloors(data || []);
+      // Sắp xếp tầng từ nhỏ đến lớn dựa trên số tầng (trích xuất số từ "Tầng X")
+      const sortedFloors = (data || []).sort((a: any, b: any) => {
+        const getFloorNum = (str: string) => {
+          const match = str.match(/\d+/);
+          return match ? parseInt(match[0], 10) : 0;
+        };
+        const nameA = String(a.name || a.floorName || "");
+        const nameB = String(b.name || b.floorName || "");
+        
+        const numA = getFloorNum(nameA);
+        const numB = getFloorNum(nameB);
+        
+        if (numA !== numB) {
+          return numA - numB;
+        }
+        return nameA.localeCompare(nameB);
+      });
+      setFloors(sortedFloors);
     } catch (err) {
       console.error(err);
     } finally {
