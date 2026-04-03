@@ -1520,8 +1520,8 @@ const MyBookingsPage: React.FC = () => {
         className="mb-2"
       />
 
-      <div className="mb-5 rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 shadow-sm md:p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-semibold text-slate-700">Search Filters</p>
           </div>
@@ -1529,7 +1529,7 @@ const MyBookingsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate(ROUTES.ROOM_LIST)}
-            className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600"
+            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-orange-600"
           >
             Book a room
           </button>
@@ -1682,11 +1682,11 @@ const MyBookingsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
           <button
             type="button"
             onClick={handleApplyFilters}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={loading}
           >
             Search
@@ -1695,7 +1695,7 @@ const MyBookingsPage: React.FC = () => {
           <button
             type="button"
             onClick={handleClearStartTimeSearch}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={loading}
           >
             Clear search
@@ -1716,7 +1716,7 @@ const MyBookingsPage: React.FC = () => {
                 appliedEndTimeFilter,
               )
             }
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={loading}
           >
             Refresh

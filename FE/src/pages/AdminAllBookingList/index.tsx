@@ -836,15 +836,15 @@ const AdminAllBookingListPage: React.FC = () => {
           </Modal>
 
           {/* Filters Section */}
-          <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6 mb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-5">
+          <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
+            <h2 className="text-sm font-semibold text-slate-700">
               Search & Filter
             </h2>
 
             {/* First Row - Start/End Time */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pb-4 border-b border-gray-200">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+            <div className="grid grid-cols-1 gap-3 border-b border-slate-200 pb-4 md:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Start Time
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
@@ -880,7 +880,7 @@ const AdminAllBookingListPage: React.FC = () => {
                         const currentHour = getClockHour(startClock) || "00";
                         setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
                       }}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
                     >
                       <option value="">Min</option>
                       {MINUTE_OPTIONS.map((minute) => (
@@ -892,8 +892,8 @@ const AdminAllBookingListPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   End Time
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
@@ -925,7 +925,7 @@ const AdminAllBookingListPage: React.FC = () => {
                         const currentHour = getClockHour(endClock) || "00";
                         setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
                       }}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
                     >
                       <option value="">Min</option>
                       {MINUTE_OPTIONS.map((minute) => (
@@ -940,9 +940,9 @@ const AdminAllBookingListPage: React.FC = () => {
             </div>
 
             {/* Second Row - Main Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4 pb-4 border-b border-gray-200">
+            <div className="mb-4 grid grid-cols-1 gap-4 border-b border-slate-200 pb-4 md:grid-cols-12">
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Building
                 </label>
                 <Select
@@ -964,7 +964,7 @@ const AdminAllBookingListPage: React.FC = () => {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Floor
                 </label>
                 <Select
@@ -982,7 +982,7 @@ const AdminAllBookingListPage: React.FC = () => {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Room Name
                 </label>
                 <Input
@@ -993,7 +993,7 @@ const AdminAllBookingListPage: React.FC = () => {
                 />
               </div>
               <div className="md:col-span-4">
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   User Email
                 </label>
                 <Input
@@ -1004,7 +1004,7 @@ const AdminAllBookingListPage: React.FC = () => {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-2">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Status
                 </label>
                 <Select
@@ -1026,17 +1026,16 @@ const AdminAllBookingListPage: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-3 justify-end">
+            <div className="flex justify-end gap-3">
               <Button 
                 onClick={handleResetFilters}
-                className="px-6 py-2 rounded-lg border-gray-300 hover:bg-gray-50"
+                className="rounded-xl border border-gray-200 px-6 py-2 text-gray-700 hover:bg-gray-100"
               >
                 Clear
               </Button>
               <Button
-                type="primary"
                 onClick={handleApplyFilters}
-                className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                className="rounded-xl bg-slate-900 px-6 py-2 font-medium text-white hover:bg-slate-800"
               >
                 Search
               </Button>

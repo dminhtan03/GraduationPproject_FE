@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Alert, Tag, Typography } from "antd";
 import { reservationService } from "../../services/reservationService";
 import { roomService } from "../../services/roomService";
+import { getProfile } from "../../services/authService";
 import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import type { Reservation } from "../../types";
@@ -86,6 +87,20 @@ const statusColor = (status?: string) => {
   return "default";
 };
 
+const toNonEmptyString = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  return trimmed || "";
+};
+
+interface TimelineItem {
+  key: string;
+  label: string;
+  time: string;
+  actorId?: string;
+  sourceOrder: number;
+}
+
 const BookingDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { bookingId } = useParams();
@@ -97,6 +112,7 @@ const BookingDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
+  const [profileId, setProfileId] = useState<string>("");
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const [roomImageUrls, setRoomImageUrls] = useState<string[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
@@ -106,6 +122,29 @@ const BookingDetailPage: React.FC = () => {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       value,
     );
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const response = await getProfile();
+        const payload = (response.data as { data?: unknown })?.data ?? response.data;
+        const source = payload && typeof payload === "object"
+          ? (payload as Record<string, unknown>)
+          : null;
+
+        const resolvedId =
+          toNonEmptyString(source?.id) ||
+          toNonEmptyString(source?.userId) ||
+          toNonEmptyString(source?.uid);
+
+        setProfileId(resolvedId);
+      } catch {
+        setProfileId("");
+      }
+    };
+
+    void loadProfile();
+  }, []);
 
   useEffect(() => {
     if (!normalizedBookingId) return;
@@ -361,6 +400,106 @@ const BookingDetailPage: React.FC = () => {
   
   const firstImageUrl = imageUrls[0] || "";
 
+  const timelineItems = useMemo(() => {
+    const items: TimelineItem[] = [];
+
+    const pushItem = (
+      key: string,
+      label: string,
+      timeValue: unknown,
+      sourceOrder: number,
+      actorId?: string,
+    ) => {
+      const time = toNonEmptyString(timeValue);
+      if (!time) return;
+      items.push({ key, label, time, actorId, sourceOrder });
+    };
+
+    pushItem("created", "Created", mergedDetail.createAt || mergedDetail.createdAt, 1);
+    pushItem("checkin", "Check-in", mergedDetail.checkinTime || mergedDetail.checkInTime, 2);
+
+    const historyList = Array.isArray(mergedDetail.history) ? mergedDetail.history : [];
+    let extendIndex = 0;
+    historyList.forEach((entry) => {
+      if (!entry || typeof entry !== "object") return;
+      const row = entry as Record<string, unknown>;
+      const action = toNonEmptyString(row.action).toUpperCase();
+      if (action === "EXTEND") {
+        extendIndex += 1;
+        pushItem(
+          `extend-${extendIndex}`,
+          `Extend ${extendIndex}`,
+          row.performAt,
+          3,
+          toNonEmptyString(row.performBy),
+        );
+      }
+      if (action === "CHECK_IN") {
+        pushItem("history-checkin", "Check-in", row.performAt, 2, toNonEmptyString(row.performBy));
+      }
+    });
+
+    pushItem("return", "Return room", mergedDetail.returnTime, 4);
+    pushItem(
+      "cancelled",
+      "Cancelled",
+      mergedDetail.cancelTime || mergedDetail.cancelledTime || mergedDetail.canceledAt,
+      5,
+      toNonEmptyString(mergedDetail.cancelledBy || mergedDetail.canceledBy || mergedDetail.cancelBy),
+    );
+
+    const seen = new Set<string>();
+    return items
+      .filter((item) => {
+        const token = `${item.label}-${item.time}`;
+        if (seen.has(token)) return false;
+        seen.add(token);
+        return true;
+      })
+      .sort((a, b) => {
+        const timeA = new Date(a.time).getTime();
+        const timeB = new Date(b.time).getTime();
+        if (Number.isNaN(timeA) && Number.isNaN(timeB)) return a.sourceOrder - b.sourceOrder;
+        if (Number.isNaN(timeA)) return 1;
+        if (Number.isNaN(timeB)) return -1;
+        return timeA - timeB;
+      });
+  }, [mergedDetail]);
+
+  const cancelledByLabel = useMemo(() => {
+    const normalizedStatus = String(mergedDetail.status || "").toUpperCase();
+    const isCancelledStatus =
+      normalizedStatus === "CANCELLED" || normalizedStatus === "FORCE_CANCELLED";
+
+    if (!isCancelledStatus) return notFoundText;
+
+    const explicitRole = toNonEmptyString(
+      mergedDetail.cancelledByRole || mergedDetail.canceledByRole || mergedDetail.cancelByRole,
+    ).toUpperCase();
+
+    if (explicitRole.includes("ADMIN")) return "Admin";
+    if (explicitRole.includes("USER")) return "User";
+
+    const actorIdFromReservation = toNonEmptyString(
+      mergedDetail.cancelledBy || mergedDetail.canceledBy || mergedDetail.cancelBy,
+    );
+
+    const historyList = Array.isArray(mergedDetail.history) ? mergedDetail.history : [];
+    const cancelHistoryActor = historyList
+      .map((entry) => (entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null))
+      .find((row) => {
+        const action = toNonEmptyString(row?.action).toUpperCase();
+        return action === "CANCEL" || action === "FORCE_CANCEL";
+      });
+
+    const actorIdFromHistory = toNonEmptyString(cancelHistoryActor?.performBy);
+    const actorId = actorIdFromReservation || actorIdFromHistory;
+
+    if (!actorId) return notFoundText;
+    if (profileId && actorId === profileId) return "User";
+    return "Admin";
+  }, [mergedDetail, profileId]);
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
@@ -461,6 +600,60 @@ const BookingDetailPage: React.FC = () => {
               </div>
             )}
           </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-lg font-semibold text-slate-900">Event Timeline</p>
+            {timelineItems.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-500">{notFoundText}</p>
+            ) : (
+              <div className="mt-4">
+                <div className="hidden overflow-x-auto pb-1 md:block">
+                  <div className="flex min-w-max items-start gap-3">
+                    {timelineItems.map((item, index) => {
+                      const isLast = index === timelineItems.length - 1;
+                      return (
+                        <React.Fragment key={item.key}>
+                          <div className="w-44 shrink-0 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 to-white px-3 py-3 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-orange-600">
+                              {item.label}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold leading-5 text-slate-900">
+                              {getDateTimeText(item.time)}
+                            </p>
+                          </div>
+                          {!isLast && (
+                            <div className="pt-8 text-lg font-bold text-orange-400">→</div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-2 md:hidden">
+                  {timelineItems.map((item, index) => {
+                    const isLast = index === timelineItems.length - 1;
+                    return (
+                      <div key={item.key} className="flex items-start gap-3">
+                        <div className="flex flex-col items-center pt-1">
+                          <span className="h-2.5 w-2.5 rounded-full bg-orange-500" />
+                          {!isLast && <span className="mt-1 h-8 w-px bg-orange-200" />}
+                        </div>
+                        <div className="flex-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {item.label}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {getDateTimeText(item.time)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </section>
 
         <aside className="space-y-4 lg:col-span-3 lg:max-w-[300px] lg:justify-self-end">
@@ -512,6 +705,10 @@ const BookingDetailPage: React.FC = () => {
               <div className="flex items-start justify-between gap-4">
                 <span className="text-slate-500">End</span>
                 <span className="font-semibold text-slate-800 text-right">{endLabel}</span>
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <span className="text-slate-500">Cancelled by</span>
+                <span className="font-semibold text-slate-800 text-right">{cancelledByLabel}</span>
               </div>
             </div>
           </div>
