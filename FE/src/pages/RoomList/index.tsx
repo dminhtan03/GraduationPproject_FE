@@ -279,23 +279,31 @@ const DashboardPage: React.FC = () => {
           {status === "LEARNING" ? "LEARNING" : status}
         </span>
       ),
-      },
-      {
-        title: "ACTION",
+    },
+    {
+      title: "ACTION",
       key: "action",
       width: "15%",
       render: (_: unknown, record: RoomListItem) => {
+        const isAvailable = record.status === "AVAILABLE";
         return (
           <button
             type="button"
-            className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-4 py-1 text-xs font-semibold text-orange-700 transition hover:bg-orange-100"
+            className={`inline-flex items-center rounded-full border px-4 py-1 text-xs font-semibold transition ${
+              isAvailable
+                ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
+            }`}
             onClick={() => {
-              navigate(ROUTES.ROOM_DETAIL.replace(":roomId", record.id), {
+              const targetRoute = isAvailable
+                ? ROUTES.BOOK_ROOM
+                : ROUTES.ROOM_DETAIL;
+              navigate(targetRoute.replace(":roomId", record.id), {
                 state: { room: record },
               });
             }}
           >
-            View
+            {isAvailable ? "Book" : "View"}
           </button>
         );
       },
@@ -814,7 +822,10 @@ const DashboardPage: React.FC = () => {
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
                 onClick={() => {
-                  navigate(ROUTES.BOOK_ROOM.replace(":roomId", room.id), {
+                  const targetRoute = isAvailable
+                    ? ROUTES.BOOK_ROOM
+                    : ROUTES.ROOM_DETAIL;
+                  navigate(targetRoute.replace(":roomId", room.id), {
                     state: { room },
                   });
                 }}

@@ -118,6 +118,7 @@ const roomMapStatusFilterOptions: Array<
 > = [
   { value: "ALL", label: "All" },
   { value: "AVAILABLE", label: "Available" },
+  { value: "LEARNING", label: "Learning" },
   { value: "UNAVAILABLE", label: "In Use" },
   { value: "BROKEN", label: "Maintenance" },
 ];
@@ -449,7 +450,8 @@ const RoomMapPage: React.FC = () => {
         return;
       }
       try {
-        const decorData = await roomService.getFloorDecorations(selectedFloorId);
+        const decorData =
+          await roomService.getFloorDecorations(selectedFloorId);
         setDecorations(decorData || []);
       } catch (err) {
         console.error("Failed to load decorations:", err);
@@ -500,7 +502,9 @@ const RoomMapPage: React.FC = () => {
 
   const isFloorFull = (floor: { rooms: { status?: string }[] }) => {
     if (!floor.rooms || floor.rooms.length === 0) return false;
-    return floor.rooms.every((r) => r.status !== "AVAILABLE");
+    return floor.rooms.every(
+      (r) => r.status !== "AVAILABLE" && r.status !== "LEARNING",
+    );
   };
 
   const currentFloorKey = useMemo(() => {
@@ -558,6 +562,13 @@ const RoomMapPage: React.FC = () => {
     if (Number.isNaN(lockDate.getTime())) return false;
     return lockDate.getTime() > Date.now();
   }, [userProfile]);
+
+  const canNavigateToBookRoom = useMemo(() => {
+    if (!selectedRoom?.roomId) return false;
+    return (
+      selectedRoom.status === "AVAILABLE" || selectedRoom.status === "LEARNING"
+    );
+  }, [selectedRoom]);
 
   const renderRoomTile = (
     room: MapRoom,
@@ -774,10 +785,11 @@ const RoomMapPage: React.FC = () => {
       return;
     }
 
-    if (selectedRoom.status !== "AVAILABLE") {
-      message.warning(
-        "Cannot book this room because it is currently unavailable.",
-      );
+    if (
+      selectedRoom.status !== "AVAILABLE" &&
+      selectedRoom.status !== "LEARNING"
+    ) {
+      message.warning("This room is currently not available for booking.");
       return;
     }
 
@@ -841,7 +853,7 @@ const RoomMapPage: React.FC = () => {
           </button>
           <button
             type="button"
-            disabled={!selectedRoom || !selectedRoom.roomId}
+            disabled={!canNavigateToBookRoom}
             onClick={handleBooking}
             className="w-full sm:w-auto px-4 py-2 rounded-full text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           >
@@ -1054,6 +1066,10 @@ const RoomMapPage: React.FC = () => {
           <div className="flex items-center gap-1.5 text-emerald-700">
             <span className="w-3 h-3 rounded-full bg-emerald-400" />
             <span>Available</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-purple-700">
+            <span className="w-3 h-3 rounded-full bg-purple-400" />
+            <span>Learning</span>
           </div>
           <div className="flex items-center gap-1.5 text-amber-700">
             <span className="w-3 h-3 rounded-full bg-amber-400" />
@@ -1354,7 +1370,7 @@ const RoomMapPage: React.FC = () => {
               </div>
               <p className="font-medium text-slate-700 mb-1">Select a room</p>
               <p className="text-xs text-slate-500">
-                Click on an available room tile to view details and book.
+                Click on a room tile to view details and book.
               </p>
             </div>
           )}
@@ -1383,9 +1399,11 @@ const RoomMapPage: React.FC = () => {
                   >
                     {selectedRoom.status === "AVAILABLE"
                       ? "Available"
-                      : selectedRoom.status === "UNAVAILABLE"
-                        ? "In Use"
-                        : "Maintenance"}
+                      : selectedRoom.status === "LEARNING"
+                        ? "Learning"
+                        : selectedRoom.status === "UNAVAILABLE"
+                          ? "In Use"
+                          : "Maintenance"}
                   </div>
                 </div>
 
@@ -1554,8 +1572,9 @@ const RoomMapPage: React.FC = () => {
 
               <button
                 type="button"
+                disabled={!canNavigateToBookRoom}
                 onClick={handleBooking}
-                className="mt-auto w-full inline-flex items-center justify-center rounded-full bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-600"
+                className="mt-auto w-full inline-flex items-center justify-center rounded-full bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Booking this room
               </button>

@@ -398,9 +398,12 @@ export const adminService = {
     };
   },
 
-  async lockUser(userId: string): Promise<string> {
+  async lockUser(userId: string, reason?: string): Promise<string> {
     const res = await api.put(
       buildUrl(API_ENDPOINTS.DASHBOARD.LOCK_USER, { userId }),
+      {
+        reason: String(reason || "").trim(),
+      },
     );
     return extractSuccessMessage(res.data, "User locked successfully");
   },
