@@ -1,10 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Bars3Icon,
-  ArrowDownTrayIcon,
-  PrinterIcon,
-} from "@heroicons/react/24/outline";
-import {
   Table,
   Alert,
   Select,
@@ -476,6 +471,50 @@ const AdminAllBookingListPage: React.FC = () => {
     return normalized === "RESERVED" || normalized === "IN_USE";
   };
 
+  const generatePaginationItems = (
+    currentPage: number,
+    totalPages: number,
+  ): Array<{ number?: number; type: "page" | "jumper" }> => {
+    // If total pages <= 5, show all
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, i) => ({
+        number: i + 1,
+        type: "page" as const,
+      }));
+    }
+
+    const items: Array<{ number?: number; type: "page" | "jumper" }> = [];
+
+    // Calculate range: currentPage ± 2
+    const rangeStart = Math.max(1, currentPage - 2);
+    const rangeEnd = Math.min(totalPages, currentPage + 2);
+
+    // Add first page if not in range
+    if (rangeStart > 1) {
+      items.push({ number: 1, type: "page" });
+      // Add jumper if there's a gap after page 1
+      if (rangeStart > 2) {
+        items.push({ type: "jumper" });
+      }
+    }
+
+    // Add pages in range
+    for (let i = rangeStart; i <= rangeEnd; i++) {
+      items.push({ number: i, type: "page" });
+    }
+
+    // Add last page if not in range
+    if (rangeEnd < totalPages) {
+      // Add jumper if there's a gap before last page
+      if (rangeEnd < totalPages - 1) {
+        items.push({ type: "jumper" });
+      }
+      items.push({ number: totalPages, type: "page" });
+    }
+
+    return items;
+  };
+
   const reloadBookings = async () => {
     const normalizedStart = normalizeDateTimeForApi(appliedStartDate);
     const normalizedEnd = normalizeDateTimeForApi(appliedEndDate);
@@ -532,97 +571,6 @@ const AdminAllBookingListPage: React.FC = () => {
     } finally {
       setForceCancelLoadingId(null);
     }
-  };
-
-  const handleExportCSV = () => {
-    if (bookings.length === 0) {
-      showToast("warning", "No bookings to export");
-      return;
-    }
-
-    const csvContent = [
-      ["USER NAME", "ROOM NAME", "START TIME", "END TIME", "STATUS"].join(","),
-      ...bookings.map((booking) => [
-        booking.userName || booking.user || "-",
-        booking.roomName || booking.room || "-",
-        booking.startTime ? new Date(booking.startTime).toLocaleString() : "-",
-        (booking.endTime || booking.date) ? new Date(booking.endTime || booking.date || "").toLocaleString() : "-",
-        booking.status || "-",
-      ]
-        .map((cell) =>
-          typeof cell === "string" && cell.includes(",")
-            ? `"${cell}"`
-            : cell,
-        )
-        .join(",")),
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `bookings-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-    showToast("success", "Exported to CSV successfully");
-  };
-
-  const handlePrintReport = () => {
-    if (bookings.length === 0) {
-      showToast("warning", "No bookings to print");
-      return;
-    }
-
-    const printWindow = window.open("", "", "height=600,width=800");
-    if (!printWindow) return;
-
-    const html = `
-      <html>
-        <head>
-          <title>All Bookings Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            h1 { text-align: center; }
-            .print-date { text-align: right; font-size: 12px; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f5f5f5; font-weight: bold; }
-            tr:nth-child(even) { background-color: #f9f9f9; }
-          </style>
-        </head>
-        <body>
-          <h1>All Bookings List</h1>
-          <div class="print-date">Generated: ${new Date().toLocaleString()}</div>
-          <table>
-            <tr>
-              <th>USER NAME</th>
-              <th>ROOM NAME</th>
-              <th>START TIME</th>
-              <th>END TIME</th>
-              <th>STATUS</th>
-            </tr>
-            ${bookings
-              .map(
-                (booking) => `
-              <tr>
-                <td>${booking.userName || booking.user || "-"}</td>
-                <td>${booking.roomName || booking.room || "-"}</td>
-                <td>${booking.startTime ? new Date(booking.startTime).toLocaleString() : "-"}</td>
-                <td>${booking.endTime ? new Date(booking.endTime).toLocaleString() : booking.date ? new Date(booking.date).toLocaleString() : "-"}</td>
-                <td>${booking.status || "-"}</td>
-              </tr>
-            `,
-              )
-              .join("")}
-          </table>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.print();
-    showToast("success", "Print dialog opened");
   };
 
   const userNameColumnFilters = Array.from(
@@ -766,32 +714,8 @@ const AdminAllBookingListPage: React.FC = () => {
       />
 
       <div className="flex-1 flex flex-col overflow-hidden ml-72">
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
-            >
-              <Bars3Icon className="w-6 h-6" />
-            </button>
-            <h1 className="text-2xl font-bold text-gray-900">
-              All Bookings List
-            </h1>
-          </div>
-
-          {toastPopup && (
-            <CustomMessage
-              type={toastPopup.type}
-              message={toastPopup.message}
-              onClose={() => setToastPopup(null)}
-            />
-          )}
-        </header>
-
         {/* Main Content */}
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto px-4 pb-8 pt-5 lg:px-8">
           <Modal
             title="Are you sure to cancel booking?"
             open={forceCancelModalOpen}
@@ -835,20 +759,32 @@ const AdminAllBookingListPage: React.FC = () => {
             </div>
           </Modal>
 
-          {/* Filters Section */}
-          <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
-            <h2 className="text-sm font-semibold text-slate-700">
-              Search & Filter
-            </h2>
+          {/* Header */}
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">All Bookings List</h1>
+              <p className="text-sm text-slate-500">Manage all booking reservations and requests</p>
+            </div>
+          </div>
 
+          {toastPopup && (
+            <CustomMessage
+              type={toastPopup.type}
+              message={toastPopup.message}
+              onClose={() => setToastPopup(null)}
+            />
+          )}
+
+          {/* Search & Filter Section */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4 mb-6 flex flex-col gap-4">
             {/* First Row - Start/End Time */}
-            <div className="grid grid-cols-1 gap-3 border-b border-slate-200 pb-4 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Start Time
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
-                  <div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px]">
+              <div>
+                <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
+                  Start time
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
+                  <div className="min-w-0">
                     <DatePickerField
                       value={startDate}
                       onChange={(nextDate) => {
@@ -859,92 +795,105 @@ const AdminAllBookingListPage: React.FC = () => {
                       }}
                     />
                   </div>
-                  <div>
-                    <Select
-                      value={getClockHour(startClock) || undefined}
-                      onChange={(nextHour) => {
-                        const currentMinute = getClockMinute(startClock) || "00";
-                        setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
-                      }}
-                      placeholder="Hour"
-                      listHeight={160}
-                      className="w-full"
-                      options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
-                    />
-                  </div>
-                  <div>
-                    <select
-                      value={getClockMinute(startClock)}
-                      onChange={(event) => {
-                        const nextMinute = event.target.value;
-                        const currentHour = getClockHour(startClock) || "00";
-                        setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
-                      }}
-                      className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    >
-                      <option value="">Min</option>
-                      {MINUTE_OPTIONS.map((minute) => (
-                        <option key={minute} value={minute}>
-                          {minute}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <Select
+                    value={getClockHour(startClock) || undefined}
+                    onChange={(nextHour) => {
+                      const currentMinute = getClockMinute(startClock) || "00";
+                      setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                    }}
+                    placeholder="Hour"
+                    listHeight={160}
+                    className="w-full"
+                    options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                  />
+                  <select
+                    value={getClockMinute(startClock)}
+                    onChange={(event) => {
+                      const nextMinute = event.target.value;
+                      const currentHour = getClockHour(startClock) || "00";
+                      setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                    }}
+                    className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm tabular-nums bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    <option value="">Min</option>
+                    {MINUTE_OPTIONS.map((minute) => (
+                      <option key={minute} value={minute}>
+                        {minute}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  End Time
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-[1.25fr_1fr_1fr] gap-2">
-                  <div>
+
+              <div>
+                <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
+                  End time
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
+                  <div className="min-w-0">
                     <DatePickerField
                       value={endDate}
                       minDate={startDate}
                       onChange={setEndDate}
                     />
                   </div>
-                  <div>
-                    <Select
-                      value={getClockHour(endClock) || undefined}
-                      onChange={(nextHour) => {
-                        const currentMinute = getClockMinute(endClock) || "00";
-                        setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
-                      }}
-                      placeholder="Hour"
-                      listHeight={160}
-                      className="w-full"
-                      options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
-                    />
-                  </div>
-                  <div>
-                    <select
-                      value={getClockMinute(endClock)}
-                      onChange={(event) => {
-                        const nextMinute = event.target.value;
-                        const currentHour = getClockHour(endClock) || "00";
-                        setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
-                      }}
-                      className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    >
-                      <option value="">Min</option>
-                      {MINUTE_OPTIONS.map((minute) => (
-                        <option key={minute} value={minute}>
-                          {minute}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <Select
+                    value={getClockHour(endClock) || undefined}
+                    onChange={(nextHour) => {
+                      const currentMinute = getClockMinute(endClock) || "00";
+                      setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                    }}
+                    placeholder="Hour"
+                    listHeight={160}
+                    className="w-full"
+                    options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                  />
+                  <select
+                    value={getClockMinute(endClock)}
+                    onChange={(event) => {
+                      const nextMinute = event.target.value;
+                      const currentHour = getClockHour(endClock) || "00";
+                      setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                    }}
+                    className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm tabular-nums bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    <option value="">Min</option>
+                    {MINUTE_OPTIONS.map((minute) => (
+                      <option key={minute} value={minute}>
+                        {minute}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              <div>
+                <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
+                  Status
+                </div>
+                <Select
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  className="w-full"
+                  options={[
+                    { label: "All", value: "All" },
+                    { label: "Reserved", value: "RESERVED" },
+                    { label: "In Use", value: "IN_USE" },
+                    { label: "Completed", value: "COMPLETED" },
+                    { label: "Cancelled", value: "CANCELLED" },
+                    { label: "No Show", value: "NO_SHOW" },
+                    { label: "Failed", value: "FAILED" },
+                  ]}
+                />
               </div>
             </div>
 
             {/* Second Row - Main Filters */}
-            <div className="mb-4 grid grid-cols-1 gap-4 border-b border-slate-200 pb-4 md:grid-cols-12">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
               <div className="md:col-span-2">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
                   Building
-                </label>
+                </div>
                 <Select
                   value={selectedBuildingId || undefined}
                   onChange={(value) => {
@@ -963,10 +912,11 @@ const AdminAllBookingListPage: React.FC = () => {
                   options={buildingOptions}
                 />
               </div>
+
               <div className="md:col-span-2">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
                   Floor
-                </label>
+                </div>
                 <Select
                   value={floorNameFilter || undefined}
                   onChange={(value) => setFloorNameFilter(value || "")}
@@ -981,10 +931,11 @@ const AdminAllBookingListPage: React.FC = () => {
                   options={floorOptions}
                 />
               </div>
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+
+              <div className="md:col-span-3">
+                <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
                   Room Name
-                </label>
+                </div>
                 <Input
                   value={roomNameFilter}
                   onChange={(event) => setRoomNameFilter(event.target.value)}
@@ -992,10 +943,11 @@ const AdminAllBookingListPage: React.FC = () => {
                   className="rounded-lg"
                 />
               </div>
-              <div className="md:col-span-4">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+
+              <div className="md:col-span-3">
+                <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
                   User Email
-                </label>
+                </div>
                 <Input
                   value={userEmailFilter}
                   onChange={(event) => setUserEmailFilter(event.target.value)}
@@ -1003,42 +955,22 @@ const AdminAllBookingListPage: React.FC = () => {
                   className="rounded-lg"
                 />
               </div>
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Status
-                </label>
-                <Select
-                  value={statusFilter}
-                  onChange={setStatusFilter}
-                  className="w-full"
-                  options={[
-                    { label: "All", value: "All" },
-                    { label: "Reserved", value: "RESERVED" },
-                    { label: "In Use", value: "IN_USE" },
-                    { label: "Completed", value: "COMPLETED" },
-                    { label: "Cancelled", value: "CANCELLED" },
-                    { label: "Force Cancelled", value: "FORCE_CANCELLED" },
-                    { label: "No Show", value: "NO_SHOW" },
-                    { label: "Failed", value: "FAILED" },
-                  ]}
-                />
-              </div>
             </div>
 
             {/* Action Buttons */}
             <div className="flex justify-end gap-3">
-              <Button 
+              <button 
                 onClick={handleResetFilters}
-                className="rounded-xl border border-gray-200 px-6 py-2 text-gray-700 hover:bg-gray-100"
+                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-gray-50 transition-all"
               >
                 Clear
-              </Button>
-              <Button
+              </button>
+              <button
                 onClick={handleApplyFilters}
-                className="rounded-xl bg-slate-900 px-6 py-2 font-medium text-white hover:bg-slate-800"
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition-all"
               >
                 Search
-              </Button>
+              </button>
             </div>
           </div>
 
@@ -1054,50 +986,99 @@ const AdminAllBookingListPage: React.FC = () => {
           )}
 
           {/* Bookings Table */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-100 mb-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-6 overflow-hidden">
             {bookings.length === 0 && !loading && !error ? (
               <Empty
                 style={{ padding: "60px 20px" }}
                 description="No bookings match your filters"
               />
             ) : (
-              <Table<BookingRow>
-                rowKey={(record, index) =>
-                  record.reservationId ||
-                  record.bookingId ||
-                  record.id ||
-                  `booking-${index}`
-                }
-                loading={loading}
-                columns={columns}
-                dataSource={bookings}
-                pagination={{
-                  current: page,
-                  pageSize,
-                  total,
-                  showSizeChanger: true,
-                  pageSizeOptions: ["10", "20", "50"],
-                }}
-                onChange={handleTableChange}
-                className="border-none"
-              />
-            )}
-          </div>
+              <>
+                <Table<BookingRow>
+                  rowKey={(record, index) =>
+                    record.reservationId ||
+                    record.bookingId ||
+                    record.id ||
+                    `booking-${index}`
+                  }
+                  loading={loading}
+                  columns={columns}
+                  dataSource={bookings}
+                  pagination={false}
+                  onChange={handleTableChange}
+                  className="border-none"
+                />
 
-          {/* Export/Print Actions */}
-          <div className="flex gap-3 justify-end">
-            <Button
-              icon={<ArrowDownTrayIcon className="w-4 h-4" />}
-              onClick={handleExportCSV}
-            >
-              Export to CSV
-            </Button>
-            <Button
-              icon={<PrinterIcon className="w-4 h-4" />}
-              onClick={handlePrintReport}
-            >
-              Print Report
-            </Button>
+                {/* Custom Pagination */}
+                <div className="border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50">
+                  <div className="text-sm text-slate-700 font-medium">
+                    {total > 0
+                      ? `Results: ${(page - 1) * pageSize + 1} - ${Math.min(
+                          page * pageSize,
+                          total,
+                        )} of ${total}`
+                      : "0 of 0"}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      onClick={() => setPage(Math.max(1, page - 1))}
+                      disabled={page === 1}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:text-slate-300 disabled:hover:bg-white transition-all"
+                    >
+                      &lt;
+                    </button>
+
+                    {generatePaginationItems(page, Math.ceil(total / pageSize)).map(
+                      (item, index) =>
+                        item.type === "page" ? (
+                          <button
+                            key={`page-${item.number}`}
+                            onClick={() => setPage(item.number || 1)}
+                            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                              page === item.number
+                                ? "bg-slate-900 text-white shadow-md"
+                                : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
+                            }`}
+                          >
+                            {item.number}
+                          </button>
+                        ) : (
+                          <span
+                            key={`jumper-${index}`}
+                            className="px-2 text-slate-400 font-semibold"
+                          >
+                            ...
+                          </span>
+                        ),
+                    )}
+
+                    <button
+                      onClick={() =>
+                        setPage(Math.min(Math.ceil(total / pageSize), page + 1))
+                      }
+                      disabled={page >= Math.ceil(total / pageSize)}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:text-slate-300 disabled:hover:bg-white transition-all"
+                    >
+                      &gt;
+                    </button>
+                  </div>
+
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  >
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                  </select>
+                </div>
+              </>
+            )}
           </div>
         </main>
       </div>
