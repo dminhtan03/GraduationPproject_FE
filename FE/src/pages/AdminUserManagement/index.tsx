@@ -48,6 +48,12 @@ const statusFilterOptions: Array<AnimatedDropdownOption<StatusFilter>> = [
   { value: "LOCKED", label: "Locked" },
 ];
 
+const lockReasonPromptOptions = [
+  "You violated the room booking policy through repeated no-shows.",
+  "You used campus rooms for activities that are not permitted.",
+  "You repeatedly disrupted shared spaces and ignored prior warnings.",
+] as const;
+
 const normalizeRole = (value?: string) => {
   const raw = String(value || "")
     .trim()
@@ -84,6 +90,28 @@ const AdminUserManagementPage: React.FC = () => {
   const [confirmActionUser, setConfirmActionUser] = useState<AdminUser | null>(
     null,
   );
+  const [lockReasonInput, setLockReasonInput] = useState("");
+  const [lockReasonError, setLockReasonError] = useState<string | null>(null);
+  const [lockReasonOverrides, setLockReasonOverrides] = useState<
+    Record<string, string>
+  >(() => {
+    try {
+      const raw = window.localStorage.getItem("admin-user-lock-reasons");
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      return Object.entries(parsed).reduce<Record<string, string>>(
+        (acc, [key, value]) => {
+          if (typeof value === "string" && value.trim()) {
+            acc[key] = value;
+          }
+          return acc;
+        },
+        {},
+      );
+    } catch {
+      return {};
+    }
+  });
   const [reasonViewerUser, setReasonViewerUser] = useState<AdminUser | null>(
     null,
   );
@@ -140,6 +168,13 @@ const AdminUserManagementPage: React.FC = () => {
     setPage(1);
   }, [search, statusFilter]);
 
+  useEffect(() => {
+    window.localStorage.setItem(
+      "admin-user-lock-reasons",
+      JSON.stringify(lockReasonOverrides),
+    );
+  }, [lockReasonOverrides]);
+
   const filteredUsers = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return allUsers.filter((user) => {
@@ -169,15 +204,25 @@ const AdminUserManagementPage: React.FC = () => {
   const totalLocked = allUsers.filter((user) => user.locked).length;
   const totalActive = allUsers.length - totalLocked;
 
-  const handleToggleLock = async (user: AdminUser) => {
+  const handleToggleLock = async (user: AdminUser, reason?: string) => {
     setActionLoadingId(user.id);
     setError(null);
     try {
       let successMessage = "User status updated successfully";
       if (user.locked) {
         successMessage = await adminService.unlockUser(user.id);
+        setLockReasonOverrides((prev) => {
+          const next = { ...prev };
+          delete next[user.id];
+          return next;
+        });
       } else {
-        successMessage = await adminService.lockUser(user.id);
+        const normalizedReason = String(reason || "").trim();
+        successMessage = await adminService.lockUser(user.id, normalizedReason);
+        setLockReasonOverrides((prev) => ({
+          ...prev,
+          [user.id]: normalizedReason,
+        }));
       }
       showToast("success", successMessage);
       await loadUsers();
@@ -190,18 +235,35 @@ const AdminUserManagementPage: React.FC = () => {
 
   const requestToggleLockConfirm = (user: AdminUser) => {
     setConfirmActionUser(user);
+    setLockReasonInput("");
+    setLockReasonError(null);
   };
 
   const closeConfirmModal = () => {
     if (!actionLoadingId) {
       setConfirmActionUser(null);
+      setLockReasonInput("");
+      setLockReasonError(null);
     }
   };
 
   const handleConfirmToggleLock = async () => {
     if (!confirmActionUser) return;
-    await handleToggleLock(confirmActionUser);
+
+    if (!confirmActionUser.locked) {
+      const normalizedReason = lockReasonInput.trim();
+      if (!normalizedReason) {
+        setLockReasonError("Please enter a reason before locking this user.");
+        return;
+      }
+      await handleToggleLock(confirmActionUser, normalizedReason);
+    } else {
+      await handleToggleLock(confirmActionUser);
+    }
+
     setConfirmActionUser(null);
+    setLockReasonInput("");
+    setLockReasonError(null);
   };
 
   const openReasonPopup = (user: AdminUser) => {
@@ -213,10 +275,12 @@ const AdminUserManagementPage: React.FC = () => {
   };
 
   const getReasonText = (user: AdminUser | null): string => {
-    if (!user) return "You violate the terms of service";
-    const rawReason = String(user.reason || "").trim();
+    if (!user) return "No lock reason provided.";
+    const rawReason = String(
+      user.reason || lockReasonOverrides[user.id] || "",
+    ).trim();
     if (rawReason) return rawReason;
-    return "You violate the terms of service";
+    return "No lock reason provided.";
   };
 
   const handleLogout = async () => {
@@ -400,7 +464,7 @@ const AdminUserManagementPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowAddUserModal(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+              className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600 transition-colors"
             >
               <PlusIcon className="h-4 w-4" />
               Add User
@@ -861,6 +925,45 @@ const AdminUserManagementPage: React.FC = () => {
                 ? `Are you sure you want to unlock ${confirmActionUser.fullName || "this user"}?`
                 : `Are you sure you want to lock ${confirmActionUser.fullName || "this user"}?`}
             </p>
+
+            {!confirmActionUser.locked && (
+              <div className="mt-4 space-y-2">
+                <label className="block text-sm font-semibold text-slate-700">
+                  Lock reason
+                </label>
+                <textarea
+                  rows={3}
+                  value={lockReasonInput}
+                  onChange={(event) => {
+                    setLockReasonInput(event.target.value);
+                    if (lockReasonError) {
+                      setLockReasonError(null);
+                    }
+                  }}
+                  placeholder="Enter the reason for locking this user"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                />
+                {lockReasonError && (
+                  <p className="text-xs text-red-600">{lockReasonError}</p>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {lockReasonPromptOptions.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => {
+                        setLockReasonInput(prompt);
+                        setLockReasonError(null);
+                      }}
+                      className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 transition hover:bg-orange-100"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-5 flex items-center justify-end gap-2">
               <button
