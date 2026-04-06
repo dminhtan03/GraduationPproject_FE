@@ -776,9 +776,9 @@ const AdminAllBookingListPage: React.FC = () => {
           )}
 
           {/* Search & Filter Section */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4 mb-6 flex flex-col gap-4">
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             {/* First Row - Start/End Time */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px]">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px]">
               <div>
                 <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
                   Start time
@@ -803,7 +803,7 @@ const AdminAllBookingListPage: React.FC = () => {
                     }}
                     placeholder="Hour"
                     listHeight={160}
-                    className="w-full"
+                    className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
                     options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
                   />
                   <select
@@ -813,7 +813,7 @@ const AdminAllBookingListPage: React.FC = () => {
                       const currentHour = getClockHour(startClock) || "00";
                       setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
                     }}
-                    className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm tabular-nums bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium tabular-nums text-slate-700 outline-none transition-all duration-300 hover:border-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   >
                     <option value="">Min</option>
                     {MINUTE_OPTIONS.map((minute) => (
@@ -845,7 +845,7 @@ const AdminAllBookingListPage: React.FC = () => {
                     }}
                     placeholder="Hour"
                     listHeight={160}
-                    className="w-full"
+                    className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
                     options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
                   />
                   <select
@@ -855,7 +855,7 @@ const AdminAllBookingListPage: React.FC = () => {
                       const currentHour = getClockHour(endClock) || "00";
                       setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
                     }}
-                    className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm tabular-nums bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium tabular-nums text-slate-700 outline-none transition-all duration-300 hover:border-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   >
                     <option value="">Min</option>
                     {MINUTE_OPTIONS.map((minute) => (
@@ -874,7 +874,7 @@ const AdminAllBookingListPage: React.FC = () => {
                 <Select
                   value={statusFilter}
                   onChange={setStatusFilter}
-                  className="w-full"
+                  className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
                   options={[
                     { label: "All", value: "All" },
                     { label: "Reserved", value: "RESERVED" },
@@ -889,7 +889,7 @@ const AdminAllBookingListPage: React.FC = () => {
             </div>
 
             {/* Second Row - Main Filters */}
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-12">
               <div className="md:col-span-2">
                 <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
                   Building
@@ -908,7 +908,7 @@ const AdminAllBookingListPage: React.FC = () => {
                   }}
                   allowClear
                   placeholder="Select building"
-                  className="w-full"
+                  className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
                   options={buildingOptions}
                 />
               </div>
@@ -927,7 +927,7 @@ const AdminAllBookingListPage: React.FC = () => {
                       ? "Select floor"
                       : "Select building first"
                   }
-                  className="w-full"
+                  className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
                   options={floorOptions}
                 />
               </div>
@@ -940,7 +940,7 @@ const AdminAllBookingListPage: React.FC = () => {
                   value={roomNameFilter}
                   onChange={(event) => setRoomNameFilter(event.target.value)}
                   placeholder="Search room..."
-                  className="rounded-lg"
+                  className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm font-medium text-slate-700 transition-all duration-300 hover:border-slate-300 focus:border-slate-400 focus:ring-slate-200"
                 />
               </div>
 
@@ -952,22 +952,22 @@ const AdminAllBookingListPage: React.FC = () => {
                   value={userEmailFilter}
                   onChange={(event) => setUserEmailFilter(event.target.value)}
                   placeholder="Search email..."
-                  className="rounded-lg"
+                  className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm font-medium text-slate-700 transition-all duration-300 hover:border-slate-300 focus:border-slate-400 focus:ring-slate-200"
                 />
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="flex justify-end gap-3">
+            <div className="mt-4 flex justify-end gap-3">
               <button 
                 onClick={handleResetFilters}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-gray-50 transition-all"
+                className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-all duration-300 hover:bg-slate-50"
               >
                 Clear
               </button>
               <button
                 onClick={handleApplyFilters}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition-all"
+                className="h-11 rounded-xl bg-slate-900 px-6 text-sm font-semibold text-white transition-all duration-300 hover:bg-slate-800 md:min-w-32"
               >
                 Search
               </button>
