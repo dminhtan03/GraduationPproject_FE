@@ -9,33 +9,102 @@ import {
 import { useNavigate } from "react-router-dom";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
 import { adminService } from "../../services/adminService";
+import { api } from "../../services/api";
 import { logout } from "../../services/authService";
 import { ROUTES } from "../../constants";
+import { API_ENDPOINTS } from "../../constants/endpoints";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
 
+type ProfilePayload = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+};
+
+type Amenity = {
+  id: string;
+  name: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === "object") {
+    const maybeError = error as {
+      message?: unknown;
+      response?: { data?: { message?: unknown } };
+    };
+
+    const responseMessage = maybeError.response?.data?.message;
+    if (typeof responseMessage === "string" && responseMessage.trim()) {
+      return responseMessage;
+    }
+
+    if (typeof maybeError.message === "string" && maybeError.message.trim()) {
+      return maybeError.message;
+    }
+  }
+
+  return fallback;
+};
+
 const AdminAmenityManagementPage: React.FC = () => {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [amenities, setAmenities] = useState<any[]>([]);
+  const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [loading, setLoading] = useState(false);
-  const [toastPopup, setToastPopup] = useState<{ type: MessageType; message: string } | null>(null);
+  const [toastPopup, setToastPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingAmenity, setEditingAmenity] = useState<any>(null);
+  const [editingAmenity, setEditingAmenity] = useState<Amenity | null>(null);
   const [amenityName, setAmenityName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [adminName, setAdminName] = useState("Admin User");
+  const [adminEmail, setAdminEmail] = useState("");
 
-  const adminName = "Admin";
-  const adminEmail = "admin@unibooking.com";
+  const loadAdminProfile = async () => {
+    try {
+      const res = await api.get<ProfilePayload | { data: ProfilePayload }>(
+        API_ENDPOINTS.AUTH.PROFILE,
+      );
+      const raw = res.data;
+      const nested = (raw as { data?: ProfilePayload }).data;
+      const data = (nested || raw || {}) as ProfilePayload;
+      const fullName = [data.firstName, data.lastName]
+        .filter(Boolean)
+        .join(" ");
+      setAdminName(fullName || "Admin User");
+      setAdminEmail(data.email || "");
+    } catch {
+      setAdminName("Admin User");
+      setAdminEmail("");
+    }
+  };
 
   const loadAmenities = async () => {
     setLoading(true);
     try {
       const data = await adminService.listAmenities();
-      setAmenities(data);
+      const normalizedAmenities = Array.isArray(data)
+        ? data.map((item) => {
+            const row = item as Record<string, unknown>;
+            return {
+              id: String(row.id ?? ""),
+              name: String(row.name ?? ""),
+              createdAt:
+                typeof row.createdAt === "string" ? row.createdAt : undefined,
+              updatedAt:
+                typeof row.updatedAt === "string" ? row.updatedAt : undefined,
+            } as Amenity;
+          })
+        : [];
+      setAmenities(normalizedAmenities);
     } catch (err) {
       console.error(err);
       setToastPopup({ type: "error", message: "Failed to load amenities" });
@@ -45,10 +114,11 @@ const AdminAmenityManagementPage: React.FC = () => {
   };
 
   useEffect(() => {
+    loadAdminProfile();
     loadAmenities();
   }, []);
 
-  const handleOpenModal = (amenity?: any) => {
+  const handleOpenModal = (amenity?: Amenity) => {
     if (amenity) {
       setEditingAmenity(amenity);
       setAmenityName(amenity.name);
@@ -67,17 +137,26 @@ const AdminAmenityManagementPage: React.FC = () => {
     try {
       if (editingAmenity) {
         await adminService.updateAmenity(editingAmenity.id, amenityName.trim());
-        setToastPopup({ type: "success", message: "Amenity updated successfully" });
+        setToastPopup({
+          type: "success",
+          message: "Amenity updated successfully",
+        });
       } else {
         await adminService.createAmenity(amenityName.trim());
-        setToastPopup({ type: "success", message: "Amenity created successfully" });
+        setToastPopup({
+          type: "success",
+          message: "Amenity created successfully",
+        });
       }
       setIsModalOpen(false);
       loadAmenities();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setToastPopup({
         type: "error",
-        message: err.response?.data?.message || "Operation failed. Name might be duplicated.",
+        message: getErrorMessage(
+          err,
+          "Operation failed. Name might be duplicated.",
+        ),
       });
     } finally {
       setSubmitting(false);
@@ -85,16 +164,23 @@ const AdminAmenityManagementPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this amenity?")) return;
+    if (!window.confirm("Are you sure you want to delete this amenity?"))
+      return;
 
     try {
       await adminService.deleteAmenity(id);
-      setToastPopup({ type: "success", message: "Amenity deleted successfully" });
+      setToastPopup({
+        type: "success",
+        message: "Amenity deleted successfully",
+      });
       loadAmenities();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setToastPopup({
         type: "error",
-        message: err.response?.data?.message || "Failed to delete amenity. It might be in use.",
+        message: getErrorMessage(
+          err,
+          "Failed to delete amenity. It might be in use.",
+        ),
       });
     }
   };
@@ -112,8 +198,12 @@ const AdminAmenityManagementPage: React.FC = () => {
       <main className="min-h-screen px-4 pb-8 pt-5 lg:ml-72 lg:px-8">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Amenity Management</h1>
-            <p className="text-sm text-slate-500">Manage room facilities and equipment</p>
+            <h1 className="text-2xl font-bold text-slate-900">
+              Amenity Management
+            </h1>
+            <p className="text-sm text-slate-500">
+              Manage room facilities and equipment
+            </p>
           </div>
 
           <button
@@ -129,10 +219,18 @@ const AdminAmenityManagementPage: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 w-16">#</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Amenity Name</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Last Updated</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-right">Actions</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 w-16">
+                  #
+                </th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Amenity Name
+                </th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Last Updated
+                </th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-right">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y border-slate-100">
@@ -140,23 +238,36 @@ const AdminAmenityManagementPage: React.FC = () => {
                 <tr>
                   <td colSpan={4} className="py-20 text-center">
                     <div className="animate-spin h-8 w-8 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-2" />
-                    <p className="text-sm text-slate-500">Loading amenities...</p>
+                    <p className="text-sm text-slate-500">
+                      Loading amenities...
+                    </p>
                   </td>
                 </tr>
               ) : amenities.length > 0 ? (
                 amenities.map((amenity, index) => (
-                  <tr key={amenity.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4 text-sm text-slate-500">{index + 1}</td>
+                  <tr
+                    key={amenity.id}
+                    className="hover:bg-slate-50/50 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-sm text-slate-500">
+                      {index + 1}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-orange-50 rounded-lg text-orange-500">
                           <WrenchScrewdriverIcon className="h-5 w-5" />
                         </div>
-                        <span className="font-semibold text-slate-900">{amenity.name}</span>
+                        <span className="font-semibold text-slate-900">
+                          {amenity.name}
+                        </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {new Date(amenity.updatedAt || amenity.createdAt).toLocaleDateString()}
+                      {amenity.updatedAt || amenity.createdAt
+                        ? new Date(
+                            amenity.updatedAt || amenity.createdAt || "",
+                          ).toLocaleDateString()
+                        : "-"}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -181,7 +292,9 @@ const AdminAmenityManagementPage: React.FC = () => {
               ) : (
                 <tr>
                   <td colSpan={4} className="py-20 text-center bg-slate-50/50">
-                    <p className="text-slate-500 font-medium">No amenities found</p>
+                    <p className="text-slate-500 font-medium">
+                      No amenities found
+                    </p>
                     <button
                       onClick={() => handleOpenModal()}
                       className="mt-4 text-orange-500 font-bold hover:text-orange-600 text-sm"
@@ -206,7 +319,9 @@ const AdminAmenityManagementPage: React.FC = () => {
                   {editingAmenity ? "Edit Amenity" : "Add New Amenity"}
                 </h3>
                 <p className="text-sm text-slate-500">
-                  {editingAmenity ? "Update facility information" : "Create a new facility for rooms"}
+                  {editingAmenity
+                    ? "Update facility information"
+                    : "Create a new facility for rooms"}
                 </p>
               </div>
               <button
@@ -219,7 +334,9 @@ const AdminAmenityManagementPage: React.FC = () => {
             <form onSubmit={handleSubmit}>
               <div className="p-6">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1.5">Amenity Name</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                    Amenity Name
+                  </label>
                   <input
                     required
                     type="text"
@@ -248,8 +365,10 @@ const AdminAmenityManagementPage: React.FC = () => {
                       <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       Saving...
                     </>
+                  ) : editingAmenity ? (
+                    "Update"
                   ) : (
-                    editingAmenity ? "Update" : "Create"
+                    "Create"
                   )}
                 </button>
               </div>

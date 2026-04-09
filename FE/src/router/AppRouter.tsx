@@ -38,6 +38,9 @@ const AdminUserManagementPage = React.lazy(
 const AdminAllBookingListPage = React.lazy(
   () => import("../pages/AdminAllBookingList"),
 );
+const AdminBookingDetailPage = React.lazy(
+  () => import("../pages/AdminBookingDetail"),
+);
 const AdminBuildingManagementPage = React.lazy(
   () => import("../pages/AdminBuildingManagement"),
 );
@@ -251,6 +254,17 @@ export const router = createBrowserRouter([
       <ProtectedRoute mode="admin-only">
         <SuspenseWrapper>
           <AdminAllBookingListPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_BOOKING_DETAIL,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminBookingDetailPage />
         </SuspenseWrapper>
       </ProtectedRoute>
     ),

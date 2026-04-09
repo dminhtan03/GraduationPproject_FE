@@ -12,7 +12,10 @@ import {
   Modal,
 } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
+import { EyeIcon } from "@heroicons/react/24/outline";
 import { adminService } from "../../services/adminService";
+import { api } from "../../services/api";
+import { API_ENDPOINTS } from "../../constants/endpoints";
 import { logout } from "../../services/authService";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
@@ -58,6 +61,12 @@ interface FloorOption {
   label: string;
   value: string;
 }
+
+type ProfilePayload = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+};
 
 const PAGE_SIZE = 10;
 const FORCE_CANCEL_QUICK_ACTIONS = [
@@ -109,7 +118,9 @@ const getStatusColor = (status: string) => {
 
 const parseDate = (dateStr?: string) => {
   if (!dateStr) return null;
-  const normalized = dateStr.includes("T") ? dateStr : dateStr.replace(" ", "T");
+  const normalized = dateStr.includes("T")
+    ? dateStr
+    : dateStr.replace(" ", "T");
   const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? null : date;
 };
@@ -158,6 +169,7 @@ const AdminAllBookingListPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [adminName, setAdminName] = useState("Admin User");
+  const [adminEmail, setAdminEmail] = useState("");
   const [toastPopup, setToastPopup] = useState<{
     type: MessageType;
     message: string;
@@ -175,13 +187,15 @@ const AdminAllBookingListPage: React.FC = () => {
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("");
   const [buildingOptions, setBuildingOptions] = useState<BuildingOption[]>([]);
   const [floorOptions, setFloorOptions] = useState<FloorOption[]>([]);
-  const [forceCancelLoadingId, setForceCancelLoadingId] = useState<string | null>(
-    null,
-  );
+  const [forceCancelLoadingId, setForceCancelLoadingId] = useState<
+    string | null
+  >(null);
   const [forceCancelModalOpen, setForceCancelModalOpen] = useState(false);
   const [forceCancelReservationId, setForceCancelReservationId] = useState("");
   const [forceCancelReason, setForceCancelReason] = useState("");
-  const [forceCancelReasonOptions] = useState<Array<{ label: string; value: string }>>(
+  const [forceCancelReasonOptions] = useState<
+    Array<{ label: string; value: string }>
+  >(
     FORCE_CANCEL_QUICK_ACTIONS.map((reason) => ({
       label: reason,
       value: reason,
@@ -199,16 +213,20 @@ const AdminAllBookingListPage: React.FC = () => {
 
   const loadAdminProfile = async () => {
     try {
-      const res = await fetch("/api/v1/auth/profile");
-      if (res.ok) {
-        const data = await res.json();
-        const firstName = data.data?.firstName || data.firstName || "";
-        const lastName = data.data?.lastName || data.lastName || "";
-        const fullName = [firstName, lastName].filter(Boolean).join(" ");
-        setAdminName(fullName || "Admin User");
-      }
+      const res = await api.get<ProfilePayload | { data: ProfilePayload }>(
+        API_ENDPOINTS.AUTH.PROFILE,
+      );
+      const raw = res.data;
+      const nested = (raw as { data?: ProfilePayload }).data;
+      const data = (nested || raw || {}) as ProfilePayload;
+      const fullName = [data.firstName, data.lastName]
+        .filter(Boolean)
+        .join(" ");
+      setAdminName(fullName || "Admin User");
+      setAdminEmail(data.email || "");
     } catch {
       setAdminName("Admin User");
+      setAdminEmail("");
     }
   };
 
@@ -254,32 +272,31 @@ const AdminAllBookingListPage: React.FC = () => {
     }
 
     try {
-      const response = await adminService.getFloorsByBuilding(normalizedBuildingId);
-      const floors = Array.isArray(response)
-        ? response
+      const response =
+        await adminService.getFloorsByBuilding(normalizedBuildingId);
+      const floors: Array<Record<string, unknown>> = Array.isArray(response)
+        ? (response as Array<Record<string, unknown>>)
         : Array.isArray(response?.items)
-          ? response.items
+          ? (response.items as Array<Record<string, unknown>>)
           : Array.isArray(response?.content)
-            ? response.content
+            ? (response.content as Array<Record<string, unknown>>)
             : [];
 
-      const mapped = floors
-        .map((item: any) => {
-          const rawName = String(item?.name ?? item?.floorName ?? "").trim();
-          if (!rawName) return null;
-          const floorNumber = parseFloorNumber(rawName);
-          return {
-            label: rawName,
-            value: rawName,
-            floorNumber,
-          };
-        })
-        .filter(
-          (
-            item,
-          ): item is FloorOption & {
-            floorNumber: number | null;
-          } => !!item,
+      const mapped: Array<FloorOption & { floorNumber: number | null }> =
+        floors.reduce<Array<FloorOption & { floorNumber: number | null }>>(
+          (accumulator, item) => {
+            const rawName = String(item.name ?? item.floorName ?? "").trim();
+            if (!rawName) return accumulator;
+
+            accumulator.push({
+              label: rawName,
+              value: rawName,
+              floorNumber: parseFloorNumber(rawName),
+            });
+
+            return accumulator;
+          },
+          [],
         );
 
       const unique = Array.from(
@@ -293,7 +310,9 @@ const AdminAllBookingListPage: React.FC = () => {
           }
           if (left.floorNumber != null) return -1;
           if (right.floorNumber != null) return 1;
-          return left.label.localeCompare(right.label, undefined, { numeric: true });
+          return left.label.localeCompare(right.label, undefined, {
+            numeric: true,
+          });
         })
         .map(({ label, value }) => ({ label, value }));
 
@@ -377,7 +396,10 @@ const AdminAllBookingListPage: React.FC = () => {
     }
     // If only one date is provided, show warning
     else if ((startDate && !endDate) || (!startDate && endDate)) {
-      showToast("warning", "Please select both start and end dates, or leave both empty to show all");
+      showToast(
+        "warning",
+        "Please select both start and end dates, or leave both empty to show all",
+      );
       return;
     }
     // If both are empty, that's OK - will show all bookings
@@ -562,7 +584,8 @@ const AdminAllBookingListPage: React.FC = () => {
       });
       showToast(
         "success",
-        message || "Force cancel success. User will receive an email notification.",
+        message ||
+          "Force cancel success. User will receive an email notification.",
       );
       setForceCancelModalOpen(false);
       await reloadBookings();
@@ -590,7 +613,9 @@ const AdminAllBookingListPage: React.FC = () => {
   ).map((value) => ({ text: value, value }));
 
   const statusColumnFilters = Array.from(
-    new Set(bookings.map((item) => String(item.status || "").trim()).filter(Boolean)),
+    new Set(
+      bookings.map((item) => String(item.status || "").trim()).filter(Boolean),
+    ),
   ).map((value) => ({ text: value, value }));
 
   const columns: ColumnsType<BookingRow> = [
@@ -674,33 +699,61 @@ const AdminAllBookingListPage: React.FC = () => {
       title: "ACTIONS",
       key: "actions",
       width: "13%",
-      render: (_, record) => (
-        <Space>
-          <Tooltip title="View details">
-            <Button
-              type="text"
-              size="small"
-              onClick={() => {
-                showToast("info", "View details feature coming soon");
-              }}
-            >
-              View
-            </Button>
-          </Tooltip>
-          {canForceCancel(record.status) && Boolean(getReservationKey(record)) && (
-            <Tooltip title="Force cancel booking">
-              <Button
-                danger
-                size="small"
-                loading={forceCancelLoadingId === getReservationKey(record)}
-                onClick={() => handleForceCancel(record)}
+      render: (_, record) => {
+        const reservationKey = getReservationKey(record);
+
+        return (
+          <Space>
+            <Tooltip title="View booking detail">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!reservationKey) {
+                    showToast(
+                      "warning",
+                      "Missing reservation id for this booking",
+                    );
+                    return;
+                  }
+
+                  navigate(
+                    ROUTES.ADMIN_BOOKING_DETAIL.replace(
+                      ":bookingId",
+                      encodeURIComponent(reservationKey),
+                    ),
+                    {
+                      state: {
+                        booking: {
+                          ...record,
+                          id: reservationKey,
+                          reservationId: reservationKey,
+                        },
+                      },
+                    },
+                  );
+                }}
+                className="group inline-flex items-center gap-1.5 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-300 hover:bg-cyan-100 hover:shadow"
               >
-                Force Cancel
-              </Button>
+                <EyeIcon className="h-3.5 w-3.5 transition-transform duration-200 group-hover:scale-110" />
+                View
+              </button>
             </Tooltip>
-          )}
-        </Space>
-      ),
+
+            {canForceCancel(record.status) && Boolean(reservationKey) && (
+              <Tooltip title="Force cancel booking">
+                <Button
+                  danger
+                  size="small"
+                  loading={forceCancelLoadingId === reservationKey}
+                  onClick={() => handleForceCancel(record)}
+                >
+                  Force Cancel
+                </Button>
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 
@@ -708,6 +761,7 @@ const AdminAllBookingListPage: React.FC = () => {
     <div className="flex h-screen bg-gray-50">
       <AdminSidebar
         adminName={adminName}
+        adminEmail={adminEmail}
         onLogout={handleLogout}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
@@ -730,7 +784,8 @@ const AdminAllBookingListPage: React.FC = () => {
           >
             <div className="mt-2 space-y-3">
               <p className="text-sm text-gray-600">
-                This action will force cancel the booking and a notification email will be sent to the user.
+                This action will force cancel the booking and a notification
+                email will be sent to the user.
               </p>
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase text-gray-600">
@@ -762,8 +817,12 @@ const AdminAllBookingListPage: React.FC = () => {
           {/* Header */}
           <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">All Bookings List</h1>
-              <p className="text-sm text-slate-500">Manage all booking reservations and requests</p>
+              <h1 className="text-2xl font-bold text-slate-900">
+                All Bookings List
+              </h1>
+              <p className="text-sm text-slate-500">
+                Manage all booking reservations and requests
+              </p>
             </div>
           </div>
 
@@ -799,19 +858,26 @@ const AdminAllBookingListPage: React.FC = () => {
                     value={getClockHour(startClock) || undefined}
                     onChange={(nextHour) => {
                       const currentMinute = getClockMinute(startClock) || "00";
-                      setStartClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                      setStartClock(
+                        nextHour ? `${nextHour}:${currentMinute}` : "",
+                      );
                     }}
                     placeholder="Hour"
                     listHeight={160}
                     className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
-                    options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                    options={ALL_HOURS.map((hour) => ({
+                      value: hour,
+                      label: hour,
+                    }))}
                   />
                   <select
                     value={getClockMinute(startClock)}
                     onChange={(event) => {
                       const nextMinute = event.target.value;
                       const currentHour = getClockHour(startClock) || "00";
-                      setStartClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                      setStartClock(
+                        nextMinute ? `${currentHour}:${nextMinute}` : "",
+                      );
                     }}
                     className="h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium tabular-nums text-slate-700 outline-none transition-all duration-300 hover:border-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   >
@@ -841,19 +907,26 @@ const AdminAllBookingListPage: React.FC = () => {
                     value={getClockHour(endClock) || undefined}
                     onChange={(nextHour) => {
                       const currentMinute = getClockMinute(endClock) || "00";
-                      setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
+                      setEndClock(
+                        nextHour ? `${nextHour}:${currentMinute}` : "",
+                      );
                     }}
                     placeholder="Hour"
                     listHeight={160}
                     className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
-                    options={ALL_HOURS.map((hour) => ({ value: hour, label: hour }))}
+                    options={ALL_HOURS.map((hour) => ({
+                      value: hour,
+                      label: hour,
+                    }))}
                   />
                   <select
                     value={getClockMinute(endClock)}
                     onChange={(event) => {
                       const nextMinute = event.target.value;
                       const currentHour = getClockHour(endClock) || "00";
-                      setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
+                      setEndClock(
+                        nextMinute ? `${currentHour}:${nextMinute}` : "",
+                      );
                     }}
                     className="h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium tabular-nums text-slate-700 outline-none transition-all duration-300 hover:border-slate-300 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
                   >
@@ -959,7 +1032,7 @@ const AdminAllBookingListPage: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="mt-4 flex justify-end gap-3">
-              <button 
+              <button
                 onClick={handleResetFilters}
                 className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-all duration-300 hover:bg-slate-50"
               >
@@ -1029,28 +1102,30 @@ const AdminAllBookingListPage: React.FC = () => {
                       &lt;
                     </button>
 
-                    {generatePaginationItems(page, Math.ceil(total / pageSize)).map(
-                      (item, index) =>
-                        item.type === "page" ? (
-                          <button
-                            key={`page-${item.number}`}
-                            onClick={() => setPage(item.number || 1)}
-                            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                              page === item.number
-                                ? "bg-slate-900 text-white shadow-md"
-                                : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
-                            }`}
-                          >
-                            {item.number}
-                          </button>
-                        ) : (
-                          <span
-                            key={`jumper-${index}`}
-                            className="px-2 text-slate-400 font-semibold"
-                          >
-                            ...
-                          </span>
-                        ),
+                    {generatePaginationItems(
+                      page,
+                      Math.ceil(total / pageSize),
+                    ).map((item, index) =>
+                      item.type === "page" ? (
+                        <button
+                          key={`page-${item.number}`}
+                          onClick={() => setPage(item.number || 1)}
+                          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                            page === item.number
+                              ? "bg-slate-900 text-white shadow-md"
+                              : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
+                          }`}
+                        >
+                          {item.number}
+                        </button>
+                      ) : (
+                        <span
+                          key={`jumper-${index}`}
+                          className="px-2 text-slate-400 font-semibold"
+                        >
+                          ...
+                        </span>
+                      ),
                     )}
 
                     <button

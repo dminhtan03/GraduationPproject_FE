@@ -13,8 +13,10 @@ import {
 import { useNavigate } from "react-router-dom";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
 import { adminService } from "../../services/adminService";
+import { api } from "../../services/api";
 import { logout } from "../../services/authService";
 import { ROUTES } from "../../constants";
+import { API_ENDPOINTS } from "../../constants/endpoints";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
@@ -55,6 +57,12 @@ const getHourFromTime = (time: string) =>
 const getMinuteFromTime = (time: string) =>
   (time?.split(":")[1] || "00").padStart(2, "0");
 
+type ProfilePayload = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+};
+
 const AdminAcademicSchedulePage: React.FC = () => {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -91,9 +99,27 @@ const AdminAcademicSchedulePage: React.FC = () => {
     type: MessageType;
     message: string;
   } | null>(null);
+  const [adminName, setAdminName] = useState("Admin User");
+  const [adminEmail, setAdminEmail] = useState("");
 
-  const adminName = "Admin";
-  const adminEmail = "admin@unibooking.com";
+  const loadAdminProfile = async () => {
+    try {
+      const res = await api.get<ProfilePayload | { data: ProfilePayload }>(
+        API_ENDPOINTS.AUTH.PROFILE,
+      );
+      const raw = res.data;
+      const nested = (raw as { data?: ProfilePayload }).data;
+      const data = (nested || raw || {}) as ProfilePayload;
+      const fullName = [data.firstName, data.lastName]
+        .filter(Boolean)
+        .join(" ");
+      setAdminName(fullName || "Admin User");
+      setAdminEmail(data.email || "");
+    } catch {
+      setAdminName("Admin User");
+      setAdminEmail("");
+    }
+  };
 
   const resetAddScheduleForm = () => {
     setNewSchedule(defaultNewSchedule);
@@ -248,6 +274,10 @@ const AdminAcademicSchedulePage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadAdminProfile();
+  }, []);
 
   useEffect(() => {
     loadBuildings();
