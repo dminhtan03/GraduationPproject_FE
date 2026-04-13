@@ -4,6 +4,8 @@ import type { MapRoomStatus } from "../utils";
 import { API_CONFIG } from "../constants";
 import { API_ENDPOINTS, buildUrl } from "../constants/endpoints";
 
+type UnknownRecord = Record<string, unknown>;
+
 export interface GetRoomParams {
   page: number;
   size: number;
@@ -25,7 +27,7 @@ export interface RoomsMapBuilding {
   floors: {
     floorId: string;
     floorName: string;
-    rooms: any[];
+    rooms: UnknownRecord[];
   }[];
 }
 
@@ -58,13 +60,13 @@ export interface RoomAcademicScheduleItem {
   description?: string | null;
 }
 
-const extractData = (raw: unknown): any => {
+const extractData = (raw: unknown): unknown => {
   if (!raw || typeof raw !== "object") return raw;
-  const body = raw as Record<string, any>;
+  const body = raw as UnknownRecord;
   const firstData = body.data;
 
   if (firstData && typeof firstData === "object") {
-    const nested = (firstData as Record<string, any>).data;
+    const nested = (firstData as UnknownRecord).data;
     return nested ?? firstData;
   }
 
@@ -99,29 +101,27 @@ const normalizeRoomImages = (
 
   const normalized: Array<{ id?: string; imageUrl?: string }> = [];
 
-  images
-    .forEach((item) => {
-      if (!item || typeof item !== "object") return;
+  images.forEach((item) => {
+    if (!item || typeof item !== "object") return;
 
-      const image = item as UnknownRecord;
-      const imageUrl = toAbsoluteImageUrl(
-        image.imageUrl ?? image.url ?? image.image ?? image.path,
-      );
-
-      return {
-        id: typeof image.id === "string" ? image.id : undefined,
-        imageUrl,
-      };
-    })
-    .filter((img): img is { id?: string; imageUrl?: string } =>
-      Boolean(img && (img.id || img.imageUrl)),
+    const image = item as UnknownRecord;
+    const imageUrl = toAbsoluteImageUrl(
+      image.imageUrl ?? image.url ?? image.image ?? image.path,
     );
+    const id = typeof image.id === "string" ? image.id : undefined;
+
+    if (id || imageUrl) {
+      normalized.push({ id, imageUrl });
+    }
+  });
+
+  return normalized;
 };
 
-const normalizeRoomDetail = (detail: unknown): Record<string, any> => {
+const normalizeRoomDetail = (detail: unknown): UnknownRecord => {
   if (!detail || typeof detail !== "object") return {};
 
-  const mapped = detail as Record<string, any>;
+  const mapped = detail as UnknownRecord;
   return {
     ...mapped,
     images: normalizeRoomImages(mapped.images),
@@ -129,21 +129,53 @@ const normalizeRoomDetail = (detail: unknown): Record<string, any> => {
 };
 
 // Flatten rooms from buildingResponse -> floors -> rooms
-function flattenRooms(data: any, params: GetRoomParams): Room[] {
-  if (!data || !Array.isArray(data.buildingResponse)) return [];
+function flattenRooms(data: unknown, params: GetRoomParams): Room[] {
+  if (!data || typeof data !== "object") return [];
+
+  const buildingResponse = (data as UnknownRecord).buildingResponse;
+  if (!Array.isArray(buildingResponse)) return [];
+
   let rooms: Room[] = [];
-  data.buildingResponse.forEach((building: any) => {
-    if (Array.isArray(building.floors)) {
-      building.floors.forEach((floor: any) => {
-        if (Array.isArray(floor.rooms)) {
-          floor.rooms.forEach((room: any) => {
+
+  buildingResponse.forEach((buildingEntry) => {
+    if (!buildingEntry || typeof buildingEntry !== "object") return;
+
+    const building = buildingEntry as UnknownRecord;
+    const floors = building.floors;
+    if (Array.isArray(floors)) {
+      floors.forEach((floorEntry) => {
+        if (!floorEntry || typeof floorEntry !== "object") return;
+
+        const floor = floorEntry as UnknownRecord;
+        const floorRooms = floor.rooms;
+
+        if (Array.isArray(floorRooms)) {
+          floorRooms.forEach((roomEntry) => {
+            if (!roomEntry || typeof roomEntry !== "object") return;
+
+            const room = roomEntry as UnknownRecord;
             rooms.push({
-              id: room.roomId || room.id,
-              roomName: room.locationCode || room.roomName || "",
-              floorInfo: floor.floorName || "",
-              building: building.buildingName || "",
-              slot: room.slot || 0,
-              status: room.status,
+              id:
+                (typeof room.roomId === "string" && room.roomId) ||
+                (typeof room.id === "string" && room.id) ||
+                "",
+              roomName:
+                (typeof room.locationCode === "string" && room.locationCode) ||
+                (typeof room.roomName === "string" && room.roomName) ||
+                "",
+              floorInfo:
+                (typeof floor.floorName === "string" && floor.floorName) || "",
+              building:
+                (typeof building.buildingName === "string" &&
+                  building.buildingName) ||
+                "",
+              slot:
+                typeof room.slot === "number"
+                  ? room.slot
+                  : Number(room.slot) || 0,
+              status: (typeof room.status === "string"
+                ? room.status
+                : "AVAILABLE") as RoomStatus,
             });
           });
         }
@@ -162,7 +194,7 @@ function flattenRooms(data: any, params: GetRoomParams): Room[] {
 
 export const roomService = {
   async getRooms(params: GetRoomParams): Promise<RoomResponse> {
-    const res = await api.get<any>("/api/v1/dashboard/rooms-map", {
+    const res = await api.get<unknown>("/api/v1/dashboard/rooms-map", {
       params: {
         page: params.page,
         size: params.size,
@@ -173,7 +205,10 @@ export const roomService = {
       },
     });
 
-    const payload = res.data || {};
+    const payload =
+      res.data && typeof res.data === "object"
+        ? (res.data as UnknownRecord)
+        : ({} as UnknownRecord);
     const data = payload.data ?? payload;
 
     // Backend có thể đã filter & phân trang; flattenRooms chỉ chuẩn hóa structure
@@ -191,34 +226,57 @@ export const roomService = {
   },
 
   async getRoomsMap(): Promise<RoomsMapResponse> {
-    const res = await api.get<any>("/api/v1/dashboard/rooms-map");
-    const data = res.data?.data || res.data || {};
-    return data as RoomsMapResponse;
+    const res = await api.get<unknown>("/api/v1/dashboard/rooms-map");
+    const raw =
+      res.data && typeof res.data === "object"
+        ? (res.data as UnknownRecord)
+        : ({} as UnknownRecord);
+    const data = (raw.data as UnknownRecord) || raw;
+    return data as unknown as RoomsMapResponse;
   },
 
   // Tìm phòng TRỐNG theo khoảng thời gian (BE: /api/v1/rooms/search)
   async searchAvailableRooms(
     payload: RoomStatusRequest,
   ): Promise<RoomStatusItem[]> {
-    const res = await api.post<any>(API_ENDPOINTS.ROOMS.SEARCH, payload);
-
-    const list = res.data?.data || res.data || [];
+    const res = await api.post<unknown>(API_ENDPOINTS.ROOMS.SEARCH, payload);
+    const raw =
+      res.data && typeof res.data === "object"
+        ? (res.data as UnknownRecord)
+        : ({} as UnknownRecord);
+    const list = raw.data ?? raw;
 
     const arr = Array.isArray(list) ? list : [];
 
-    return arr.map((item: any) => ({
-      roomId: item.id ?? item.roomId ?? item.seatId,
-      locationCode: item.locationCode,
-      status: (item.status as MapRoomStatus) ?? "AVAILABLE",
-      score:
-        typeof item.score === "number" && !Number.isNaN(item.score)
-          ? item.score
-          : null,
-    }));
+    return arr.map((item) => {
+      const record =
+        item && typeof item === "object"
+          ? (item as UnknownRecord)
+          : ({} as UnknownRecord);
+
+      return {
+        roomId:
+          (typeof record.roomId === "string" && record.roomId) ||
+          (typeof record.id === "string" && record.id) ||
+          (typeof record.seatId === "string" && record.seatId) ||
+          "",
+        locationCode:
+          (typeof record.locationCode === "string" && record.locationCode) ||
+          "",
+        status:
+          ((typeof record.status === "string"
+            ? record.status
+            : "AVAILABLE") as MapRoomStatus) || "AVAILABLE",
+        score:
+          typeof record.score === "number" && !Number.isNaN(record.score)
+            ? record.score
+            : null,
+      };
+    });
   },
 
-  async getRoomDetail(roomId: string): Promise<any> {
-    const res = await api.get<any>(
+  async getRoomDetail(roomId: string): Promise<UnknownRecord> {
+    const res = await api.get<unknown>(
       buildUrl(API_ENDPOINTS.ROOMS.DETAIL, { id: roomId }),
     );
     const detail = normalizeRoomDetail(extractData(res));
@@ -228,7 +286,9 @@ export const roomService = {
     }
 
     try {
-      const imageRes = await api.get<any>(`/api/v1/room-images/room/${roomId}`);
+      const imageRes = await api.get<unknown>(
+        `/api/v1/room-images/room/${roomId}`,
+      );
       const images = normalizeRoomImages(extractData(imageRes));
       return {
         ...detail,
@@ -242,7 +302,7 @@ export const roomService = {
   async getAcademicSchedulesByRoom(
     roomId: string,
   ): Promise<RoomAcademicScheduleItem[]> {
-    const res = await api.get<any>(
+    const res = await api.get<unknown>(
       buildUrl(API_ENDPOINTS.ACADEMIC_SCHEDULES.BY_ROOM, { roomId }),
     );
     const payload = extractData(res);
@@ -337,11 +397,16 @@ export const roomService = {
     );
   },
 
-  async getFloorDecorations(floorId: string): Promise<any[]> {
-    const res = await api.get<any>(
+  async getFloorDecorations(floorId: string): Promise<UnknownRecord[]> {
+    const res = await api.get<unknown>(
       `/api/v1/rooms/floors/${floorId}/decorations`,
     );
-    return res.data?.data || [];
+    const raw =
+      res.data && typeof res.data === "object"
+        ? (res.data as UnknownRecord)
+        : ({} as UnknownRecord);
+    const data = raw.data;
+    return Array.isArray(data) ? (data as UnknownRecord[]) : [];
   },
   // end add updateLayout method
 };

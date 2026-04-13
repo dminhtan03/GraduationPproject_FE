@@ -514,19 +514,55 @@ const RoomMapPage: React.FC = () => {
 
     const rooms: MapRoom[] = Array.isArray(floor.rooms)
       ? floor.rooms.map((r) => {
+          const roomRecord = r as Record<string, unknown>;
           const resolvedRoomId = resolveRoomId(r as RawMapRoom);
-          const baseStatus = r.status as MapRoomStatus;
+          const baseStatus =
+            (roomRecord.status as MapRoomStatus) || "AVAILABLE";
           const override = overrideStatuses[resolvedRoomId];
+
+          const score =
+            typeof roomRecord.score === "number" &&
+            !Number.isNaN(roomRecord.score)
+              ? roomRecord.score
+              : null;
+
+          const xPosition =
+            typeof roomRecord.x === "number"
+              ? roomRecord.x
+              : typeof roomRecord.xPosition === "number"
+                ? roomRecord.xPosition
+                : typeof roomRecord.xposition === "number"
+                  ? roomRecord.xposition
+                  : 0;
+
+          const yPosition =
+            typeof roomRecord.y === "number"
+              ? roomRecord.y
+              : typeof roomRecord.yPosition === "number"
+                ? roomRecord.yPosition
+                : typeof roomRecord.yposition === "number"
+                  ? roomRecord.yposition
+                  : 0;
+
+          const width =
+            typeof roomRecord.width === "number" ? roomRecord.width : 80;
+          const height =
+            typeof roomRecord.height === "number" ? roomRecord.height : 50;
+          const positioned =
+            typeof roomRecord.positioned === "boolean"
+              ? roomRecord.positioned
+              : false;
+
           return {
             roomId: resolvedRoomId,
             locationCode: resolveLocationCode(r as RawMapRoom),
             status: override ?? baseStatus,
-            score: r.score,
-            xPosition: r.x ?? r.xPosition ?? r.xposition ?? 0,
-            yPosition: r.y ?? r.yPosition ?? r.yposition ?? 0,
-            width: r.width || 80,
-            height: r.height || 50,
-            positioned: r.positioned ?? false,
+            score,
+            xPosition,
+            yPosition,
+            width,
+            height,
+            positioned,
           };
         })
       : [];

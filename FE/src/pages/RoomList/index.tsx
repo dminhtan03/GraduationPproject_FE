@@ -285,25 +285,17 @@ const DashboardPage: React.FC = () => {
       key: "action",
       width: "15%",
       render: (_: unknown, record: RoomListItem) => {
-        const isAvailable = record.status === "AVAILABLE";
         return (
           <button
             type="button"
-            className={`inline-flex items-center rounded-full border px-4 py-1 text-xs font-semibold transition ${
-              isAvailable
-                ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
-                : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
-            }`}
+            className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-4 py-1 text-xs font-semibold text-orange-700 transition hover:bg-orange-100"
             onClick={() => {
-              const targetRoute = isAvailable
-                ? ROUTES.BOOK_ROOM
-                : ROUTES.ROOM_DETAIL;
-              navigate(targetRoute.replace(":roomId", record.id), {
+              navigate(ROUTES.ROOM_DETAIL.replace(":roomId", record.id), {
                 state: { room: record },
               });
             }}
           >
-            {isAvailable ? "Book" : "View"}
+            View
           </button>
         );
       },
@@ -413,6 +405,23 @@ const DashboardPage: React.FC = () => {
   const totalFiltered = filteredRooms.length;
   const start = totalFiltered === 0 ? 0 : page * PAGE_SIZE + 1;
   const end = Math.min((page + 1) * PAGE_SIZE, totalFiltered);
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage((prev) => Math.min(prev, Math.max(0, totalPages - 1)));
+  }, [totalPages]);
+
+  const visiblePages = useMemo(() => {
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index);
+    }
+
+    const startPage = Math.max(0, Math.min(page - 2, totalPages - 5));
+    return Array.from({ length: 5 }, (_, index) => startPage + index);
+  }, [page, totalPages]);
+
+  const canGoPrev = page > 0;
+  const canGoNext = page < totalPages - 1;
 
   const isBackendDateTime = (value: string) => {
     if (!LOCAL_DATE_TIME_PATTERN.test(value)) return false;
@@ -856,26 +865,90 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mt-6">
-        <Text className="text-gray-500 text-sm text-center sm:text-left">
-          Showing {loading ? 0 : start}–{loading ? 0 : end} of {totalFiltered}
-        </Text>
+      <div className="mt-6 rounded-2xl border border-orange-100 bg-white/90 px-3 py-3 shadow-sm sm:px-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Text className="text-center text-sm text-slate-600 sm:text-left">
+            Showing{" "}
+            <span className="font-semibold text-slate-800">
+              {loading ? 0 : start}
+            </span>
+            -
+            <span className="font-semibold text-slate-800">
+              {loading ? 0 : end}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-slate-800">
+              {totalFiltered}
+            </span>
+          </Text>
 
-        <div className="flex gap-2 self-center sm:self-auto">
-          <button
-            disabled={page === 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40"
-          >
-            &lt;
-          </button>
-          <button
-            disabled={end >= totalFiltered}
-            onClick={() => setPage((p) => p + 1)}
-            className="w-9 h-9 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-40"
-          >
-            &gt;
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:justify-end">
+            <button
+              type="button"
+              disabled={!canGoPrev}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Prev
+            </button>
+
+            {visiblePages[0] > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setPage(0)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                >
+                  1
+                </button>
+                {visiblePages[0] > 1 && (
+                  <span className="px-1 text-sm text-slate-400">...</span>
+                )}
+              </>
+            )}
+
+            {visiblePages.map((pageNumber) => {
+              const active = pageNumber === page;
+              return (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  onClick={() => setPage(pageNumber)}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border text-sm font-semibold transition ${
+                    active
+                      ? "border-orange-500 bg-orange-500 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                  }`}
+                >
+                  {pageNumber + 1}
+                </button>
+              );
+            })}
+
+            {visiblePages[visiblePages.length - 1] < totalPages - 1 && (
+              <>
+                {visiblePages[visiblePages.length - 1] < totalPages - 2 && (
+                  <span className="px-1 text-sm text-slate-400">...</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPage(totalPages - 1)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                >
+                  {totalPages}
+                </button>
+              </>
+            )}
+
+            <button
+              type="button"
+              disabled={!canGoNext}
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </div>
