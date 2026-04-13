@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
     LIST: "/api/v1/rooms-map",
     SEARCH: "/api/v1/rooms/search",
     DETAIL: "/api/v1/rooms/:id",
+    DETAIL_RESERVATION: "/api/v1/reservations/detail-reservation/:id",
     BOOK: "/api/v1/reservations",
     MY_STATUS: "/api/v1/reservations/my-status",
     CHECK_IN: "/api/v1/reservations/check-in/:id",
@@ -33,15 +34,24 @@ export const API_ENDPOINTS = {
     CREATE: "/api/v1/rooms",
     GET_AMENITIES: "/api/v1/rooms/amenities",
     // end add layout endpoint
-    // start add building endpoints
+  },
+  AMENITIES: {
+    LIST: "/api/v1/amenities",
+    CREATE: "/api/v1/amenities",
+    UPDATE: "/api/v1/amenities/:id",
+    DELETE: "/api/v1/amenities/:id",
+  },
+  // start add building endpoints
+  BUILDINGS: {
     ADMIN_BUILDINGS: "/api/v1/dashboard/all-buildings",
     ADMIN_FLOORS: "/api/v1/dashboard/all-floors-by-buildingId/:buildingId",
     ADMIN_ROOMS_BY_FLOOR: "/api/v1/dashboard/all-room-by-floorId/:floorId",
     CREATE_BUILDING: "/api/v1/dashboard/buildings",
     UPDATE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
     DELETE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
-    // end add building endpoints
+    CREATE_FLOOR: "/api/v1/dashboard/buildings/:buildingId/add-floor",
   },
+  // end add building endpoints
 
   // User endpoints
   USERS: {
@@ -72,7 +82,8 @@ export const API_ENDPOINTS = {
   },
   // AI assistant endpoints
   AI: {
-    CHAT: "/api/v1/ai/chat",
+    CHAT: "/api/v1/chatbot/message",
+    VOICE: "/api/v1/chatbot/voice",
     RESERVE: "/api/v1/ai/reserve",
   },
 
@@ -84,6 +95,15 @@ export const API_ENDPOINTS = {
   NOTIFICATIONS: {
     LIST: "/api/v1/notifications/getAll",
     MARK_AS_READ: "/api/v1/notifications/markAsRead/:notificationId",
+  },
+
+  ACADEMIC_SCHEDULES: {
+    LIST: "/api/v1/academic-schedules",
+    CREATE: "/api/v1/academic-schedules",
+    UPDATE: "/api/v1/academic-schedules/:id",
+    DELETE: "/api/v1/academic-schedules/:id",
+    IMPORT: "/api/v1/academic-schedules/import",
+    BY_ROOM: "/api/v1/academic-schedules/room/:roomId",
   },
 
   DASHBOARD: {

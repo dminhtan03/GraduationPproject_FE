@@ -47,6 +47,17 @@ export interface RoomStatusItem {
   score: number | null;
 }
 
+export interface RoomAcademicScheduleItem {
+  id: string;
+  roomId?: string;
+  startTime?: string;
+  endTime?: string;
+  daysOfWeek?: string;
+  fromDate?: string;
+  toDate?: string;
+  description?: string | null;
+}
+
 type UnknownRecord = Record<string, unknown>;
 
 const extractData = (raw: unknown): unknown => {
@@ -88,23 +99,23 @@ const normalizeRoomImages = (
 ): Array<{ id?: string; imageUrl?: string }> => {
   if (!Array.isArray(images)) return [];
 
-  return images
-    .map((item) => {
-      if (!item || typeof item !== "object") return undefined;
+  const normalized: Array<{ id?: string; imageUrl?: string }> = [];
 
-      const image = item as UnknownRecord;
-      const imageUrl = toAbsoluteImageUrl(
-        image.imageUrl ?? image.url ?? image.image ?? image.path,
-      );
+  images.forEach((item) => {
+    if (!item || typeof item !== "object") return;
 
-      return {
-        id: typeof image.id === "string" ? image.id : undefined,
-        imageUrl,
-      };
-    })
-    .filter((img): img is { id?: string; imageUrl?: string } =>
-      Boolean(img && (img.id || img.imageUrl)),
+    const image = item as UnknownRecord;
+    const imageUrl = toAbsoluteImageUrl(
+      image.imageUrl ?? image.url ?? image.image ?? image.path,
     );
+    const id = typeof image.id === "string" ? image.id : undefined;
+
+    if (id || imageUrl) {
+      normalized.push({ id, imageUrl });
+    }
+  });
+
+  return normalized;
 };
 
 const normalizeRoomDetail = (detail: unknown): UnknownRecord => {
@@ -196,7 +207,7 @@ export const roomService = {
     const arr = Array.isArray(list) ? list : [];
 
     return arr.map((item: any) => ({
-      id: item.id ?? item.roomId ?? item.seatId,
+      roomId: item.id ?? item.roomId ?? item.seatId,
       locationCode: item.locationCode,
       status: (item.status as MapRoomStatus) ?? "AVAILABLE",
       score:
@@ -226,6 +237,50 @@ export const roomService = {
     } catch {
       return detail;
     }
+  },
+
+  async getAcademicSchedulesByRoom(
+    roomId: string,
+  ): Promise<RoomAcademicScheduleItem[]> {
+    const res = await api.get<any>(
+      buildUrl(API_ENDPOINTS.ACADEMIC_SCHEDULES.BY_ROOM, { roomId }),
+    );
+    const payload = extractData(res);
+    const list = Array.isArray(payload) ? payload : [];
+
+    const normalizeText = (value: unknown): string | undefined => {
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+      }
+      if (value === null || value === undefined) return undefined;
+      return String(value);
+    };
+
+    const schedules: RoomAcademicScheduleItem[] = [];
+
+    list.forEach((item, index) => {
+      if (!item || typeof item !== "object") return;
+
+      const record = item as UnknownRecord;
+      const roomRecord =
+        record.room && typeof record.room === "object"
+          ? (record.room as UnknownRecord)
+          : null;
+
+      schedules.push({
+        id: normalizeText(record.id) || `${roomId}-${index}`,
+        roomId: normalizeText(record.roomId) || normalizeText(roomRecord?.id),
+        startTime: normalizeText(record.startTime),
+        endTime: normalizeText(record.endTime),
+        daysOfWeek: normalizeText(record.daysOfWeek),
+        fromDate: normalizeText(record.fromDate),
+        toDate: normalizeText(record.toDate),
+        description: normalizeText(record.description) ?? null,
+      });
+    });
+
+    return schedules;
   },
 
   // start add updateLayout method

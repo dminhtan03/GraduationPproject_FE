@@ -87,6 +87,7 @@ export interface GetDataResponse {
 
 export interface AiChatRequestDto {
   message: string;
+  sessionId?: string;
   startTime?: string;
   endTime?: string;
   capacity?: number;
@@ -97,9 +98,16 @@ export interface AiRoomSuggestion {
   locationCode: string;
   score?: number | null;
   status: RoomStatus | string;
+  building?: string;
+  floor?: string;
+  capacity?: number | null;
+  amenities?: string[];
+  imageUrl?: string;
+  availableTimeSlots?: string[];
 }
 
 export interface AiChatResponseDto {
+  sessionId?: string;
   reply: string;
   suggestions?: AiRoomSuggestion[];
   reservationCreated: boolean;
