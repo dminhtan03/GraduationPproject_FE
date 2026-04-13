@@ -77,9 +77,13 @@ const mapApiItemToNotification = (
   const reservationId =
     typeof item.reservationId === "string"
       ? item.reservationId
-      : typeof item.ReservationId === "string"
-        ? item.ReservationId
-        : undefined;
+      : typeof item.reservationId === "number"
+        ? String(item.reservationId)
+        : typeof item.ReservationId === "string"
+          ? item.ReservationId
+          : typeof item.ReservationId === "number"
+            ? String(item.ReservationId)
+            : undefined;
 
   const title = String(item.title || "Notification");
   const message = String(item.content || "");
@@ -118,9 +122,13 @@ const mapMessageToNotification = (
   const reservationId =
     typeof raw.reservationId === "string"
       ? raw.reservationId
-      : typeof raw.ReservationId === "string"
-        ? raw.ReservationId
-        : undefined;
+      : typeof raw.reservationId === "number"
+        ? String(raw.reservationId)
+        : typeof raw.ReservationId === "string"
+          ? raw.ReservationId
+          : typeof raw.ReservationId === "number"
+            ? String(raw.ReservationId)
+            : undefined;
 
   const createdAtSource = raw.createdAt ?? raw.time ?? message.timestamp;
   const createdAt = String(createdAtSource || message.timestamp);

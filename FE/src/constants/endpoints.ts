@@ -82,7 +82,8 @@ export const API_ENDPOINTS = {
   },
   // AI assistant endpoints
   AI: {
-    CHAT: "/api/v1/ai/chat",
+    CHAT: "/api/v1/chatbot/message",
+    VOICE: "/api/v1/chatbot/voice",
     RESERVE: "/api/v1/ai/reserve",
   },
 

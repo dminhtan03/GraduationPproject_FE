@@ -1,4 +1,6 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
+import { ROUTES } from "../../constants";
 import { useNotifications } from "../../context/NotificationContext";
 import {
   formatReservationStatusLabel,
@@ -22,8 +24,40 @@ const formatTime = (iso: string): string => {
 };
 
 const NotificationsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { notifications, markAllAsRead, unreadCount, markAsRead } =
     useNotifications();
+
+  const handleNotificationItemClick = (notificationId: string) => {
+    const notification = notifications.find(
+      (item) => item.id === notificationId,
+    );
+    markAsRead(notificationId);
+
+    const bookingId = notification?.reservationId?.trim();
+    if (!bookingId) {
+      return;
+    }
+
+    navigate(
+      ROUTES.BOOKING_DETAIL.replace(
+        ":bookingId",
+        encodeURIComponent(bookingId),
+      ),
+      {
+        state: {
+          booking: {
+            id: bookingId,
+            status: notification?.reservationStatusAtNow,
+            rawData: {
+              reservationStatusAtNow: notification?.reservationStatusAtNow,
+              status: notification?.reservationStatusAtNow,
+            },
+          },
+        },
+      },
+    );
+  };
 
   const getCategoryClass = (category?: string) => {
     if (category === "booking") {
@@ -86,7 +120,7 @@ const NotificationsPage: React.FC = () => {
             <button
               type="button"
               key={n.id}
-              onClick={() => markAsRead(n.id)}
+              onClick={() => handleNotificationItemClick(n.id)}
               className={`w-full rounded-2xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
                 n.read
                   ? "border-slate-200 bg-white"

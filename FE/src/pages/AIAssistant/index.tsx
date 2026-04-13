@@ -5,13 +5,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Avatar, Button, Empty, Input, Tag, Typography } from "antd";
-import {
-  ClockCircleOutlined,
-  PlusOutlined,
-  SendOutlined,
-  RobotOutlined,
-} from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { aiService } from "../../services/aiService";
 import type { AiChatResponseDto, AiRoomSuggestion } from "../../types/api";
@@ -19,8 +12,7 @@ import type { Reservation, UserProfile } from "../../types";
 import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
-
-const { Text } = Typography;
+import { roomService } from "../../services/roomService";
 
 type Sender = "user" | "bot";
 
@@ -39,6 +31,7 @@ interface ChatSessionSummary {
   title: string;
   subtitle: string;
   createdAt: string;
+  aiSessionId?: string;
 }
 
 const createId = () => Math.random().toString(36).slice(2);
@@ -55,23 +48,245 @@ const formatDate = (value: string) =>
     day: "numeric",
   });
 
+const createWelcomeMessage = (): ChatMessage => ({
+  id: createId(),
+  sender: "bot",
+  text: "Hello, I am UniBot. I can help you find available rooms, check capacity, and book quickly.",
+  createdAt: new Date().toISOString(),
+});
+
+const statusClass: Record<string, string> = {
+  AVAILABLE: "border-emerald-200 bg-emerald-100 text-emerald-700",
+  RESERVED: "border-emerald-200 bg-emerald-100 text-emerald-700",
+};
+
+const toText = (value: unknown) =>
+  typeof value === "string" ? value.trim() : "";
+
+const toPositiveNumber = (value: unknown) => {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+};
+
+const toRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
+};
+
+const toNumberOrNull = (value: unknown) => {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+};
+
+const formatDateTimeLabel = (value: unknown) => {
+  if (!value) return "-";
+
+  const raw = String(value);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+
+  return parsed.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const bookingStatusClass = (status: string) => {
+  const upper = status.toUpperCase();
+  if (
+    upper === "APPROVED" ||
+    upper === "CHECKED_IN" ||
+    upper === "IN_USE" ||
+    upper === "RESERVED"
+  ) {
+    return "border-emerald-200 bg-emerald-100 text-emerald-700";
+  }
+  if (upper === "CANCELLED" || upper === "REJECTED") {
+    return "border-rose-200 bg-rose-100 text-rose-700";
+  }
+  if (upper === "COMPLETED") {
+    return "border-slate-200 bg-slate-100 text-slate-700";
+  }
+  return "border-amber-200 bg-amber-100 text-amber-700";
+};
+
+const getBookingCardData = (reservation?: Reservation | null) => {
+  if (!reservation) return null;
+
+  const source = toRecord(reservation);
+  if (!source) return null;
+
+  const room = toRecord(source.room);
+  const floor = toRecord(source.floor);
+  const building = toRecord(source.building);
+
+  const id = toText(source.id) || "-";
+  const roomCode =
+    toText(source.locationCode) ||
+    toText(room?.locationCode) ||
+    toText(room?.roomName) ||
+    toText(source.roomId) ||
+    "-";
+  const floorName =
+    toText(source.floor) ||
+    toText(floor?.name) ||
+    toText(floor?.floorName) ||
+    "-";
+  const buildingName =
+    toText(source.buildingName) ||
+    toText(building?.name) ||
+    toText(building?.buildingName) ||
+    "-";
+  const purpose = toText(source.purpose) || "-";
+  const note = toText(source.note);
+  const status = toText(source.status) || "PENDING";
+  const attendeeCount = toNumberOrNull(source.attendeeCount);
+
+  return {
+    id,
+    roomCode,
+    floorName,
+    buildingName,
+    startTime: formatDateTimeLabel(source.startTime),
+    endTime: formatDateTimeLabel(source.endTime),
+    purpose,
+    note,
+    status,
+    attendeeCount,
+  };
+};
+
+const AI_ASSISTANT_STORAGE_KEY = "ai_assistant_chat_state_v1";
+
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<ArrayLike<SpeechRecognitionAlternativeLike>>;
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+const getSpeechRecognitionCtor = () => {
+  const maybeWindow = window as Window & {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  };
+
+  return maybeWindow.SpeechRecognition || maybeWindow.webkitSpeechRecognition;
+};
+
+interface StoredAIAssistantState {
+  sessions: ChatSessionSummary[];
+  selectedSessionId: string;
+  messagesBySession: Record<string, ChatMessage[]>;
+}
+
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
-  const [sessions, setSessions] = useState<ChatSessionSummary[]>([
-    {
-      id: "s1",
-      title: "Finding Epsilon Rooms",
-      subtitle: "Found 3 available rooms for you.",
-      createdAt: new Date().toISOString(),
-    },
-  ]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string>("s1");
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const initialSession = useMemo<ChatSessionSummary>(
+    () => ({
+      id: createId(),
+      title: "New Conversation",
+      subtitle: "Start chatting with UniBot",
+      createdAt: new Date().toISOString(),
+    }),
+    [],
+  );
+
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([
+    initialSession,
+  ]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(
+    initialSession.id,
+  );
+  const [messagesBySession, setMessagesBySession] = useState<
+    Record<string, ChatMessage[]>
+  >({
+    [initialSession.id]: [createWelcomeMessage()],
+  });
+
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isMobileHistoryOpen, setIsMobileHistoryOpen] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [dismissedSuggestionMessageId, setDismissedSuggestionMessageId] =
+    useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const manualStopRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(AI_ASSISTANT_STORAGE_KEY);
+      if (!raw) {
+        setIsHydrated(true);
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as Partial<StoredAIAssistantState>;
+      const sessionsData = Array.isArray(parsed.sessions)
+        ? parsed.sessions
+        : [];
+      const messagesData =
+        parsed.messagesBySession && typeof parsed.messagesBySession === "object"
+          ? (parsed.messagesBySession as Record<string, ChatMessage[]>)
+          : null;
+
+      if (sessionsData.length > 0 && messagesData) {
+        const selectedId =
+          typeof parsed.selectedSessionId === "string" &&
+          sessionsData.some(
+            (session) => session.id === parsed.selectedSessionId,
+          )
+            ? parsed.selectedSessionId
+            : sessionsData[0].id;
+
+        setSessions(sessionsData);
+        setSelectedSessionId(selectedId);
+        setMessagesBySession(messagesData);
+      }
+    } catch {
+      // Ignore invalid storage payload.
+    } finally {
+      setIsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    const payload: StoredAIAssistantState = {
+      sessions,
+      selectedSessionId,
+      messagesBySession,
+    };
+
+    window.localStorage.setItem(
+      AI_ASSISTANT_STORAGE_KEY,
+      JSON.stringify(payload),
+    );
+  }, [isHydrated, messagesBySession, selectedSessionId, sessions]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -90,21 +305,28 @@ const AIAssistantPage: React.FC = () => {
     fetchProfile();
   }, []);
 
-  const selectedSession = useMemo(
-    () => sessions.find((s) => s.id === selectedSessionId),
-    [sessions, selectedSessionId],
+  const selectedSession = useMemo(() => {
+    return sessions.find((s) => s.id === selectedSessionId) ?? null;
+  }, [sessions, selectedSessionId]);
+
+  const selectedMessages = useMemo(() => {
+    return messagesBySession[selectedSessionId] ?? [];
+  }, [messagesBySession, selectedSessionId]);
+
+  const latestMessage = useMemo(
+    () => selectedMessages[selectedMessages.length - 1] ?? null,
+    [selectedMessages],
   );
 
-  const latestBotMessage = useMemo(
-    () =>
-      [...messages]
-        .reverse()
-        .find(
-          (m) =>
-            m.sender === "bot" && m.suggestions && m.suggestions.length > 0,
-        ),
-    [messages],
-  );
+  const latestSuggestionMessage = useMemo(() => {
+    if (!latestMessage || latestMessage.sender !== "bot") return null;
+    if (!latestMessage.suggestions?.length) return null;
+    return latestMessage;
+  }, [latestMessage]);
+
+  const isSuggestionsVisible =
+    !!latestSuggestionMessage &&
+    latestSuggestionMessage.id !== dismissedSuggestionMessageId;
 
   let userInitials = "U";
   if (profile) {
@@ -118,10 +340,10 @@ const AIAssistantPage: React.FC = () => {
     }
   }
 
-  const handleSend = useCallback(
-    async (text?: string) => {
-      const content = (text ?? inputValue).trim();
-      if (!content) return;
+  const sendMessageToAi = useCallback(
+    async (content: string, _mode: "chat" | "voice") => {
+      void _mode;
+      if (!content || isSending || !selectedSession) return;
 
       const now = new Date().toISOString();
       const userMessage: ChatMessage = {
@@ -130,13 +352,34 @@ const AIAssistantPage: React.FC = () => {
         text: content,
         createdAt: now,
       };
-      setMessages((prev) => [...prev, userMessage]);
-      if (!text) setInputValue("");
+
+      setMessagesBySession((prev) => ({
+        ...prev,
+        [selectedSession.id]: [
+          ...(prev[selectedSession.id] ?? []),
+          userMessage,
+        ],
+      }));
+
+      setSessions((prev) =>
+        prev.map((session) => {
+          if (session.id !== selectedSession.id) return session;
+          const shouldUpdateTitle = session.title === "New Conversation";
+          return {
+            ...session,
+            title: shouldUpdateTitle
+              ? content.slice(0, 36) + (content.length > 36 ? "..." : "")
+              : session.title,
+            subtitle: content,
+          };
+        }),
+      );
 
       setIsSending(true);
       try {
         const response: AiChatResponseDto = await aiService.chat({
           message: content,
+          sessionId: selectedSession.aiSessionId,
         });
 
         const botMessage: ChatMessage = {
@@ -148,21 +391,131 @@ const AIAssistantPage: React.FC = () => {
           reservation: response.reservation,
           reservationCreated: response.reservationCreated,
         };
-        setMessages((prev) => [...prev, botMessage]);
+
+        setMessagesBySession((prev) => ({
+          ...prev,
+          [selectedSession.id]: [
+            ...(prev[selectedSession.id] ?? []),
+            botMessage,
+          ],
+        }));
+
+        setSessions((prev) =>
+          prev.map((session) => {
+            if (session.id !== selectedSession.id) return session;
+            return {
+              ...session,
+              subtitle: response.reply,
+              aiSessionId: response.sessionId || session.aiSessionId,
+            };
+          }),
+        );
       } catch {
         const botMessage: ChatMessage = {
           id: createId(),
           sender: "bot",
-          text: "Sorry, I'm currently experiencing some issues. Please try again later.",
+          text: "I cannot reach the AI service right now. Please try again in a moment.",
           createdAt: new Date().toISOString(),
         };
-        setMessages((prev) => [...prev, botMessage]);
+        setMessagesBySession((prev) => ({
+          ...prev,
+          [selectedSession.id]: [
+            ...(prev[selectedSession.id] ?? []),
+            botMessage,
+          ],
+        }));
       } finally {
         setIsSending(false);
       }
     },
-    [inputValue],
+    [isSending, selectedSession],
   );
+
+  const handleSend = useCallback(
+    async (text?: string) => {
+      const content = (text ?? inputValue).trim();
+      if (!content) return;
+
+      if (!text) setInputValue("");
+      await sendMessageToAi(content, "chat");
+    },
+    [inputValue, sendMessageToAi],
+  );
+
+  const handleMicClick = useCallback(() => {
+    if (isSending || !selectedSession) return;
+
+    if (isListening) {
+      manualStopRef.current = true;
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const RecognitionCtor = getSpeechRecognitionCtor();
+    if (!RecognitionCtor) {
+      setMessagesBySession((prev) => ({
+        ...prev,
+        [selectedSession.id]: [
+          ...(prev[selectedSession.id] ?? []),
+          {
+            id: createId(),
+            sender: "bot",
+            text: "Speech recognition is not supported in this browser.",
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }));
+      return;
+    }
+
+    const recognition = new RecognitionCtor();
+    recognitionRef.current = recognition;
+    recognition.lang = "en-US";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    let finalTranscript = "";
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event: SpeechRecognitionEventLike) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        transcript += event.results[i][0].transcript;
+      }
+
+      finalTranscript = transcript.trim();
+      if (finalTranscript) {
+        setInputValue(finalTranscript);
+      }
+    };
+
+    recognition.onerror = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+
+      if (manualStopRef.current) {
+        manualStopRef.current = false;
+        return;
+      }
+
+      const spokenText = finalTranscript.trim();
+      if (!spokenText) return;
+
+      setInputValue("");
+      void sendMessageToAi(spokenText, "voice");
+    };
+
+    recognition.start();
+  }, [isListening, isSending, selectedSession, sendMessageToAi]);
 
   const handleQuickAction = (prompt: string) => {
     handleSend(prompt);
@@ -174,10 +527,24 @@ const AIAssistantPage: React.FC = () => {
       behavior: "smooth",
       block: "end",
     });
-  }, [messages, isSending]);
+  }, [selectedMessages, isSending]);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
 
   const renderMessage = (message: ChatMessage) => {
     const isUser = message.sender === "user";
+    const booking = getBookingCardData(message.reservation);
+    const bookingId =
+      toText(message.reservation?.id) ||
+      toText(message.reservation?.rawData?.reservationId);
+
     return (
       <div
         key={message.id}
@@ -186,26 +553,136 @@ const AIAssistantPage: React.FC = () => {
         <div
           className={`flex items-end gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}
         >
-          <Avatar
-            size={32}
-            style={{
-              backgroundColor: isUser ? "#ea580c" : "#fed7aa",
-              color: isUser ? "#ffffff" : "#9a3412",
-              fontSize: 12,
-            }}
-          >
-            {isUser ? userInitials : <RobotOutlined />}
-          </Avatar>
           <div
-            className={`max-w-[min(78vw,44rem)] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
+              isUser
+                ? "bg-orange-500 text-white"
+                : "bg-orange-100 text-orange-700"
+            }`}
+          >
+            {isUser ? userInitials : "AI"}
+          </div>
+          <div
+            className={`max-w-[85vw] sm:max-w-[70vw] xl:max-w-[44rem] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
               isUser
                 ? "rounded-br-md bg-orange-500 text-orange-50"
                 : "rounded-bl-md border border-orange-200 bg-white text-orange-900"
             }`}
           >
             <div>{message.text}</div>
+
+            {!isUser && (booking || message.reservationCreated) && (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-md hover:shadow-lg transition-shadow">
+                <div className="flex items-center justify-between gap-2 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-3 py-2.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-orange-700">
+                    Booking Details
+                  </p>
+                  <span
+                    className={`rounded-lg border px-2.5 py-1 text-[10px] font-semibold ${bookingStatusClass(
+                      booking?.status || "CREATED",
+                    )}`}
+                  >
+                    {booking?.status || "CREATED"}
+                  </span>
+                </div>
+
+                {booking ? (
+                  <div className="space-y-2.5 px-3 py-3 text-[12px] text-slate-700">
+                    <div className="sm:hidden rounded-xl border border-orange-100 bg-orange-50/50 px-3 py-2.5">
+                      <p className="font-bold text-slate-900">
+                        {booking.roomCode}
+                      </p>
+                      <p className="mt-1 text-[10px] text-slate-600">
+                        {booking.buildingName} · {booking.floorName}
+                      </p>
+                      <p className="mt-1.5 text-[10px] font-semibold text-slate-900">
+                        {booking.startTime} - {booking.endTime}
+                      </p>
+                    </div>
+
+                    <div className="hidden sm:grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                      <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-2.5">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-orange-600">
+                          Room
+                        </p>
+                        <p className="mt-1 font-semibold text-slate-900">
+                          {booking.roomCode}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-2.5">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-orange-600">
+                          Location
+                        </p>
+                        <p className="mt-1 font-semibold text-slate-900">
+                          {booking.buildingName} · {booking.floorName}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-2.5 sm:col-span-2">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-orange-600">
+                          Schedule
+                        </p>
+                        <p className="mt-1 font-semibold text-slate-900">
+                          {booking.startTime} - {booking.endTime}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-600">
+                        Purpose
+                      </p>
+                      <p className="mt-1 text-slate-900">{booking.purpose}</p>
+                    </div>
+
+                    {booking.attendeeCount && (
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5">
+                        <span className="inline-flex text-[10px] font-semibold text-blue-700">
+                          {booking.attendeeCount} attendees
+                        </span>
+                      </div>
+                    )}
+
+                    {booking.note && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5">
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-amber-700">
+                          Note
+                        </p>
+                        <p className="mt-1 text-amber-900">{booking.note}</p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      {bookingId && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              ROUTES.BOOKING_DETAIL.replace(
+                                ":bookingId",
+                                bookingId,
+                              ),
+                              { state: { booking: message.reservation } },
+                            )
+                          }
+                          className="rounded-lg border border-orange-500 bg-orange-500 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md"
+                        >
+                          View Details →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-3 py-2.5 text-xs text-orange-900">
+                    Reservation has been created successfully.
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="mt-2 flex items-center gap-1 text-[11px] opacity-70">
-              <ClockCircleOutlined />
+              <span>•</span>
               <span>{formatClock(message.createdAt)}</span>
             </div>
           </div>
@@ -214,278 +691,687 @@ const AIAssistantPage: React.FC = () => {
     );
   };
 
-  const handleBookNow = (suggestion: AiRoomSuggestion) => {
-    if (!suggestion.roomId) return;
-    navigate(ROUTES.BOOK_ROOM.replace(":roomId", suggestion.roomId));
+  const resolveSuggestionForNavigation = async (
+    suggestion: AiRoomSuggestion,
+  ) => {
+    let resolvedRoomId = toText(suggestion.roomId);
+    let resolvedRoomData: Record<string, unknown> | null = null;
+    let resolvedBuilding = "";
+    let resolvedFloor = "";
+
+    if (!resolvedRoomId) {
+      const code = toText(suggestion.locationCode).toLowerCase();
+      if (!code) return;
+
+      try {
+        const roomsMap = await roomService.getRoomsMap();
+        for (const building of roomsMap.buildingResponse || []) {
+          for (const floor of building.floors || []) {
+            const match = (floor.rooms || []).find((room) => {
+              const locationCode = toText(
+                (room as { locationCode?: string }).locationCode,
+              ).toLowerCase();
+              return locationCode === code;
+            });
+
+            if (match) {
+              resolvedRoomData = match as Record<string, unknown>;
+              resolvedRoomId = toText(
+                (match as { roomId?: string; id?: string }).roomId ||
+                  (match as { id?: string }).id,
+              );
+              resolvedBuilding = toText(building.buildingName);
+              resolvedFloor = toText(floor.floorName);
+              break;
+            }
+          }
+          if (resolvedRoomId) break;
+        }
+      } catch {
+        return;
+      }
+    }
+
+    if (!resolvedRoomId) return null;
+
+    try {
+      const detail = await roomService.getRoomDetail(resolvedRoomId);
+      if (detail && typeof detail === "object") {
+        resolvedRoomData = detail as Record<string, unknown>;
+      }
+    } catch {
+      // Fallback to map data if room detail is not available.
+    }
+
+    const source = resolvedRoomData || {};
+    const roomNode = toRecord(source.room);
+    const floorNode = toRecord(source.floor);
+    const buildingNode = toRecord(source.building);
+
+    const roomState = {
+      id: resolvedRoomId,
+      roomName:
+        toText(source.roomName) ||
+        toText(source.locationCode) ||
+        toText(roomNode?.roomName) ||
+        toText(roomNode?.locationCode) ||
+        toText(source.locationCode) ||
+        toText(suggestion.locationCode) ||
+        resolvedRoomId,
+      building:
+        toText(source.building) ||
+        toText(source.buildingName) ||
+        toText(roomNode?.buildingName) ||
+        toText(roomNode?.building) ||
+        toText(buildingNode?.name) ||
+        toText(buildingNode?.buildingName) ||
+        toText((buildingNode as Record<string, unknown> | null)?.code) ||
+        toText(suggestion.building) ||
+        resolvedBuilding,
+      floorInfo:
+        toText(source.floorInfo) ||
+        toText(source.floorName) ||
+        toText(source.floor) ||
+        toText(roomNode?.floorInfo) ||
+        toText(roomNode?.floorName) ||
+        toText(roomNode?.floor) ||
+        toText(floorNode?.name) ||
+        toText(floorNode?.floorName) ||
+        toText((floorNode as Record<string, unknown> | null)?.floorInfo) ||
+        toText(suggestion.floor) ||
+        resolvedFloor,
+      slot: toPositiveNumber(source.slot || source.capacity),
+      status:
+        String(
+          source.status || suggestion.status || "AVAILABLE",
+        ).toUpperCase() === "AVAILABLE"
+          ? "AVAILABLE"
+          : "OCCUPIED",
+    };
+
+    return {
+      roomId: resolvedRoomId,
+      roomState,
+    };
   };
 
-  const renderSuggestionCard = (s: AiRoomSuggestion) => {
+  const handleBookNow = async (suggestion: AiRoomSuggestion) => {
+    const resolved = await resolveSuggestionForNavigation(suggestion);
+    if (!resolved) return;
+
+    navigate(ROUTES.BOOK_ROOM.replace(":roomId", resolved.roomId), {
+      state: { room: resolved.roomState },
+    });
+  };
+
+  const handleViewDetails = async (suggestion: AiRoomSuggestion) => {
+    const resolved = await resolveSuggestionForNavigation(suggestion);
+    if (!resolved) return;
+
+    navigate(ROUTES.ROOM_DETAIL.replace(":roomId", resolved.roomId), {
+      state: { room: resolved.roomState },
+    });
+  };
+
+  const renderSuggestionCard = (s: AiRoomSuggestion, isFeatured = false) => {
+    const status = String(s.status || "").toUpperCase();
+
     return (
       <div
-        key={s.roomId}
-        className="mb-3 mr-3 flex min-w-[220px] max-w-xs flex-col justify-between rounded-2xl border border-orange-200/80 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+        key={`${s.roomId}-${s.locationCode}`}
+        className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 ${
+          isFeatured
+            ? "border-orange-300 ring-2 ring-orange-200 shadow-md hover:shadow-lg"
+            : "border-orange-100 hover:border-orange-200 hover:shadow-md"
+        }`}
       >
-        <div>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <Text strong>{s.locationCode || s.roomId}</Text>
-            <Tag
-              color={s.status === "AVAILABLE" ? "green" : "red"}
-              className="mr-0"
-            >
-              {s.status}
-            </Tag>
+        {isFeatured && (
+          <div className="flex items-center justify-center bg-gradient-to-r from-orange-50 to-amber-50 px-3 py-2">
+            <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-orange-700">
+              Best match for your request
+            </span>
           </div>
-          {typeof s.score === "number" && (
-            <div className="text-xs text-orange-700/80">
-              Match score: {s.score.toFixed(2)}
+        )}
+
+        {s.imageUrl && (
+          <button
+            type="button"
+            onClick={() => setPreviewImageUrl(s.imageUrl || null)}
+            className="relative block w-full overflow-hidden bg-gradient-to-br from-orange-100 to-amber-100"
+          >
+            <img
+              src={s.imageUrl}
+              alt={s.locationCode || s.roomId}
+              className="h-32 w-full object-cover transition-transform duration-300 hover:scale-105"
+              loading="lazy"
+            />
+          </button>
+        )}
+
+        <div className="p-3.5 sm:p-4">
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-sm font-bold text-slate-900">
+                {s.locationCode || s.roomId}
+              </h3>
+              {typeof s.score === "number" && (
+                <p className="mt-1 text-[11px] text-orange-600 font-medium">
+                  Match: {(s.score * 100).toFixed(0)}%
+                </p>
+              )}
+            </div>
+            <span
+              className={`shrink-0 rounded-lg border px-2.5 py-1 text-[10px] font-semibold ${
+                statusClass[status] ||
+                "border-slate-200 bg-slate-50 text-slate-700"
+              }`}
+            >
+              {status || "UNKNOWN"}
+            </span>
+          </div>
+
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            {/* Building */}
+            <div className="rounded-lg border border-orange-100 bg-orange-50/50 px-2 py-2">
+              <p className="text-[10px] font-semibold text-orange-600 uppercase tracking-wide">
+                Building
+              </p>
+              <p className="mt-1 truncate text-xs font-medium text-slate-900">
+                {s.building || "—"}
+              </p>
+            </div>
+
+            {/* Floor */}
+            <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-2 py-2">
+              <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">
+                Floor
+              </p>
+              <p className="mt-1 truncate text-xs font-medium text-slate-900">
+                {s.floor || "—"}
+              </p>
+            </div>
+
+            {/* Capacity */}
+            <div className="rounded-lg border border-sky-100 bg-sky-50/50 px-2 py-2">
+              <p className="text-[10px] font-semibold text-sky-600 uppercase tracking-wide">
+                Capacity
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-900">
+                {typeof s.capacity === "number" ? s.capacity : "—"}
+              </p>
+            </div>
+          </div>
+
+          {s.availableTimeSlots && s.availableTimeSlots.length > 0 && (
+            <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-2">
+              <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">
+                Available Time Slots
+              </p>
+              <p className="mt-1 text-xs text-emerald-900">
+                {s.availableTimeSlots.slice(0, 2).join(" • ")}
+              </p>
+            </div>
+          )}
+
+          {s.amenities && s.amenities.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-2 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">
+                Amenities
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {s.amenities.slice(0, 5).map((amenity) => (
+                  <span
+                    key={`${s.roomId}-${amenity}`}
+                    className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-medium text-orange-700"
+                  >
+                    • {amenity}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
         </div>
-        <div className="mt-4 flex gap-2">
-          <Button
-            type="primary"
-            size="small"
-            className="flex-1 border-orange-500 bg-orange-500"
+
+        <div className="flex gap-2 border-t border-orange-50 bg-gradient-to-r from-orange-50/40 to-amber-50/40 px-3.5 py-3 sm:px-4">
+          <button
+            type="button"
+            className="flex-1 rounded-lg border border-orange-200 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+            onClick={() => handleViewDetails(s)}
+          >
+            Details
+          </button>
+
+          <button
+            type="button"
+            className="flex-1 rounded-lg border border-orange-500 bg-orange-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md"
             onClick={() => handleBookNow(s)}
           >
-            Book Now
-          </Button>
-          <Button
-            size="small"
-            className="flex-1 border-orange-200 text-orange-700"
-            ghost
-          >
-            Quick Reserve
-          </Button>
+            Book Now →
+          </button>
         </div>
       </div>
     );
   };
 
-  const suggestions = latestBotMessage?.suggestions || [];
+  const suggestions = latestSuggestionMessage?.suggestions || [];
+  const isSingleSuggestion = suggestions.length === 1;
+
+  const handleSelectSession = (sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    setIsMobileHistoryOpen(false);
+  };
 
   const handleNewChat = () => {
     const id = createId();
     const now = new Date().toISOString();
     const newSession: ChatSessionSummary = {
       id,
-      title: "New Chat",
-      subtitle: "Start a new conversation",
+      title: "New Conversation",
+      subtitle: "Start chatting with UniBot",
       createdAt: now,
     };
     setSessions((prev) => [newSession, ...prev]);
     setSelectedSessionId(id);
-    setMessages([]);
+    setMessagesBySession((prev) => ({
+      ...prev,
+      [id]: [createWelcomeMessage()],
+    }));
+    setInputValue("");
+    setIsMobileHistoryOpen(false);
   };
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-orange-200/80 bg-gradient-to-br from-orange-50 via-amber-50/50 to-white p-4 sm:p-6">
-      <div className="pointer-events-none absolute -top-20 -left-20 h-56 w-56 rounded-full bg-orange-200/45 blur-3xl" />
-      <div className="pointer-events-none absolute -right-16 -bottom-16 h-52 w-52 rounded-full bg-amber-200/45 blur-3xl" />
+    <section className="relative overflow-hidden rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-amber-50 to-white p-3 sm:p-6">
+      <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-orange-200/45 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-12 right-10 h-48 w-48 rounded-full bg-amber-200/50 blur-3xl" />
 
-      <div className="relative grid grid-cols-1 gap-5 xl:grid-cols-12">
-        {/* Left: History */}
-        <div className="xl:col-span-4 2xl:col-span-3">
-          <div className="flex h-full flex-col rounded-3xl border border-orange-200/70 bg-white/90 p-4 shadow-sm backdrop-blur sm:p-5">
-            <div className="mb-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-orange-900">
-                  History
+      <div className="relative grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-12">
+        <aside className="hidden xl:col-span-4 xl:block 2xl:col-span-3">
+          <div className="flex max-h-[280px] min-h-0 flex-col rounded-2xl border border-orange-200 bg-white/90 p-4 shadow-sm backdrop-blur-sm sm:max-h-[340px] sm:p-5 xl:max-h-none xl:min-h-[620px]">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-orange-700">
+                  Conversations
                 </h2>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={handleNewChat}
-                  className="text-orange-700"
-                />
+                <p className="text-xs text-orange-500">UniBot History</p>
               </div>
-              <Input.Search
-                placeholder="Search chats..."
-                size="middle"
-                className="rounded-xl"
-              />
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="rounded-lg border border-orange-200 px-3 py-1.5 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+              >
+                New Chat
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto pr-1">
-              {sessions.length === 0 ? (
-                <Empty
-                  description="No conversations yet"
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                />
-              ) : (
-                sessions.map((s) => (
+            <div className="space-y-2 overflow-y-auto pr-1">
+              {sessions.map((session) => {
+                const active = session.id === selectedSessionId;
+                return (
                   <button
-                    key={s.id}
+                    key={session.id}
                     type="button"
-                    className={`mb-2.5 w-full rounded-2xl border px-3 py-2.5 text-left transition ${
-                      s.id === selectedSessionId
-                        ? "border-orange-500 bg-orange-500 text-orange-50 shadow"
+                    onClick={() => handleSelectSession(session.id)}
+                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
+                      active
+                        ? "border-orange-500 bg-orange-500 text-white shadow"
                         : "border-orange-200 bg-white hover:border-orange-300 hover:bg-orange-50"
                     }`}
-                    onClick={() => setSelectedSessionId(s.id)}
                   >
                     <div className="truncate text-sm font-semibold">
-                      {s.title}
+                      {session.title}
                     </div>
                     <div
-                      className={`truncate text-xs ${
-                        s.id === selectedSessionId
-                          ? "text-orange-100/85"
-                          : "text-orange-700/75"
+                      className={`mt-1 truncate text-xs ${
+                        active ? "text-orange-50/85" : "text-orange-700/80"
                       }`}
                     >
-                      {s.subtitle}
+                      {session.subtitle}
                     </div>
                     <div
                       className={`mt-1 text-[11px] ${
-                        s.id === selectedSessionId
-                          ? "text-orange-100/70"
-                          : "text-orange-700/60"
+                        active ? "text-orange-100/80" : "text-orange-500"
                       }`}
                     >
-                      {formatDate(s.createdAt)}
+                      {formatDate(session.createdAt)}
                     </div>
                   </button>
-                ))
-              )}
+                );
+              })}
             </div>
           </div>
-        </div>
+        </aside>
 
-        {/* Right: Chat area */}
-        <div className="xl:col-span-8 2xl:col-span-9">
-          <div className="flex h-[72vh] min-h-[560px] flex-col overflow-hidden rounded-3xl border border-orange-200/80 bg-white/90 p-4 shadow-sm backdrop-blur sm:p-5">
-            {/* Top: current summary */}
-            {selectedSession && (
-              <div className="mb-4 rounded-2xl border border-orange-200 bg-orange-50/70 px-4 py-3">
-                <div className="mb-1 flex items-center gap-2">
-                  <RobotOutlined className="text-orange-700" />
-                  <h2 className="text-base font-semibold text-orange-900">
-                    AI Assistant
-                  </h2>
+        <main className="xl:col-span-8 2xl:col-span-9">
+          <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-2xl border border-orange-200 bg-white/95 shadow-sm sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px]">
+            <header className="border-b border-orange-100 bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-4 text-white sm:px-6">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-lg font-semibold">AI Assistant</h1>
                 </div>
-                <p className="text-xs text-orange-700/80">
-                  Ask for room suggestions, available slots, and booking
-                  guidance.
-                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileHistoryOpen(true)}
+                    className="rounded-full border border-white/35 bg-white/15 px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-white/20 xl:hidden"
+                  >
+                    Conversations
+                  </button>
+                  <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[11px] font-medium">
+                    {selectedSession?.aiSessionId
+                      ? "Session Synced"
+                      : "New Session"}
+                  </span>
+                </div>
               </div>
-            )}
+            </header>
 
-            {/* Messages */}
-            <div className="mb-4 flex-1 overflow-y-auto pr-2">
-              {messages.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-orange-300 bg-orange-50/60 p-6 text-center">
-                  <RobotOutlined className="mb-2 text-xl text-orange-400" />
-                  <p className="text-sm text-orange-700/80">
-                    Start by telling the assistant what kind of room you need.
-                  </p>
-                </div>
-              ) : (
-                messages.map((m) => renderMessage(m))
-              )}
+            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-orange-50/40 px-4 py-5 sm:px-6">
+              {selectedMessages.map((message) => renderMessage(message))}
+
               {isSending && (
-                <div className="mb-4 flex justify-start">
-                  <div className="flex flex-row items-end gap-3">
-                    <Avatar
-                      size={32}
-                      style={{
-                        backgroundColor: "#fed7aa",
-                        color: "#9a3412",
-                        fontSize: 12,
-                      }}
-                    >
-                      <RobotOutlined />
-                    </Avatar>
-                    <div className="max-w-xs rounded-2xl rounded-bl-md border border-orange-200 bg-white px-4 py-2 text-sm leading-relaxed text-orange-900 shadow-sm">
-                      <span className="typing-dots">
-                        <span />
-                        <span />
-                        <span />
-                      </span>
+                <div className="mb-5 flex justify-start">
+                  <div className="flex items-end gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">
+                      AI
+                    </div>
+                    <div className="rounded-2xl rounded-bl-md border border-orange-200 bg-white px-4 py-2 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-orange-500">
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-orange-400" />
+                        <span
+                          className="h-1.5 w-1.5 animate-bounce rounded-full bg-orange-400"
+                          style={{ animationDelay: "0.1s" }}
+                        />
+                        <span
+                          className="h-1.5 w-1.5 animate-bounce rounded-full bg-orange-400"
+                          style={{ animationDelay: "0.2s" }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
+
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Suggestions list */}
-            {suggestions.length > 0 && (
-              <div className="mb-4 rounded-2xl border border-orange-200 bg-orange-50/60 p-3.5">
-                <Text strong className="mb-2 block text-orange-900">
-                  Suggested rooms
-                </Text>
-                <div className="flex flex-wrap">
-                  {suggestions.map((s) => renderSuggestionCard(s))}
+            {isSuggestionsVisible && (
+              <div className="border-t border-orange-100 bg-gradient-to-br from-orange-50 via-amber-50/30 to-white px-4 py-4 sm:px-6">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">
+                      Suggested Rooms
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDismissedSuggestionMessageId(
+                        latestSuggestionMessage?.id ?? null,
+                      )
+                    }
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-orange-200 text-sm font-semibold text-orange-600 transition hover:border-orange-300 hover:bg-orange-50"
+                    aria-label="Close suggested rooms"
+                  >
+                    ×
+                  </button>
                 </div>
+
+                <div className="max-h-[16rem] space-y-2.5 overflow-y-auto pr-1">
+                  {isSingleSuggestion && (
+                    <div className="mb-2">
+                      {renderSuggestionCard(suggestions[0], true)}
+                    </div>
+                  )}
+
+                  {(isSingleSuggestion
+                    ? suggestions.slice(1)
+                    : suggestions
+                  ).map((s) => renderSuggestionCard(s))}
+                </div>
+
+                {suggestions.length > 3 && (
+                  <p className="mt-3 flex items-center justify-center text-[10px] font-medium text-orange-600/80">
+                    Scroll to view more suggestions
+                  </p>
+                )}
               </div>
             )}
 
-            {/* Quick actions */}
-            <div className="mb-3 flex flex-wrap gap-2">
-              <Button
-                size="small"
-                className="rounded-full border-orange-200 bg-white text-orange-800 hover:border-orange-300 hover:text-orange-900"
-                onClick={() =>
-                  handleQuickAction("Check lab availability for this afternoon")
-                }
+            <div className="sticky bottom-0 z-10 border-t border-orange-100 bg-white px-4 py-3 sm:px-6">
+              <div className="mb-3 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickAction(
+                      "Suggest available rooms for 10 people this afternoon",
+                    )
+                  }
+                  className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+                >
+                  Suggest rooms
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickAction(
+                      "I want to reserve a room from 14:00 to 15:00 for 6 people",
+                    )
+                  }
+                  className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+                >
+                  Quick reserve
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickAction(
+                      "Guide me through booking a meeting room in this system",
+                    )
+                  }
+                  className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+                >
+                  Booking guide
+                </button>
+              </div>
+
+              <div className="flex items-end gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-2.5">
+                <textarea
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  placeholder="Type your message for UniBot..."
+                  rows={1}
+                  className="max-h-28 min-h-10 flex-1 resize-y border-none bg-transparent text-sm text-orange-950 outline-none placeholder:text-orange-400"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleMicClick}
+                  disabled={isSending}
+                  title={isListening ? "Stop recording" : "Speech to text"}
+                  className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-1 ${
+                    isListening
+                      ? "border-red-400 bg-gradient-to-b from-red-500 to-rose-600 text-white shadow-md shadow-red-200"
+                      : "border-orange-200 bg-gradient-to-b from-white to-orange-50 text-orange-700 shadow-sm hover:-translate-y-0.5 hover:border-orange-300 hover:shadow"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  {isListening && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="absolute -inset-1 animate-pulse rounded-2xl border border-red-300"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="absolute h-3 w-3 animate-ping rounded-full bg-red-200"
+                      />
+                    </>
+                  )}
+                  {isListening ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden="true"
+                      className="relative z-10 h-5 w-5"
+                    >
+                      <rect
+                        x="7"
+                        y="7"
+                        width="10"
+                        height="10"
+                        rx="2"
+                        className="fill-current"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden="true"
+                      className="relative z-10 h-5 w-5"
+                    >
+                      <path
+                        d="M12 3.75a3 3 0 0 0-3 3v5.25a3 3 0 0 0 6 0V6.75a3 3 0 0 0-3-3Z"
+                        className="fill-current"
+                      />
+                      <path
+                        d="M5.25 10.5a.75.75 0 0 1 .75.75V12a6 6 0 0 0 12 0v-.75a.75.75 0 0 1 1.5 0V12a7.5 7.5 0 0 1-6.75 7.46V21a.75.75 0 0 1-1.5 0v-1.54A7.5 7.5 0 0 1 4.5 12v-.75a.75.75 0 0 1 .75-.75Z"
+                        className="fill-current"
+                      />
+                    </svg>
+                  )}
+                  <span className="sr-only">
+                    {isListening ? "Stop recording" : "Start voice input"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSend()}
+                  disabled={isSending || !inputValue.trim()}
+                  className="inline-flex h-10 items-center rounded-xl bg-orange-500 px-4 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
+                >
+                  {isSending ? "Sending..." : "Send"}
+                </button>
+              </div>
+
+              {isListening && (
+                <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-red-600">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                  Listening... Speak now.
+                </p>
+              )}
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {isMobileHistoryOpen && (
+        <div className="fixed inset-0 z-[70] bg-slate-950/40 backdrop-blur-[1px] xl:hidden">
+          <button
+            type="button"
+            onClick={() => setIsMobileHistoryOpen(false)}
+            className="absolute inset-0 h-full w-full"
+            aria-label="Close conversations panel"
+          />
+
+          <div className="absolute inset-y-0 left-0 w-[86vw] max-w-sm border-r border-orange-200 bg-white p-4 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-orange-700">
+                  Conversations
+                </h2>
+                <p className="text-xs text-orange-500">UniBot History</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileHistoryOpen(false)}
+                className="rounded-lg border border-orange-200 px-2.5 py-1 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
               >
-                Check Lab availability
-              </Button>
-              <Button
-                size="small"
-                className="rounded-full border-orange-200 bg-white text-orange-800 hover:border-orange-300 hover:text-orange-900"
-                onClick={() =>
-                  handleQuickAction(
-                    "Show me available rooms in the Epsilon building",
-                  )
-                }
-              >
-                Show me map of Epsilon
-              </Button>
-              <Button
-                size="small"
-                className="rounded-full border-orange-200 bg-white text-orange-800 hover:border-orange-300 hover:text-orange-900"
-                onClick={() =>
-                  handleQuickAction(
-                    "How do I book a group study room for 5 people?",
-                  )
-                }
-              >
-                How to book for a group?
-              </Button>
+                Close
+              </button>
             </div>
 
-            {/* Input bar */}
-            <div className="flex items-end gap-3 rounded-2xl border border-orange-200 bg-orange-50/70 p-2.5">
-              <Input.TextArea
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onPressEnter={(e) => {
-                  if (!e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                autoSize={{ minRows: 1, maxRows: 3 }}
-                placeholder="Type a message to find rooms..."
-                className="border-none bg-transparent shadow-none"
-              />
-              <Button
-                type="primary"
-                shape="circle"
-                icon={<SendOutlined />}
-                loading={isSending}
-                onClick={() => handleSend()}
-                className="h-10 w-10 shrink-0 border-orange-500 bg-orange-500"
-              />
+            <button
+              type="button"
+              onClick={handleNewChat}
+              className="mb-3 w-full rounded-lg border border-orange-200 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+            >
+              New Chat
+            </button>
+
+            <div className="max-h-[calc(100vh-11rem)] space-y-2 overflow-y-auto pr-1">
+              {sessions.map((session) => {
+                const active = session.id === selectedSessionId;
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => handleSelectSession(session.id)}
+                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
+                      active
+                        ? "border-orange-500 bg-orange-500 text-white shadow"
+                        : "border-orange-200 bg-white hover:border-orange-300 hover:bg-orange-50"
+                    }`}
+                  >
+                    <div className="truncate text-sm font-semibold">
+                      {session.title}
+                    </div>
+                    <div
+                      className={`mt-1 truncate text-xs ${
+                        active ? "text-orange-50/85" : "text-orange-700/80"
+                      }`}
+                    >
+                      {session.subtitle}
+                    </div>
+                    <div
+                      className={`mt-1 text-[11px] ${
+                        active ? "text-orange-100/80" : "text-orange-500"
+                      }`}
+                    >
+                      {formatDate(session.createdAt)}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      )}
+
+      {previewImageUrl && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 p-4">
+          <button
+            type="button"
+            onClick={() => setPreviewImageUrl(null)}
+            className="absolute inset-0"
+            aria-label="Close image preview"
+          />
+          <div className="relative z-10 w-full max-w-4xl rounded-2xl bg-white p-2 shadow-2xl">
+            <img
+              src={previewImageUrl}
+              alt="Room preview"
+              className="max-h-[80vh] w-full rounded-xl object-contain"
+            />
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPreviewImageUrl(null)}
+                className="rounded-lg border border-orange-200 px-3 py-1.5 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 };
-
 export default AIAssistantPage;

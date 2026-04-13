@@ -4,6 +4,7 @@ import { Alert, Pagination, Rate, message } from "antd";
 import { TagIcon, ClockIcon } from "@heroicons/react/24/outline";
 import {
   roomService,
+  type RoomAcademicScheduleItem,
   type RoomsMapBuilding,
   type RoomStatusItem,
 } from "../../services/roomService";
@@ -110,6 +111,36 @@ const formatCheckInDateTime = (value?: string | null) => {
   return `${day}/${month}/${year} ${hour}:${minute}:${second}`;
 };
 
+const formatScheduleTime = (value?: string | null) => {
+  if (!value) return "N/A";
+  const raw = String(value).trim();
+  if (!raw) return "N/A";
+  return raw.length >= 5 ? raw.slice(0, 5) : raw;
+};
+
+const formatScheduleDate = (value?: string | null) => {
+  if (!value) return "N/A";
+  const parsed = new Date(String(value));
+
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value);
+  }
+
+  const day = String(parsed.getDate()).padStart(2, "0");
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const year = parsed.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const formatScheduleDays = (value?: string | null) => {
+  if (!value) return "N/A";
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(", ");
+};
+
 const ROOM_LAYOUT_STORAGE_KEY = "room-map-layout-order";
 const FEEDBACK_PAGE_SIZE = 5;
 
@@ -194,6 +225,13 @@ const RoomMapPage: React.FC = () => {
   const [roomDetail, setRoomDetail] = useState<RoomDetail | null>(null);
   const [roomDetailLoading, setRoomDetailLoading] = useState(false);
   const [roomDetailError, setRoomDetailError] = useState<string | null>(null);
+  const [roomSchedules, setRoomSchedules] = useState<
+    RoomAcademicScheduleItem[]
+  >([]);
+  const [roomSchedulesLoading, setRoomSchedulesLoading] = useState(false);
+  const [roomSchedulesError, setRoomSchedulesError] = useState<string | null>(
+    null,
+  );
   const [roomFeedbacks, setRoomFeedbacks] = useState<RoomFeedbackItem[]>([]);
   const [roomFeedbackTotal, setRoomFeedbackTotal] = useState(0);
   const [roomFeedbackPage, setRoomFeedbackPage] = useState(1);
@@ -710,6 +748,9 @@ const RoomMapPage: React.FC = () => {
     setRoomDetail(null);
     setRoomDetailError(null);
     setRoomDetailLoading(true);
+    setRoomSchedules([]);
+    setRoomSchedulesError(null);
+    setRoomSchedulesLoading(true);
     setRoomFeedbacks([]);
     setRoomFeedbackTotal(0);
     setRoomFeedbackPage(1);
@@ -717,6 +758,7 @@ const RoomMapPage: React.FC = () => {
 
     if (!normalizedRoomId) {
       setRoomDetailLoading(false);
+      setRoomSchedulesLoading(false);
       setRoomDetailError(
         "Cannot load room details because room id is missing from map data.",
       );
@@ -735,12 +777,26 @@ const RoomMapPage: React.FC = () => {
     } finally {
       setRoomDetailLoading(false);
     }
+
+    try {
+      const schedules =
+        await roomService.getAcademicSchedulesByRoom(normalizedRoomId);
+      setRoomSchedules(schedules);
+    } catch (e: unknown) {
+      setRoomSchedulesError(extractApiMessage(e, "Unable to load schedules"));
+      setRoomSchedules([]);
+    } finally {
+      setRoomSchedulesLoading(false);
+    }
   };
 
   useEffect(() => {
     const roomId = selectedRoom?.roomId;
 
     if (!roomId) {
+      setRoomSchedules([]);
+      setRoomSchedulesError(null);
+      setRoomSchedulesLoading(false);
       setRoomFeedbacks([]);
       setRoomFeedbackTotal(0);
       setRoomFeedbackError(null);
@@ -1461,6 +1517,56 @@ const RoomMapPage: React.FC = () => {
                       {formatCheckInDateTime(roomDetail.checkInTime)}
                     </div>
                   </div>
+
+                  {roomSchedulesLoading && (
+                    <div className="text-xs text-slate-500">
+                      Loading room schedule...
+                    </div>
+                  )}
+
+                  {!roomSchedulesLoading && roomSchedulesError && (
+                    <div className="text-xs text-rose-500">
+                      {roomSchedulesError}
+                    </div>
+                  )}
+
+                  {!roomSchedulesLoading && roomSchedules.length > 0 && (
+                    <div className="text-xs">
+                      <div className="mb-1 text-[11px] text-slate-500">
+                        Schedule
+                      </div>
+                      <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                        {roomSchedules.slice(0, 4).map((schedule) => (
+                          <div
+                            key={schedule.id}
+                            className="rounded-xl border border-orange-100 bg-orange-50/60 px-3 py-2"
+                          >
+                            <div className="text-[11px] font-semibold text-orange-700">
+                              {formatScheduleDays(schedule.daysOfWeek)}
+                            </div>
+                            <div className="mt-0.5 text-[11px] text-slate-700">
+                              {formatScheduleTime(schedule.startTime)} -{" "}
+                              {formatScheduleTime(schedule.endTime)}
+                            </div>
+                            <div className="mt-0.5 text-[10px] text-slate-500">
+                              {formatScheduleDate(schedule.fromDate)} -{" "}
+                              {formatScheduleDate(schedule.toDate)}
+                            </div>
+                            {schedule.description && (
+                              <div className="mt-1 text-[10px] text-slate-600">
+                                {schedule.description}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {roomSchedules.length > 4 && (
+                          <div className="text-[10px] text-slate-500">
+                            +{roomSchedules.length - 4} more schedule entries
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {roomDetail.amenities && roomDetail.amenities.length > 0 && (
                     <div className="text-xs">

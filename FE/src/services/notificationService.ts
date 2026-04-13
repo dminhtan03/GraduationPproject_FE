@@ -9,8 +9,8 @@ export interface NotificationApiItem {
   isRead?: boolean;
   read?: boolean;
   createdAt?: string;
-  reservationId?: string;
-  ReservationId?: string;
+  reservationId?: string | number;
+  ReservationId?: string | number;
   reservationStatusAtNow?: string;
 }
 
