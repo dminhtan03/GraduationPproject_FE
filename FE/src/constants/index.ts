@@ -44,6 +44,7 @@ export const ROUTES = {
 // LocalStorage keys
 export const STORAGE_KEYS = {
   USER_TOKEN: "user_token",
+  REFRESH_TOKEN: "refresh_token",
   THEME: "app_theme",
   LANGUAGE: "app_language",
   FORCED_PASSWORD_CHANGE: "force_password_change",

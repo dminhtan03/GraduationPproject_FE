@@ -14,36 +14,15 @@ import {
   BasicMessageResponse,
 } from "../types/api";
 import { API_ENDPOINTS } from "../constants/endpoints";
-import { AUTH_EVENTS, ROUTES, STORAGE_KEYS } from "../constants";
-
-// Max-age cho refresh token trong cookie: 7 ngày (theo BE 604800000 ms)
-const REFRESH_TOKEN_MAX_AGE_SECONDS = 7 * 24 * 60 * 60; // 604800
-
-const setRefreshTokenCookie = (refreshToken: string) => {
-  const secureFlag =
-    typeof window !== "undefined" && window.location.protocol === "https:"
-      ? "; secure"
-      : "";
-
-  document.cookie = `refresh_token=${encodeURIComponent(
-    refreshToken,
-  )}; path=/; max-age=${REFRESH_TOKEN_MAX_AGE_SECONDS}; samesite=lax${secureFlag}`;
-};
-
-const clearRefreshTokenCookie = () => {
-  const secureFlag =
-    typeof window !== "undefined" && window.location.protocol === "https:"
-      ? "; secure"
-      : "";
-
-  document.cookie = `refresh_token=; path=/; max-age=0; samesite=lax${secureFlag}`;
-};
-
-const getRefreshTokenFromCookie = (): string | null => {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(/(?:^|; )refresh_token=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
-};
+import { AUTH_EVENTS, ROUTES } from "../constants";
+import {
+  clearAccessToken,
+  clearRefreshToken,
+  getAccessToken,
+  getRefreshToken,
+  persistRefreshToken,
+  setAccessToken,
+} from "./authTokenStorage";
 
 const emitAuthTokenChanged = () => {
   if (typeof window === "undefined") return;
@@ -99,7 +78,8 @@ const extractUserFromToken = (accessToken: string | undefined): User | null => {
     role,
     roles: roles.length ? roles : undefined,
     cancellationCount: 0,
-    bookingLockedUntil: new Date(0),
+    // Keep Redux auth state serializable by storing ISO string instead of Date object.
+    bookingLockedUntil: new Date(0).toISOString(),
   };
 };
 
@@ -121,10 +101,9 @@ export const loginWithEmail = async (
   if (accessToken) {
     localStorage.removeItem("user");
     localStorage.removeItem("user_data");
-    localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    // Save refresh token in cookie for auto-refresh flow
+    setAccessToken(accessToken);
     if (refreshToken) {
-      setRefreshTokenCookie(refreshToken);
+      persistRefreshToken(refreshToken);
     }
     emitAuthTokenChanged();
   }
@@ -156,10 +135,9 @@ export const loginWithGoogle = async (
   if (accessToken) {
     localStorage.removeItem("user");
     localStorage.removeItem("user_data");
-    localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    // Save refresh token in cookie for auto-refresh flow
+    setAccessToken(accessToken);
     if (refreshToken) {
-      setRefreshTokenCookie(refreshToken);
+      persistRefreshToken(refreshToken);
     }
     emitAuthTokenChanged();
   }
@@ -183,8 +161,8 @@ export const logout = async (): Promise<void> => {
   try {
     await api.post(API_ENDPOINTS.AUTH.LOGOUT);
   } finally {
-    localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
-    clearRefreshTokenCookie();
+    clearAccessToken();
+    clearRefreshToken();
     localStorage.removeItem("user");
     localStorage.removeItem("user_data");
     emitAuthTokenChanged();
@@ -217,10 +195,10 @@ export const isAdminUser = (user: User | null): boolean => {
 };
 
 export const getCurrentUser = (): User | null => {
-  const token = localStorage.getItem(STORAGE_KEYS.USER_TOKEN);
+  const token = getAccessToken();
   const user = extractUserFromToken(token || undefined);
   if (!user && token) {
-    localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
+    clearAccessToken();
   }
   return user;
 };
@@ -231,7 +209,7 @@ export const getCurrentUser = (): User | null => {
  * - Nếu không có access token nhưng còn refresh cookie, gọi refresh để lấy token mới
  */
 export const restoreSession = async (): Promise<User | null> => {
-  const storedAccessToken = localStorage.getItem(STORAGE_KEYS.USER_TOKEN);
+  const storedAccessToken = getAccessToken();
   const userFromStoredToken = extractUserFromToken(
     storedAccessToken || undefined,
   );
@@ -239,7 +217,7 @@ export const restoreSession = async (): Promise<User | null> => {
     return userFromStoredToken;
   }
 
-  const refreshToken = getRefreshTokenFromCookie();
+  const refreshToken = getRefreshToken();
   if (!refreshToken) {
     return null;
   }
@@ -265,16 +243,17 @@ export const restoreSession = async (): Promise<User | null> => {
       return null;
     }
 
-    localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
+    setAccessToken(accessToken);
     if (newRefreshToken) {
-      setRefreshTokenCookie(newRefreshToken);
+      persistRefreshToken(newRefreshToken);
     }
 
     emitAuthTokenChanged();
 
     return extractUserFromToken(accessToken);
   } catch {
-    localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
+    clearAccessToken();
+    clearRefreshToken();
     emitAuthTokenChanged();
     return null;
   }

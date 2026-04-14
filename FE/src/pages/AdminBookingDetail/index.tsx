@@ -13,6 +13,8 @@ import {
 } from "@heroicons/react/24/outline";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
 import { ROUTES } from "../../constants";
+import { API_ENDPOINTS } from "../../constants/endpoints";
+import { api } from "../../services/api";
 import { logout } from "../../services/authService";
 import { reservationService } from "../../services/reservationService";
 import { roomService } from "../../services/roomService";
@@ -184,13 +186,22 @@ const AdminBookingDetailPage: React.FC = () => {
 
   const loadAdminProfile = async () => {
     try {
-      const response = await fetch("/api/v1/auth/profile");
-      if (!response.ok) {
-        setAdminName("Admin User");
-        return;
-      }
+      const response = await api.get<
+        | {
+            data?: {
+              firstName?: string;
+              lastName?: string;
+            };
+            firstName?: string;
+            lastName?: string;
+          }
+        | {
+            firstName?: string;
+            lastName?: string;
+          }
+      >(API_ENDPOINTS.AUTH.PROFILE);
 
-      const payload = (await response.json()) as {
+      const payload = response.data as {
         data?: {
           firstName?: string;
           lastName?: string;

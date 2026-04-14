@@ -31,7 +31,17 @@ function AnimatedDropdown<T extends string>({
   ariaLabel,
 }: AnimatedDropdownProps<T>) {
   const [isOpen, setIsOpen] = React.useState(false);
+  const [isSelecting, setIsSelecting] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const selectingTimerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (selectingTimerRef.current != null) {
+        window.clearTimeout(selectingTimerRef.current);
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -76,6 +86,7 @@ function AnimatedDropdown<T extends string>({
           "flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition",
           "focus-visible:border-orange-400 focus-visible:ring-2 focus-visible:ring-orange-100",
           "disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500",
+          isSelecting ? "border-orange-300 bg-orange-50/80" : "",
           buttonClassName,
         ].join(" ")}
       >
@@ -87,14 +98,14 @@ function AnimatedDropdown<T extends string>({
 
       <div
         className={[
-          "absolute left-0 right-0 z-40 mt-2 origin-top rounded-xl border border-slate-200 bg-white p-1 shadow-lg transition-all duration-200",
+          "absolute left-0 right-0 z-40 mt-2 max-h-60 overflow-y-auto origin-top rounded-xl border border-slate-200 bg-white p-1 shadow-lg transition-all duration-200",
           isOpen
             ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
             : "pointer-events-none -translate-y-1 scale-95 opacity-0",
           menuClassName,
         ].join(" ")}
       >
-        <ul role="listbox" className="max-h-60 overflow-auto py-1">
+        <ul role="listbox" className="py-1">
           {options.map((option) => {
             const isSelected = option.value === value;
             return (
@@ -107,10 +118,17 @@ function AnimatedDropdown<T extends string>({
                   onClick={() => {
                     if (option.disabled) return;
                     onChange(option.value);
+                    setIsSelecting(true);
+                    if (selectingTimerRef.current != null) {
+                      window.clearTimeout(selectingTimerRef.current);
+                    }
+                    selectingTimerRef.current = window.setTimeout(() => {
+                      setIsSelecting(false);
+                    }, 220);
                     setIsOpen(false);
                   }}
                   className={[
-                    "flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition",
+                    "flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition active:scale-[0.98]",
                     isSelected
                       ? "bg-orange-50 text-orange-700"
                       : "text-slate-700 hover:bg-slate-50",

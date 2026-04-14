@@ -18,7 +18,6 @@ import {
   buildDateTime,
   clampToRange,
   getCurrentTimeRange,
-  getTimeOptionStyle,
   normalizeLocalDateTime,
   toDateInputValue,
   toTotalMinutes,
@@ -142,6 +141,66 @@ const DashboardPage: React.FC = () => {
     startHour,
     startMinute,
   ]);
+
+  const minEndHourValue = useMemo(
+    () => String(Math.floor(minEndMinutes / 60)).padStart(2, "0"),
+    [minEndMinutes],
+  );
+
+  const startHourDropdownOptions = useMemo<
+    Array<AnimatedDropdownOption<string>>
+  >(
+    () =>
+      HOUR_OPTIONS.map((hour) => ({
+        value: hour.value,
+        label: `${hour.value}h`,
+        disabled:
+          startDate === nowParts.date &&
+          Number(hour.value) * 60 < minStartMinutes,
+      })),
+    [minStartMinutes, nowParts.date, startDate],
+  );
+
+  const startMinuteDropdownOptions = useMemo<
+    Array<AnimatedDropdownOption<string>>
+  >(
+    () =>
+      MINUTE_OPTIONS.map((minute) => ({
+        value: minute,
+        label: `${minute}m`,
+        disabled:
+          startDate === nowParts.date &&
+          startHour === nowParts.hour &&
+          Number(minute) < Number(nowParts.minute),
+      })),
+    [nowParts.date, nowParts.hour, nowParts.minute, startDate, startHour],
+  );
+
+  const endHourDropdownOptions = useMemo<Array<AnimatedDropdownOption<string>>>(
+    () =>
+      HOUR_OPTIONS.map((hour) => ({
+        value: hour.value,
+        label: `${hour.value}h`,
+        disabled:
+          endDate === minEndDate && Number(hour.value) * 60 < minEndMinutes,
+      })),
+    [endDate, minEndDate, minEndMinutes],
+  );
+
+  const endMinuteDropdownOptions = useMemo<
+    Array<AnimatedDropdownOption<string>>
+  >(
+    () =>
+      MINUTE_OPTIONS.map((minute) => ({
+        value: minute,
+        label: `${minute}m`,
+        disabled:
+          endDate === minEndDate &&
+          endHour === minEndHourValue &&
+          Number(minute) < minEndMinutes % 60,
+      })),
+    [endDate, endHour, minEndDate, minEndHourValue, minEndMinutes],
+  );
 
   useEffect(() => {
     if (startDate < nowParts.date) {
@@ -610,57 +669,30 @@ const DashboardPage: React.FC = () => {
                   }}
                 />
               </div>
-              <select
+              <AnimatedDropdown<string>
                 value={startHour}
-                onChange={(e) => {
-                  setStartHour(e.target.value);
+                options={startHourDropdownOptions}
+                onChange={(nextValue) => {
+                  setStartHour(nextValue);
                   setPage(0);
                 }}
-                className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {HOUR_OPTIONS.map((hour) => {
-                  const isDisabled =
-                    startDate === nowParts.date &&
-                    Number(hour.value) * 60 < minStartMinutes;
-
-                  return (
-                    <option
-                      key={hour.value}
-                      value={hour.value}
-                      disabled={isDisabled}
-                      style={getTimeOptionStyle(isDisabled)}
-                    >
-                      {hour.label}
-                    </option>
-                  );
-                })}
-              </select>
-              <select
+                buttonClassName="h-[40px] border-gray-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                menuClassName="max-h-56 overflow-y-auto"
+                optionClassName="text-xs tabular-nums"
+                ariaLabel="Select start hour"
+              />
+              <AnimatedDropdown<string>
                 value={startMinute}
-                onChange={(e) => {
-                  setStartMinute(e.target.value);
+                options={startMinuteDropdownOptions}
+                onChange={(nextValue) => {
+                  setStartMinute(nextValue);
                   setPage(0);
                 }}
-                className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {MINUTE_OPTIONS.map((minute) => {
-                  const isDisabled =
-                    startDate === nowParts.date &&
-                    startHour === nowParts.hour &&
-                    Number(minute) < Number(nowParts.minute);
-
-                  return (
-                    <option
-                      key={minute}
-                      value={minute}
-                      disabled={isDisabled}
-                      style={getTimeOptionStyle(isDisabled)}
-                    >
-                      {minute}m
-                    </option>
-                  );
-                })}
-              </select>
+                buttonClassName="h-[40px] border-gray-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                menuClassName="max-h-56 overflow-y-auto"
+                optionClassName="text-xs tabular-nums"
+                ariaLabel="Select start minute"
+              />
             </div>
           </div>
 
@@ -679,58 +711,30 @@ const DashboardPage: React.FC = () => {
                   }}
                 />
               </div>
-              <select
+              <AnimatedDropdown<string>
                 value={endHour}
-                onChange={(e) => {
-                  setEndHour(e.target.value);
+                options={endHourDropdownOptions}
+                onChange={(nextValue) => {
+                  setEndHour(nextValue);
                   setPage(0);
                 }}
-                className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {HOUR_OPTIONS.map((hour) => {
-                  const isDisabled =
-                    endDate === minEndDate &&
-                    Number(hour.value) * 60 < minEndMinutes;
-
-                  return (
-                    <option
-                      key={hour.value}
-                      value={hour.value}
-                      disabled={isDisabled}
-                      style={getTimeOptionStyle(isDisabled)}
-                    >
-                      {hour.label}
-                    </option>
-                  );
-                })}
-              </select>
-              <select
+                buttonClassName="h-[40px] border-gray-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                menuClassName="max-h-56 overflow-y-auto"
+                optionClassName="text-xs tabular-nums"
+                ariaLabel="Select end hour"
+              />
+              <AnimatedDropdown<string>
                 value={endMinute}
-                onChange={(e) => {
-                  setEndMinute(e.target.value);
+                options={endMinuteDropdownOptions}
+                onChange={(nextValue) => {
+                  setEndMinute(nextValue);
                   setPage(0);
                 }}
-                className="w-full min-w-0 border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {MINUTE_OPTIONS.map((minute) => {
-                  const isDisabled =
-                    endDate === minEndDate &&
-                    endHour ===
-                      String(Math.floor(minEndMinutes / 60)).padStart(2, "0") &&
-                    Number(minute) < minEndMinutes % 60;
-
-                  return (
-                    <option
-                      key={minute}
-                      value={minute}
-                      disabled={isDisabled}
-                      style={getTimeOptionStyle(isDisabled)}
-                    >
-                      {minute}m
-                    </option>
-                  );
-                })}
-              </select>
+                buttonClassName="h-[40px] border-gray-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                menuClassName="max-h-56 overflow-y-auto"
+                optionClassName="text-xs tabular-nums"
+                ariaLabel="Select end minute"
+              />
             </div>
           </div>
 

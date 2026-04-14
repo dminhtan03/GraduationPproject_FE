@@ -32,7 +32,7 @@ export interface User {
   /** Tất cả authorities từ BE */
   roles?: string[];
   cancellationCount: number;
-  bookingLockedUntil: Date;
+  bookingLockedUntil: string;
 }
 
 // Interface cho data demo
@@ -100,7 +100,12 @@ export interface AppNotification {
 }
 
 // ===== ROOM (Campus Room Inventory) =====
-export type RoomStatus = "AVAILABLE" | "OCCUPIED" | "UNAVAILABLE" | "BROKEN" | "LEARNING";
+export type RoomStatus =
+  | "AVAILABLE"
+  | "OCCUPIED"
+  | "UNAVAILABLE"
+  | "BROKEN"
+  | "LEARNING";
 
 export interface Room {
   id: string;

@@ -3,13 +3,12 @@
 import React from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { ROUTES } from "../constants";
+import { getDefaultRouteByRole, isAdminUser } from "../services/authService";
 import {
-  getCurrentUser,
-  getDefaultRouteByRole,
-  isAdminUser,
-  restoreSession,
-} from "../services/authService";
-import type { User } from "../types";
+  selectAuthInitializing,
+  selectAuthUser,
+  useAppSelector,
+} from "../store";
 
 // Lazy load components để optimize performance
 const MainLayout = React.lazy(() => import("../components/Layout/MainLayout"));
@@ -65,37 +64,8 @@ const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 type AccessMode = "authenticated" | "admin-only" | "user-only";
 
 const useResolvedUser = () => {
-  const [user, setUser] = React.useState<User | null>(() => getCurrentUser());
-  const [isResolving, setIsResolving] = React.useState<boolean>(() => !user);
-
-  React.useEffect(() => {
-    let isMounted = true;
-
-    const resolve = async () => {
-      const currentUser = getCurrentUser();
-      if (currentUser) {
-        if (!isMounted) return;
-        setUser(currentUser);
-        setIsResolving(false);
-        return;
-      }
-
-      try {
-        const restoredUser = await restoreSession();
-        if (!isMounted) return;
-        setUser(restoredUser);
-      } finally {
-        if (!isMounted) return;
-        setIsResolving(false);
-      }
-    };
-
-    resolve();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const user = useAppSelector(selectAuthUser);
+  const isResolving = useAppSelector(selectAuthInitializing);
 
   return { user, isResolving };
 };

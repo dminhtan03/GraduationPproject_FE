@@ -7,12 +7,14 @@ import { store } from "./store";
 import { router } from "./router/AppRouter";
 import { ErrorBoundary } from "./components/common";
 import { NotificationProvider } from "./context/NotificationContext";
+import AuthSessionBootstrap from "./store/AuthSessionBootstrap";
 
 // Main App Component
 function App() {
   return (
     <ErrorBoundary>
       <Provider store={store}>
+        <AuthSessionBootstrap />
         <NotificationProvider>
           <RouterProvider router={router} />
         </NotificationProvider>

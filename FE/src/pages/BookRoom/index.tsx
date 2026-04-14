@@ -1,17 +1,25 @@
 import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { Alert, Select, Typography, message } from "antd";
-import { ClockCircleOutlined } from "@ant-design/icons";
+import { message } from "antd";
+import {
+  CalendarDaysIcon,
+  CheckBadgeIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+  UserGroupIcon,
+} from "@heroicons/react/24/outline";
 import { reservationService } from "../../services/reservationService";
 import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import type { Room } from "../../types";
 import DatePickerField from "../../components/common/DatePickerField";
+import AnimatedDropdown, {
+  type AnimatedDropdownOption,
+} from "../../components/common/AnimatedDropdown";
 import CustomMessage, {
   MessageType,
 } from "../../components/common/CustomMessage";
-
-const { Title, Text } = Typography;
 
 interface LocationState {
   room?: Room;
@@ -79,7 +87,11 @@ const buildEndFromStart = (startDate: string, startClock: string) => {
   };
 };
 
-const getMinEndSlot = (startDate: string, startClock: string, endDate: string) => {
+const getMinEndSlot = (
+  startDate: string,
+  startClock: string,
+  endDate: string,
+) => {
   if (!endDate) return null;
 
   let minBoundary: Date | null = null;
@@ -159,16 +171,6 @@ const getSuggestedStartClock = (selectedDate: string, minDate: string) => {
   return `${pad(rounded.hour)}:${pad(rounded.minute)}`;
 };
 
-const isClockBeforeMinSlot = (clock: string, minSlot: { minHour: number; minMinute: number }) => {
-  const hour = Number(getClockHour(clock));
-  const minute = Number(getClockMinute(clock));
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
-
-  if (hour < minSlot.minHour) return true;
-  if (hour === minSlot.minHour && minute < minSlot.minMinute) return true;
-  return false;
-};
-
 const getClockHour = (clock: string) => {
   if (!clock.includes(":")) return "";
   return clock.split(":")[0] || "";
@@ -214,10 +216,16 @@ const BookRoomPage: React.FC = () => {
   };
 
   const room = (state as LocationState | null)?.room;
-  const normalizedRoomId = useMemo(() => roomId || room?.id || "", [roomId, room]);
+  const normalizedRoomId = useMemo(
+    () => roomId || room?.id || "",
+    [roomId, room],
+  );
   const minDate = useMemo(() => formatDateInput(new Date()), []);
   const nowHour = useMemo(() => new Date().getHours(), []);
-  const isStartDateToday = useMemo(() => startDate === minDate, [startDate, minDate]);
+  const isStartDateToday = useMemo(
+    () => startDate === minDate,
+    [startDate, minDate],
+  );
   const minStartSlot = useMemo(() => getMinStartSlot(startDate), [startDate]);
   const minEndSlot = useMemo(
     () => getMinEndSlot(startDate, startClock, endDate),
@@ -229,21 +237,94 @@ const BookRoomPage: React.FC = () => {
     [startDate, startClock],
   );
 
-  const endTime = useMemo(() => combineDateTime(endDate, endClock), [endDate, endClock]);
+  const endTime = useMemo(
+    () => combineDateTime(endDate, endClock),
+    [endDate, endClock],
+  );
 
   const startHourOptions = useMemo(() => {
     const selectedHour = Number(getClockHour(startClock));
-    const anchor = Number.isFinite(selectedHour) && selectedHour >= 0 ? selectedHour : nowHour;
+    const anchor =
+      Number.isFinite(selectedHour) && selectedHour >= 0
+        ? selectedHour
+        : nowHour;
     return getScrollableHourOptions(anchor);
   }, [nowHour, startClock]);
 
   const endHourOptions = useMemo(() => {
     const selectedHour = Number(getClockHour(endClock));
     const startHour = Number(getClockHour(startClock));
-    const fallbackAnchor = Number.isFinite(startHour) && startHour >= 0 ? Math.min(23, startHour + 1) : nowHour;
-    const anchor = Number.isFinite(selectedHour) && selectedHour >= 0 ? selectedHour : fallbackAnchor;
+    const fallbackAnchor =
+      Number.isFinite(startHour) && startHour >= 0
+        ? Math.min(23, startHour + 1)
+        : nowHour;
+    const anchor =
+      Number.isFinite(selectedHour) && selectedHour >= 0
+        ? selectedHour
+        : fallbackAnchor;
     return getScrollableHourOptions(anchor);
   }, [endClock, nowHour, startClock]);
+
+  const startHourDropdownOptions = useMemo<
+    Array<AnimatedDropdownOption<string>>
+  >(
+    () => [
+      { value: "", label: "Hour", disabled: true },
+      ...startHourOptions.map((hour) => ({
+        value: hour,
+        label: `${hour}h`,
+        disabled: !!minStartSlot && Number(hour) < minStartSlot.minHour,
+      })),
+    ],
+    [minStartSlot, startHourOptions],
+  );
+
+  const startMinuteDropdownOptions = useMemo<
+    Array<AnimatedDropdownOption<string>>
+  >(
+    () => [
+      { value: "", label: "Minute", disabled: true },
+      ...MINUTE_OPTIONS.map((minute) => ({
+        value: minute,
+        label: `${minute}m`,
+        disabled:
+          isStartDateToday &&
+          !!minStartSlot &&
+          Number(getClockHour(startClock) || "0") === minStartSlot.minHour &&
+          Number(minute) < minStartSlot.minMinute,
+      })),
+    ],
+    [isStartDateToday, minStartSlot, startClock],
+  );
+
+  const endHourDropdownOptions = useMemo<Array<AnimatedDropdownOption<string>>>(
+    () => [
+      { value: "", label: "Hour", disabled: true },
+      ...endHourOptions.map((hour) => ({
+        value: hour,
+        label: `${hour}h`,
+        disabled: !!minEndSlot && Number(hour) < minEndSlot.minHour,
+      })),
+    ],
+    [endHourOptions, minEndSlot],
+  );
+
+  const endMinuteDropdownOptions = useMemo<
+    Array<AnimatedDropdownOption<string>>
+  >(
+    () => [
+      { value: "", label: "Minute", disabled: true },
+      ...MINUTE_OPTIONS.map((minute) => ({
+        value: minute,
+        label: `${minute}m`,
+        disabled:
+          !!minEndSlot &&
+          Number(getClockHour(endClock) || "0") === minEndSlot.minHour &&
+          Number(minute) < minEndSlot.minMinute,
+      })),
+    ],
+    [endClock, minEndSlot],
+  );
 
   const roomRules = [
     "Sau khi book phòng nếu thay đổi kế hoạch và không có nhu cầu sử dụng cần thao tác hủy phòng trước thời gian đăng ký sử dụng / If plans change and the room is not needed, please cancel the booking before the scheduled time.",
@@ -290,7 +371,9 @@ const BookRoomPage: React.FC = () => {
       }
 
       if (room?.slot != null && attendeeCount > room.slot) {
-        message.warning(`Attendee count cannot exceed room capacity (${room.slot}).`);
+        message.warning(
+          `Attendee count cannot exceed room capacity (${room.slot}).`,
+        );
         return false;
       }
     }
@@ -307,19 +390,25 @@ const BookRoomPage: React.FC = () => {
 
     if (step === "form") {
       setStep("review");
-      message.success("Booking details ready. Please review rules before confirming.");
+      message.success(
+        "Booking details ready. Please review rules before confirming.",
+      );
       return;
     }
 
     if (!acceptedRules) {
-      message.warning("Please accept the room rules before confirming booking.");
+      message.warning(
+        "Please accept the room rules before confirming booking.",
+      );
       return;
     }
 
     setLoading(true);
     try {
       const normalizedAttendeeCount =
-        attendeeCount === "" || !Number.isFinite(attendeeCount) ? undefined : attendeeCount;
+        attendeeCount === "" || !Number.isFinite(attendeeCount)
+          ? undefined
+          : attendeeCount;
 
       await reservationService.createReservation({
         roomId: normalizedRoomId,
@@ -345,342 +434,491 @@ const BookRoomPage: React.FC = () => {
     message.info("Back to booking form. You can edit your information.");
   };
 
+  const activeStepIndex = step === "form" ? 1 : 2;
+
+  const bookingDurationLabel = useMemo(() => {
+    if (!startTime || !endTime) return "-";
+
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
+      return "-";
+    const diffMinutes = Math.floor(
+      (end.getTime() - start.getTime()) / (1000 * 60),
+    );
+    if (diffMinutes <= 0) return "-";
+
+    const hours = Math.floor(diffMinutes / 60);
+    const minutes = diffMinutes % 60;
+
+    if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h`;
+    return `${minutes}m`;
+  }, [endTime, startTime]);
+
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-      <Title level={2} className="!mb-1 text-gray-800 font-semibold">
-        Book Room
-      </Title>
-      <Text className="text-gray-500">Create a new reservation request</Text>
+    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 sm:py-10">
+      <div className="mx-auto max-w-4xl">
+        <section className="space-y-5">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
+              Book Room
+            </h1>
 
-      {!room && (
-        <Alert
-          className="mt-5"
-          type="info"
-          showIcon
-          message="Room details are limited"
-          description="You can still continue booking with the selected room id."
-        />
-      )}
-
-      <div className="mt-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide">
-        <span className={step === "form" ? "text-orange-600" : "text-gray-400"}>1. Booking info</span>
-        <span className="text-gray-300">→</span>
-        <span className={step === "review" ? "text-orange-600" : "text-gray-400"}>2. Rules & confirm</span>
-      </div>
-
-      <form
-        onSubmit={handleSubmit}
-        className="mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5"
-      >
-        {step === "form" ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Room</label>
-                <input
-                  value={room?.roomName || normalizedRoomId}
-                  readOnly
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-700"
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-3 h-2 w-full overflow-hidden rounded-full bg-slate-200/70">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-500 transition-all duration-300"
+                  style={{ width: `${(activeStepIndex / 2) * 100}%` }}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Building</label>
-                <input
-                  value={room?.building || "-"}
-                  readOnly
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-gray-700"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div
+                  className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                    step === "form"
+                      ? "border-orange-200 bg-orange-50 text-orange-700"
+                      : "border-slate-200 bg-white text-slate-500"
+                  }`}
+                >
+                  1. Booking info
+                </div>
+                <div
+                  className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                    step === "review"
+                      ? "border-orange-200 bg-orange-50 text-orange-700"
+                      : "border-slate-200 bg-white text-slate-500"
+                  }`}
+                >
+                  2. Rules & confirm
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                <span className="text-red-500 mr-1">*</span>
-                Purpose
-              </label>
-              <input
-                value={purpose}
-                onChange={(event) => setPurpose(event.target.value)}
-                placeholder="Team meeting / workshop / class ..."
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                disabled={loading}
-                required
-              />
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <ClockCircleOutlined className="text-orange-500" />
-                <span className="text-sm font-semibold text-slate-700">Meeting Time</span>
+            {!room && (
+              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <p className="inline-flex items-center gap-2 font-semibold">
+                  <ExclamationTriangleIcon className="h-4 w-4" />
+                  Room details are limited
+                </p>
+                <p className="mt-1 text-xs text-amber-700">
+                  You can still continue booking with the selected room id.
+                </p>
               </div>
-              <p className="mb-3 text-xs text-slate-500">
-                Note: Start/End time cannot be selected in the past.
-              </p>
+            )}
+          </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+          >
+            {step === "form" ? (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Room
+                    </p>
+                    <p className="mt-1 text-base font-bold text-slate-800">
+                      {room?.roomName || normalizedRoomId || "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Building
+                    </p>
+                    <p className="mt-1 text-base font-bold text-slate-800">
+                      {room?.building || "-"}
+                    </p>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <span className="text-red-500 mr-1">*</span>
-                    Start date & time
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    <span className="mr-1 text-rose-500">*</span>
+                    Purpose
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <DatePickerField
-                      value={startDate}
-                      minDate={minDate}
-                      onChange={(nextDate) => {
-                        if (isDateBefore(nextDate, minDate)) {
-                          message.warning("Start date cannot be in the past.");
-                          return;
-                        }
+                  <input
+                    value={purpose}
+                    onChange={(event) => setPurpose(event.target.value)}
+                    placeholder="Team meeting / workshop / class ..."
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+                    disabled={loading}
+                    required
+                  />
+                </div>
 
-                        setStartDate(nextDate);
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+                  <div className="mb-3 flex items-center gap-2">
+                    <ClockIcon className="h-5 w-5 text-orange-500" />
+                    <span className="text-sm font-semibold text-slate-700">
+                      Meeting Time
+                    </span>
+                  </div>
+                  <p className="mb-4 text-xs text-slate-500">
+                    Start and end times are auto-validated to prevent booking in
+                    the past.
+                  </p>
 
-                        const suggestedStartClock = getSuggestedStartClock(nextDate, minDate);
-                        setStartClock(suggestedStartClock);
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        <span className="mr-1 text-rose-500">*</span>
+                        Start date & time
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <DatePickerField
+                          value={startDate}
+                          minDate={minDate}
+                          onChange={(nextDate) => {
+                            if (isDateBefore(nextDate, minDate)) {
+                              message.warning(
+                                "Start date cannot be in the past.",
+                              );
+                              return;
+                            }
 
-                        const autoEnd = buildEndFromStart(nextDate, suggestedStartClock);
-                        setEndDate(autoEnd.endDate);
-                        setEndClock(autoEnd.endClock);
-                      }}
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Select
-                        value={getClockHour(startClock) || undefined}
-                        onChange={(nextHour) => {
-                          const currentMinute = getClockMinute(startClock) || "00";
-                          if (!nextHour) {
-                            setStartClock("");
-                            return;
-                          }
+                            setStartDate(nextDate);
 
-                          let nextMinute = currentMinute;
-                          if (
-                            minStartSlot &&
-                            Number(nextHour) === minStartSlot.minHour &&
-                            Number(nextMinute) < minStartSlot.minMinute
-                          ) {
-                            nextMinute = pad(minStartSlot.minMinute);
-                          }
+                            const suggestedStartClock = getSuggestedStartClock(
+                              nextDate,
+                              minDate,
+                            );
+                            setStartClock(suggestedStartClock);
 
-                          setStartClock(`${nextHour}:${nextMinute}`);
-                          const autoEnd = buildEndFromStart(startDate, `${nextHour}:${nextMinute}`);
-                          setEndDate(autoEnd.endDate);
-                          setEndClock(autoEnd.endClock);
-                        }}
-                        placeholder="Hour"
-                        listHeight={160}
-                        className="w-full"
-                        disabled={loading}
-                        options={startHourOptions.map((hour) => ({
-                          value: hour,
-                          label: hour,
-                          disabled: !!minStartSlot && Number(hour) < minStartSlot.minHour,
-                        }))}
-                      />
-                      <select
-                        value={getClockMinute(startClock)}
-                        onChange={(event) => {
-                          const nextMinute = event.target.value;
-                          const currentHour = getClockHour(startClock) || "00";
-                          const nextClock = nextMinute ? `${currentHour}:${nextMinute}` : "";
-                          setStartClock(nextClock);
-
-                          if (nextClock && startDate) {
-                            const autoEnd = buildEndFromStart(startDate, nextClock);
+                            const autoEnd = buildEndFromStart(
+                              nextDate,
+                              suggestedStartClock,
+                            );
                             setEndDate(autoEnd.endDate);
                             setEndClock(autoEnd.endClock);
-                          }
-                        }}
-                        className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
-                        disabled={loading}
-                        required
-                      >
-                        <option value="">Minute</option>
-                        {MINUTE_OPTIONS.map((minute) => (
-                          <option
-                            key={minute}
-                            value={minute}
-                            disabled={
-                              isStartDateToday &&
-                              !!minStartSlot &&
-                              Number(getClockHour(startClock) || "0") === minStartSlot.minHour &&
-                              Number(minute) < minStartSlot.minMinute
+                          }}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <AnimatedDropdown<string>
+                            value={getClockHour(startClock) || ""}
+                            options={startHourDropdownOptions}
+                            onChange={(nextHour) => {
+                              const currentMinute =
+                                getClockMinute(startClock) || "00";
+                              if (!nextHour) {
+                                setStartClock("");
+                                return;
+                              }
+
+                              let nextMinute = currentMinute;
+                              if (
+                                minStartSlot &&
+                                Number(nextHour) === minStartSlot.minHour &&
+                                Number(nextMinute) < minStartSlot.minMinute
+                              ) {
+                                nextMinute = pad(minStartSlot.minMinute);
+                              }
+
+                              const nextClock = `${nextHour}:${nextMinute}`;
+                              setStartClock(nextClock);
+                              const autoEnd = buildEndFromStart(
+                                startDate,
+                                nextClock,
+                              );
+                              setEndDate(autoEnd.endDate);
+                              setEndClock(autoEnd.endClock);
+                            }}
+                            className="w-full"
+                            buttonClassName="h-10 border-slate-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                            menuClassName="max-h-56 overflow-y-auto"
+                            optionClassName="text-xs tabular-nums"
+                            ariaLabel="Select start hour"
+                            disabled={loading}
+                          />
+
+                          <AnimatedDropdown<string>
+                            value={getClockMinute(startClock) || ""}
+                            options={startMinuteDropdownOptions}
+                            onChange={(nextMinute) => {
+                              const currentHour =
+                                getClockHour(startClock) || "00";
+                              const nextClock = nextMinute
+                                ? `${currentHour}:${nextMinute}`
+                                : "";
+                              setStartClock(nextClock);
+
+                              if (nextClock && startDate) {
+                                const autoEnd = buildEndFromStart(
+                                  startDate,
+                                  nextClock,
+                                );
+                                setEndDate(autoEnd.endDate);
+                                setEndClock(autoEnd.endClock);
+                              }
+                            }}
+                            className="w-full"
+                            buttonClassName="h-10 border-slate-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                            menuClassName="max-h-56 overflow-y-auto"
+                            optionClassName="text-xs tabular-nums"
+                            ariaLabel="Select start minute"
+                            disabled={loading}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <label className="mb-2 block text-sm font-semibold text-slate-700">
+                        <span className="mr-1 text-rose-500">*</span>
+                        End date & time
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <DatePickerField
+                          value={endDate}
+                          minDate={startDate || minDate}
+                          onChange={(nextDate) => {
+                            if (isDateBefore(nextDate, minDate)) {
+                              message.warning(
+                                "End date cannot be in the past.",
+                              );
+                              return;
                             }
-                          >
-                            {minute}
-                          </option>
-                        ))}
-                      </select>
+
+                            if (
+                              startDate &&
+                              isDateBefore(nextDate, startDate)
+                            ) {
+                              message.warning(
+                                "End date cannot be earlier than start date.",
+                              );
+                              return;
+                            }
+
+                            setEndDate(nextDate);
+                          }}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <AnimatedDropdown<string>
+                            value={getClockHour(endClock) || ""}
+                            options={endHourDropdownOptions}
+                            onChange={(nextHour) => {
+                              const currentMinute =
+                                getClockMinute(endClock) || "00";
+                              setEndClock(
+                                nextHour ? `${nextHour}:${currentMinute}` : "",
+                              );
+                            }}
+                            className="w-full"
+                            buttonClassName="h-10 border-slate-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                            menuClassName="max-h-56 overflow-y-auto"
+                            optionClassName="text-xs tabular-nums"
+                            ariaLabel="Select end hour"
+                            disabled={loading}
+                          />
+
+                          <AnimatedDropdown<string>
+                            value={getClockMinute(endClock) || ""}
+                            options={endMinuteDropdownOptions}
+                            onChange={(nextMinute) => {
+                              const currentHour =
+                                getClockHour(endClock) || "00";
+                              setEndClock(
+                                nextMinute
+                                  ? `${currentHour}:${nextMinute}`
+                                  : "",
+                              );
+                            }}
+                            className="w-full"
+                            buttonClassName="h-10 border-slate-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                            menuClassName="max-h-56 overflow-y-auto"
+                            optionClassName="text-xs tabular-nums"
+                            ariaLabel="Select end minute"
+                            disabled={loading}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    <span className="text-red-500 mr-1">*</span>
-                    End date & time
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <DatePickerField
-                      value={endDate}
-                      minDate={startDate || minDate}
-                      onChange={(nextDate) => {
-                        if (isDateBefore(nextDate, minDate)) {
-                          message.warning("End date cannot be in the past.");
-                          return;
-                        }
 
-                        if (startDate && isDateBefore(nextDate, startDate)) {
-                          message.warning("End date cannot be earlier than start date.");
-                          return;
-                        }
-
-                        setEndDate(nextDate);
-                      }}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Attendee count
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={room?.slot}
+                      value={attendeeCount}
+                      onChange={(event) =>
+                        setAttendeeCount(
+                          event.target.value ? Number(event.target.value) : "",
+                        )
+                      }
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+                      disabled={loading}
+                      placeholder="Optional"
                     />
-                    <div className="grid grid-cols-2 gap-2">
-                      <Select
-                        value={getClockHour(endClock) || undefined}
-                        onChange={(nextHour) => {
-                          const currentMinute = getClockMinute(endClock) || "00";
-                          setEndClock(nextHour ? `${nextHour}:${currentMinute}` : "");
-                        }}
-                        placeholder="Hour"
-                        listHeight={160}
-                        className="w-full"
-                        disabled={loading}
-                        options={endHourOptions.map((hour) => ({
-                          value: hour,
-                          label: hour,
-                          disabled: !!minEndSlot && Number(hour) < minEndSlot.minHour,
-                        }))}
-                      />
-                      <select
-                        value={getClockMinute(endClock)}
-                        onChange={(event) => {
-                          const nextMinute = event.target.value;
-                          const currentHour = getClockHour(endClock) || "00";
-                          setEndClock(nextMinute ? `${currentHour}:${nextMinute}` : "");
-                        }}
-                        className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs bg-white text-slate-700 tabular-nums focus:outline-none focus:ring-2 focus:ring-orange-400"
-                        disabled={loading}
-                        required
-                      >
-                        <option value="">Minute</option>
-                        {MINUTE_OPTIONS.map((minute) => (
-                          <option
-                            key={minute}
-                            value={minute}
-                            disabled={
-                              !!minEndSlot &&
-                              Number(getClockHour(endClock) || "0") === minEndSlot.minHour &&
-                              Number(minute) < minEndSlot.minMinute
-                            }
-                          >
-                            {minute}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {typeof room?.slot === "number" && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Maximum capacity: {room.slot} attendees
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Note
+                    </label>
+                    <textarea
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                      rows={4}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+                      disabled={loading}
+                      placeholder="Optional details"
+                    />
                   </div>
                 </div>
-              </div>
-            </div>
+              </>
+            ) : (
+              <>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+                  <h3 className="mb-4 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-700">
+                    <CheckBadgeIcon className="h-5 w-5 text-emerald-600" />
+                    Booking details
+                  </h3>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Attendee count</label>
-              <input
-                type="number"
-                min={1}
-                max={room?.slot}
-                value={attendeeCount}
-                onChange={(event) =>
-                  setAttendeeCount(event.target.value ? Number(event.target.value) : "")
-                }
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Room
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-slate-800">
+                        {room?.roomName || normalizedRoomId}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Building
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-slate-800">
+                        {room?.building || "-"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <CalendarDaysIcon className="h-4 w-4 text-orange-500" />
+                        Start
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {startTime || "-"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <ClockIcon className="h-4 w-4 text-orange-500" />
+                        End
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {endTime || "-"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <UserGroupIcon className="h-4 w-4 text-orange-500" />
+                        Attendees
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {attendeeCount || "-"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <InformationCircleIcon className="h-4 w-4 text-orange-500" />
+                        Duration
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">
+                        {bookingDurationLabel}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <span className="mr-1 text-rose-500">*</span>
+                      Purpose
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {purpose || "-"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+                  <h3 className="mb-3 text-sm font-semibold text-emerald-800">
+                    Room usage rules
+                  </h3>
+                  <ul className="list-decimal space-y-2 pl-5 text-sm text-emerald-900">
+                    {roomRules.map((rule) => (
+                      <li key={rule}>{rule}</li>
+                    ))}
+                  </ul>
+                  <label className="mt-4 flex items-start gap-3 rounded-xl bg-emerald-100/70 px-3 py-2.5 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={acceptedRules}
+                      onChange={(event) =>
+                        setAcceptedRules(event.target.checked)
+                      }
+                      className="mt-0.5 h-4 w-4 accent-emerald-600"
+                    />
+                    <span className="leading-5">
+                      I have read and agree to follow all room usage rules.
+                    </span>
+                  </label>
+                </div>
+              </>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-5">
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.ROOM_LIST)}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
                 disabled={loading}
-                placeholder="Optional"
-              />
-              {typeof room?.slot === "number" && (
-                <p className="mt-1 text-xs text-gray-500">Maximum capacity: {room.slot} attendees</p>
+              >
+                Cancel
+              </button>
+
+              {step === "review" && (
+                <button
+                  type="button"
+                  onClick={handleBackToForm}
+                  className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+                  disabled={loading}
+                >
+                  Edit booking
+                </button>
               )}
+
+              <button
+                type="submit"
+                className="rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_24px_-12px_rgba(249,115,22,0.85)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={loading || (step === "review" && !acceptedRules)}
+              >
+                {loading
+                  ? "Booking..."
+                  : step === "form"
+                    ? "Continue"
+                    : "Confirm booking"}
+              </button>
             </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Note</label>
-              <textarea
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                rows={3}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                disabled={loading}
-                placeholder="Optional details"
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-              <h3 className="text-sm font-semibold text-blue-800 mb-3">Booking details</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div><span className="text-gray-500">Room:</span> <span className="font-semibold text-gray-800">{room?.roomName || normalizedRoomId}</span></div>
-                <div><span className="text-gray-500">Building:</span> <span className="font-semibold text-gray-800">{room?.building || "-"}</span></div>
-                <div><span className="text-gray-500">Start:</span> <span className="font-semibold text-gray-800">{startTime || "-"}</span></div>
-                <div><span className="text-gray-500">End:</span> <span className="font-semibold text-gray-800">{endTime || "-"}</span></div>
-                <div><span className="text-gray-500">Purpose:</span> <span className="font-semibold text-gray-800">{purpose || "-"}</span></div>
-                <div><span className="text-gray-500">Attendees:</span> <span className="font-semibold text-gray-800">{attendeeCount || "-"}</span></div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-green-100 bg-green-50/70 p-4">
-              <h3 className="text-sm font-semibold text-green-800 mb-3">Room usage rules</h3>
-              <ul className="list-disc pl-5 space-y-2 text-sm text-green-900">
-                {roomRules.map((rule) => (
-                  <li key={rule}>{rule}</li>
-                ))}
-              </ul>
-              <label className="mt-4 flex items-start gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={acceptedRules}
-                  onChange={(event) => setAcceptedRules(event.target.checked)}
-                  className="mt-1"
-                />
-                <span>I have read and agree to follow all room usage rules.</span>
-              </label>
-            </div>
-          </>
-        )}
-
-        <div className="flex flex-wrap justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.ROOM_LIST)}
-            className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
-            disabled={loading}
-          >
-            Cancel
-          </button>
-
-          {step === "review" && (
-            <button
-              type="button"
-              onClick={handleBackToForm}
-              className="px-4 py-2 rounded-lg border border-orange-200 text-orange-700 hover:bg-orange-50"
-              disabled={loading}
-            >
-              Edit booking
-            </button>
-          )}
-
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-70"
-            disabled={loading || (step === "review" && !acceptedRules)}
-          >
-            {loading ? "Booking..." : step === "form" ? "Continue" : "Confirm booking"}
-          </button>
-        </div>
-      </form>
+          </form>
+        </section>
+      </div>
 
       {popup && (
         <CustomMessage

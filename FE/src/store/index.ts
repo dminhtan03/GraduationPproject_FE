@@ -17,6 +17,9 @@ export {
   selectNotifications,
   selectLanguage,
   selectGlobalLoading,
+  selectAuthUser,
+  selectIsAuthenticated,
+  selectAuthInitializing,
   selectAppConfig,
   selectDataStates,
 } from "./store";
@@ -49,3 +52,10 @@ export {
   setGlobalLoading,
   resetAppSettings,
 } from "./slices/appSlice";
+
+export {
+  initializeAuthSession,
+  syncAuthState,
+  setAuthenticatedUser,
+  clearAuthenticatedUser,
+} from "./slices/authSlice";
