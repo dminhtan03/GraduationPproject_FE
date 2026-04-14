@@ -1,4 +1,4 @@
-import type { MapRoomStatus } from "../../../utils";
+import type { MapRoomStatus } from "../utils";
 
 export type RoomDetail = {
   roomId?: string;

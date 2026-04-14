@@ -420,8 +420,9 @@ export const adminService = {
   },
 
   // start add admin api calls
-  async adminAddUser(payload: RegisterUserPayload): Promise<void> {
-    await api.post(API_ENDPOINTS.USERS.ADMIN_ADD, payload);
+  async adminAddUser(payload: RegisterUserPayload): Promise<string> {
+    const res = await api.post(API_ENDPOINTS.USERS.ADMIN_ADD, payload);
+    return extractSuccessMessage(res.data, "User created successfully");
   },
 
   async importUsersExcel(file: File): Promise<void> {

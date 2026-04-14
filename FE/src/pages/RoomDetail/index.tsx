@@ -59,12 +59,6 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
-const statusStyles: Record<string, string> = {
-  AVAILABLE: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  UNAVAILABLE: "bg-amber-100 text-amber-700 border-amber-200",
-  BROKEN: "bg-slate-200 text-slate-700 border-slate-300",
-};
-
 const RoomDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { roomId } = useParams();
@@ -344,15 +338,10 @@ const RoomDetailPage: React.FC = () => {
               <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">
                 Room
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-2">
                 <div className="text-2xl font-semibold text-slate-900">
                   {roomName}
                 </div>
-                <span
-                  className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-semibold ${statusStyles[status] || "bg-slate-100 text-slate-700 border-slate-200"}`}
-                >
-                  {status}
-                </span>
               </div>
             </div>
 

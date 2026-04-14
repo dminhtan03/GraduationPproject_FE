@@ -375,14 +375,13 @@ const AdminUserManagementPage: React.FC = () => {
     setAddingUser(true);
     try {
       // start update handleAddSingleUser to use adminAddUser
-      await adminService.adminAddUser({
+      const successMessage = await adminService.adminAddUser({
         ...addUserForm,
         email: addUserForm.email.trim(),
         role: normalizeRole(addUserForm.role),
       });
       // end update handleAddSingleUser to use adminAddUser
-      setImportResult("Added 1 user successfully.");
-      showToast("success", "Create user successfully");
+      showToast("success", successMessage);
       setShowAddUserModal(false);
       resetAddUserForm();
       await loadUsers();
@@ -391,7 +390,7 @@ const AdminUserManagementPage: React.FC = () => {
       if (Object.keys(fieldErrors).length > 0) {
         setAddUserFieldErrors(fieldErrors);
       } else {
-        setError(extractApiMessage(e, "Unable to add user"));
+        showToast("error", extractApiMessage(e, "Unable to add user"));
       }
     } finally {
       setAddingUser(false);

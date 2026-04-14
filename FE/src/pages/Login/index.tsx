@@ -131,11 +131,18 @@ const LoginPage: React.FC = () => {
         const res = await loginWithGoogle(token);
         if (res.success) {
           dispatch(setAuthenticatedUser(res.data?.user ?? null));
+          showPopup("success", res.message || "Login with Google successful");
           const target = getDefaultRouteByRole(res.data?.user ?? null);
-          navigate(target);
+          setTimeout(() => navigate(target), 800);
+        } else {
+          showPopup("error", res.message || "Login with Google failed");
         }
-      } catch {
-        showPopup("error", "Login with Google failed");
+      } catch (err: unknown) {
+        const backendMessage = extractApiMessage(
+          err,
+          "Login with Google failed",
+        );
+        showPopup("error", backendMessage);
       }
     },
     [dispatch, navigate],
