@@ -20,6 +20,7 @@ import { API_ENDPOINTS } from "../../constants/endpoints";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
+import { ImportModal } from "../../components/common";
 import AnimatedDropdown, {
   type AnimatedDropdownOption,
 } from "../../components/common/AnimatedDropdown";
@@ -79,8 +80,13 @@ const AdminAcademicSchedulePage: React.FC = () => {
     buildingId: "",
     floorId: "",
     fromDate: "",
-    toDate: "",
+    toDate:
+      "",
   });
+  const [sortConfig, setSortConfig] = useState<{
+    sortBy: string;
+    sortDirection: "asc" | "desc";
+  }>({ sortBy: "createdAt", sortDirection: "desc" });
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -95,6 +101,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
   const [newSchedule, setNewSchedule] = useState(defaultNewSchedule);
 
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [toastPopup, setToastPopup] = useState<{
     type: MessageType;
     message: string;
@@ -250,23 +257,27 @@ const AdminAcademicSchedulePage: React.FC = () => {
       if (searchParams.floorId) params.floorId = searchParams.floorId;
       if (searchParams.fromDate) params.fromDate = searchParams.fromDate;
       if (searchParams.toDate) params.toDate = searchParams.toDate;
+      params.sortBy = sortConfig.sortBy;
+      params.sortDirection = sortConfig.sortDirection;
 
       const response = await adminService.searchAcademicSchedules(params);
 
-      // Handle the data structure from the API response
-      // Based on your provided response: { data: [...], meta: { pages: 1, ... } }
+      let fetchedSchedules = [];
+      let totalPagesCount = 0;
+
       if (response && response.data) {
-        setSchedules(response.data || []);
-        setTotalPages(response.meta?.pages || 0);
+        fetchedSchedules = response.data || [];
+        totalPagesCount = response.meta?.pages || 0;
       } else if (response && response.content) {
-        // Fallback for Page object structure
-        setSchedules(response.content || []);
-        setTotalPages(response.totalPages || 0);
+        fetchedSchedules = response.content || [];
+        totalPagesCount = response.totalPages || 0;
       } else {
-        // Final fallback if data is the array itself
-        setSchedules(Array.isArray(response) ? response : []);
-        setTotalPages(0);
+        fetchedSchedules = Array.isArray(response) ? response : [];
+        totalPagesCount = 0;
       }
+
+      setSchedules(fetchedSchedules);
+      setTotalPages(totalPagesCount);
     } catch (err) {
       console.error(err);
       setToastPopup({ type: "error", message: "Failed to load schedules" });
@@ -383,6 +394,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importFile) return;
+    setImportError(null);
     try {
       await adminService.importAcademicSchedules(importFile);
       setToastPopup({
@@ -393,9 +405,11 @@ const AdminAcademicSchedulePage: React.FC = () => {
       setImportFile(null);
       loadSchedules();
     } catch (err: any) {
+      const errorMessage = err.message || "Failed to import schedules";
+      setImportError(errorMessage);
       setToastPopup({
         type: "error",
-        message: err.message || "Failed to import schedules",
+        message: errorMessage,
       });
     }
   };
@@ -1085,66 +1099,24 @@ const AdminAcademicSchedulePage: React.FC = () => {
       )}
 
       {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="mb-6 flex items-center justify-between border-b pb-4">
-              <h2 className="text-xl font-bold text-slate-900">
-                Import Schedules
-              </h2>
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="rounded-full p-2 hover:bg-slate-100"
-              >
-                <XMarkIcon className="h-6 w-6 text-slate-400" />
-              </button>
-            </div>
-            <form onSubmit={handleImport} className="space-y-4">
-              <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-                <ArrowUpTrayIcon className="mx-auto h-12 w-12 text-slate-300" />
-                <div className="mt-4 flex flex-col items-center">
-                  <label className="cursor-pointer rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">
-                    Choose File
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".xlsx,.xls"
-                      onChange={(e) =>
-                        setImportFile(e.target.files?.[0] || null)
-                      }
-                    />
-                  </label>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {importFile ? importFile.name : "Support .xlsx, .xls files"}
-                  </p>
-                </div>
-              </div>
-              <div className="rounded-xl bg-blue-50 p-4">
-                <p className="text-xs font-medium text-blue-700 leading-relaxed">
-                  Excel structure: RoomCode, StartTime (HH:mm), EndTime (HH:mm),
-                  DaysOfWeek (COMMA-SEPARATED), FromDate, ToDate, Description.
-                </p>
-              </div>
-              <div className="mt-6 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowImportModal(false)}
-                  className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!importFile}
-                  className="flex-1 rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 shadow-lg shadow-slate-100"
-                >
-                  Import Now
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => {
+          setShowImportModal(false);
+          setImportFile(null);
+          setImportError(null);
+        }}
+        onImport={handleImport}
+        importFile={importFile}
+        setImportFile={setImportFile}
+        title="Import Schedules"
+        description="Chỉ hỗ trợ file .xlsx"
+        structureInfo="Cấu trúc Excel: RoomCode, StartTime (HH:mm), EndTime (HH:mm), DaysOfWeek (NGĂN CÁCH BẰNG DẤU PHẨY), FromDate, ToDate, Description."
+        loading={loading}
+        error={importError}
+        templateDownloadLink="/Import Academic Schedule.xlsx"
+        templateFileName="Import Academic Schedule.xlsx"
+      />
 
       {toastPopup && (
         <CustomMessage

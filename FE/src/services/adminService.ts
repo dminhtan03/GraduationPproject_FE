@@ -469,7 +469,17 @@ export const adminService = {
     );
   },
 
-  async searchAcademicSchedules(params: any): Promise<any> {
+  async searchAcademicSchedules(params: {
+    page?: number;
+    size?: number;
+    roomName?: string;
+    buildingId?: string;
+    floorId?: string;
+    fromDate?: string;
+    toDate?: string;
+    sortBy?: string;
+    sortDirection?: "asc" | "desc";
+  }): Promise<any> {
     const res = await api.get(API_ENDPOINTS.ACADEMIC_SCHEDULES.LIST, {
       params,
     });

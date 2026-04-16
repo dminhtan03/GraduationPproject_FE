@@ -15,6 +15,7 @@ import { ROUTES } from "../../constants";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
+import { ImportModal } from "../../components/common";
 
 const AdminRoomManagementPage: React.FC = () => {
   const { buildingId, floorId } = useParams<{ buildingId: string; floorId: string }>();
@@ -23,6 +24,14 @@ const AdminRoomManagementPage: React.FC = () => {
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [showImportRoomModal, setShowImportRoomModal] = useState(false);
+  const [showImportScheduleModal, setShowImportScheduleModal] = useState(false);
+  const [importRoomFile, setImportRoomFile] = useState<File | null>(null);
+  const [importScheduleFile, setImportScheduleFile] = useState<File | null>(null);
+  const [importRoomError, setImportRoomError] = useState<string | null>(null);
+  const [importScheduleError, setImportScheduleError] = useState<string | null>(null);
+  const [buildingName, setBuildingName] = useState<string>("");
+  const [floorName, setFloorName] = useState<string>("");
   const [toastPopup, setToastPopup] = useState<{ type: MessageType; message: string } | null>(null);
   const [amenities, setAmenities] = useState<any[]>([]);
 
@@ -53,6 +62,26 @@ const AdminRoomManagementPage: React.FC = () => {
   const adminName = "Admin";
   const adminEmail = "admin@unibooking.com";
 
+  const loadBuildingAndFloorInfo = async () => {
+    try {
+      if (buildingId) {
+        const buildings = await adminService.getAllBuildings();
+        const currentBuilding = buildings.find((b: any) => b.id === buildingId);
+        if (currentBuilding) {
+          setBuildingName(currentBuilding.name);
+        }
+
+        const floors = await adminService.getFloorsByBuilding(buildingId);
+        const currentFloor = floors.find((f: any) => f.id === floorId);
+        if (currentFloor) {
+          setFloorName(currentFloor.name || currentFloor.floorName);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load building/floor info:", err);
+    }
+  };
+
   const loadRooms = async () => {
     if (!floorId) return;
     setLoading(true);
@@ -77,9 +106,10 @@ const AdminRoomManagementPage: React.FC = () => {
   };
 
   useEffect(() => {
+    loadBuildingAndFloorInfo();
     loadRooms();
     loadAmenities();
-  }, [floorId]);
+  }, [buildingId, floorId]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -93,42 +123,48 @@ const AdminRoomManagementPage: React.FC = () => {
     }
   };
 
-  const handleImportExcel = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !floorId) return;
+  const handleImportExcel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importRoomFile || !floorId) return;
 
     setImporting(true);
+    setImportRoomError(null);
     try {
-      await adminService.importRoomsExcel(file, floorId);
+      await adminService.importRoomsExcel(importRoomFile, floorId);
       setToastPopup({ type: "success", message: "Rooms imported successfully" });
+      setShowImportRoomModal(false);
+      setImportRoomFile(null);
       loadRooms();
     } catch (err: any) {
       const errorMsg = err.message || "Failed to import rooms";
       const isWarning = err.code === "ROOM_409";
+      setImportRoomError(errorMsg);
       setToastPopup({
         type: isWarning ? "warning" : "error",
         message: errorMsg,
       });
     } finally {
       setImporting(false);
-      event.target.value = "";
     }
   };
 
-  const handleImportAcademicSchedule = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleImportAcademicSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importScheduleFile) return;
 
     setImporting(true);
+    setImportScheduleError(null);
     try {
-      await adminService.importAcademicSchedules(file);
-      setToastPopup({ type: "success", message: "Lịch học đã được nhập thành công" });
-    } catch (err) {
-      console.error(err);
-      setToastPopup({ type: "error", message: "Không thể nhập lịch học" });
+      await adminService.importAcademicSchedules(importScheduleFile);
+      setToastPopup({ type: "success", message: "Academic schedules imported successfully" });
+      setShowImportScheduleModal(false);
+      setImportScheduleFile(null);
+    } catch (err: any) {
+      const errorMsg = err.message || "Failed to import academic schedules";
+      setImportScheduleError(errorMsg);
+      setToastPopup({ type: "error", message: errorMsg });
     } finally {
       setImporting(false);
-      event.target.value = "";
     }
   };
 
@@ -224,34 +260,28 @@ const AdminRoomManagementPage: React.FC = () => {
               <ArrowLeftIcon className="h-5 w-5 text-slate-600" />
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Rooms Management</h1>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Rooms Management {buildingName && floorName && `- ${buildingName} - ${floorName}`}
+              </h1>
               <p className="text-sm text-slate-500">Manage rooms, add new ones or import from Excel</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm">
+            <button
+              onClick={() => setShowImportScheduleModal(true)}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+            >
               <ArrowUpTrayIcon className="h-5 w-5" />
-              {importing ? "Importing..." : "Import Academic Schedule"}
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={handleImportAcademicSchedule}
-                disabled={importing}
-              />
-            </label>
-            <label className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm">
+              Import Academic Schedule
+            </button>
+            <button
+              onClick={() => setShowImportRoomModal(true)}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+            >
               <ArrowUpTrayIcon className="h-5 w-5" />
-              {importing ? "Importing..." : "Import Rooms"}
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={handleImportExcel}
-                disabled={importing}
-              />
-            </label>
+              Import Rooms
+            </button>
             <button
               onClick={handleOpenAddModal}
               className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-orange-600 transition-all shadow-md"
@@ -607,6 +637,45 @@ const AdminRoomManagementPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Import Modals */}
+      <ImportModal
+        isOpen={showImportRoomModal}
+        onClose={() => {
+          setShowImportRoomModal(false);
+          setImportRoomFile(null);
+          setImportRoomError(null);
+        }}
+        onImport={handleImportExcel}
+        importFile={importRoomFile}
+        setImportFile={setImportRoomFile}
+        title="Import Rooms"
+        description="Chỉ hỗ trợ file .xlsx"
+        structureInfo="Cấu trúc Excel: locationCode, capacity, status (AVAILABLE, BROKEN, etc.), score, amenityNames (ngăn cách bằng dấu phẩy)."
+        loading={importing}
+        error={importRoomError}
+        templateDownloadLink="/template file add room.xlsx"
+        templateFileName="template file add room.xlsx"
+      />
+
+      <ImportModal
+        isOpen={showImportScheduleModal}
+        onClose={() => {
+          setShowImportScheduleModal(false);
+          setImportScheduleFile(null);
+          setImportScheduleError(null);
+        }}
+        onImport={handleImportAcademicSchedule}
+        importFile={importScheduleFile}
+        setImportFile={setImportScheduleFile}
+        title="Import Academic Schedule"
+        description="Chỉ hỗ trợ file .xlsx"
+        structureInfo="Cấu trúc Excel: RoomCode, StartTime (HH:mm), EndTime (HH:mm), DaysOfWeek (NGĂN CÁCH BẰNG DẤU PHẨY), FromDate, ToDate, Description."
+        loading={importing}
+        error={importScheduleError}
+        templateDownloadLink="/Import Academic Schedule.xlsx"
+        templateFileName="Import Academic Schedule.xlsx"
+      />
 
       {toastPopup && (
         <CustomMessage
