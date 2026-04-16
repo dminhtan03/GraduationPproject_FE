@@ -26,6 +26,7 @@ import { extractApiMessage } from "../../utils/errorHandlers";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
+import { ImportModal } from "../../components/common";
 
 type ProfilePayload = {
   firstName?: string;
@@ -77,7 +78,10 @@ const AdminUserManagementPage: React.FC = () => {
   const [adminName, setAdminName] = useState("Admin User");
   const [adminEmail, setAdminEmail] = useState("");
   const [importing, setImporting] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
   const [importResult, setImportResult] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [addingUser, setAddingUser] = useState(false);
   const [addUserFieldErrors, setAddUserFieldErrors] = useState<
@@ -375,14 +379,13 @@ const AdminUserManagementPage: React.FC = () => {
     setAddingUser(true);
     try {
       // start update handleAddSingleUser to use adminAddUser
-      await adminService.adminAddUser({
+      const successMessage = await adminService.adminAddUser({
         ...addUserForm,
         email: addUserForm.email.trim(),
         role: normalizeRole(addUserForm.role),
       });
       // end update handleAddSingleUser to use adminAddUser
-      setImportResult("Added 1 user successfully.");
-      showToast("success", "Create user successfully");
+      showToast("success", successMessage);
       setShowAddUserModal(false);
       resetAddUserForm();
       await loadUsers();
@@ -391,7 +394,7 @@ const AdminUserManagementPage: React.FC = () => {
       if (Object.keys(fieldErrors).length > 0) {
         setAddUserFieldErrors(fieldErrors);
       } else {
-        setError(extractApiMessage(e, "Unable to add user"));
+        showToast("error", extractApiMessage(e, "Unable to add user"));
       }
     } finally {
       setAddingUser(false);
@@ -399,31 +402,26 @@ const AdminUserManagementPage: React.FC = () => {
   };
 
   // start add handleImportExcel
-  const handleImportExcel = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
-    if (!file) return;
+  const handleImportExcel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile) return;
 
     setImportResult(null);
     setError(null);
-
-    const ext = file.name.toLowerCase();
-    if (!ext.endsWith(".xlsx") && !ext.endsWith(".xls")) {
-      setError("Please upload a .xlsx or .xls file.");
-      return;
-    }
+    setImportError(null);
 
     setImporting(true);
     try {
-      await adminService.importUsersExcel(file);
+      await adminService.importUsersExcel(importFile);
       setImportResult("Imported users from Excel successfully.");
       showToast("success", "Import users successfully");
+      setShowImportModal(false);
+      setImportFile(null);
       await loadUsers();
     } catch (e: unknown) {
-      setError(extractApiMessage(e, "Unable to import users from Excel"));
+      const errorMessage = extractApiMessage(e, "Unable to import users from Excel");
+      setImportError(errorMessage);
+      showToast("error", errorMessage);
     } finally {
       setImporting(false);
     }
@@ -470,19 +468,14 @@ const AdminUserManagementPage: React.FC = () => {
               Add User
             </button>
 
-            {/* start update import excel UI */}
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-              <ArrowUpTrayIcon className="h-4 w-4" />
-              {importing ? "Importing..." : "Import Excel"}
-              <input
-                type="file"
-                accept=".xlsx, .xls"
-                className="hidden"
-                onChange={handleImportExcel}
-                disabled={importing}
-              />
-            </label>
-            {/* end update import excel UI */}
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <ArrowUpTrayIcon className="h-5 w-5" />
+              Import Excel
+            </button>
           </div>
         </div>
 
@@ -500,137 +493,203 @@ const AdminUserManagementPage: React.FC = () => {
                     resetAddUserForm();
                     setAddUserFieldErrors({});
                   }}
-                  className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
-                  aria-label="Close add user modal"
+                  className="rounded-full p-2 hover:bg-slate-100"
                 >
-                  <XMarkIcon className="h-5 w-5" />
+                  <XMarkIcon className="h-6 w-6 text-slate-400" />
                 </button>
               </div>
 
-              <form
-                onSubmit={handleAddSingleUser}
-                className="grid grid-cols-1 gap-3 md:grid-cols-2"
-              >
-                <input
-                  placeholder="First name"
-                  value={addUserForm.firstName}
-                  onChange={(e) =>
-                    handleAddUserField("firstName", e.target.value)
-                  }
-                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
-                />
-                {addUserFieldErrors.firstName && (
-                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
-                    {addUserFieldErrors.firstName}
-                  </p>
-                )}
-                <input
-                  placeholder="Last name"
-                  value={addUserForm.lastName}
-                  onChange={(e) =>
-                    handleAddUserField("lastName", e.target.value)
-                  }
-                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
-                />
-                {addUserFieldErrors.lastName && (
-                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
-                    {addUserFieldErrors.lastName}
-                  </p>
-                )}
-                <input
-                  placeholder="Phone number"
-                  value={addUserForm.phoneNumber}
-                  onChange={(e) =>
-                    handleAddUserField("phoneNumber", e.target.value)
-                  }
-                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
-                />
-                {addUserFieldErrors.phoneNumber && (
-                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
-                    {addUserFieldErrors.phoneNumber}
-                  </p>
-                )}
-                <input
-                  placeholder="Department"
-                  value={addUserForm.department}
-                  onChange={(e) =>
-                    handleAddUserField("department", e.target.value)
-                  }
-                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
-                />
-                {addUserFieldErrors.department && (
-                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
-                    {addUserFieldErrors.department}
-                  </p>
-                )}
-                <input
-                  placeholder="Email"
-                  type="email"
-                  value={addUserForm.email}
-                  onChange={(e) => handleAddUserField("email", e.target.value)}
-                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400 md:col-span-2"
-                />
-                {addUserFieldErrors.email && (
-                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
-                    {addUserFieldErrors.email}
-                  </p>
-                )}
-                <input
-                  placeholder="Address"
-                  value={addUserForm.address}
-                  onChange={(e) =>
-                    handleAddUserField("address", e.target.value)
-                  }
-                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400 md:col-span-2"
-                />
-                {addUserFieldErrors.address && (
-                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
-                    {addUserFieldErrors.address}
-                  </p>
-                )}
-                <input
-                  placeholder="Password"
-                  type="password"
-                  value={addUserForm.password}
-                  onChange={(e) =>
-                    handleAddUserField("password", e.target.value)
-                  }
-                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
-                />
-                {addUserFieldErrors.password && (
-                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
-                    {addUserFieldErrors.password}
-                  </p>
-                )}
-                <select
-                  value={addUserForm.gender}
-                  onChange={(e) => handleAddUserField("gender", e.target.value)}
-                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400"
-                >
-                  <option value="MALE">MALE</option>
-                  <option value="FEMALE">FEMALE</option>
-                  <option value="OTHER">OTHER</option>
-                </select>
-                {addUserFieldErrors.gender && (
-                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
-                    {addUserFieldErrors.gender}
-                  </p>
-                )}
-                <select
-                  value={addUserForm.role}
-                  onChange={(e) => handleAddUserField("role", e.target.value)}
-                  className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-orange-400 md:col-span-2"
-                >
-                  <option value="USER">USER</option>
-                  <option value="ADMIN">ADMIN</option>
-                </select>
-                {addUserFieldErrors.role && (
-                  <p className="-mt-2 text-xs text-red-600 md:col-span-2">
-                    {addUserFieldErrors.role}
-                  </p>
-                )}
+              <form onSubmit={handleAddSingleUser}>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
+                        addUserFieldErrors.firstName ? "border-red-500" : ""
+                      }`}
+                      placeholder="e.g. John"
+                      value={addUserForm.firstName}
+                      onChange={(e) =>
+                        handleAddUserField("firstName", e.target.value)
+                      }
+                    />
+                    {addUserFieldErrors.firstName && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {addUserFieldErrors.firstName}
+                      </p>
+                    )}
+                  </div>
 
-                <div className="mt-2 flex items-center justify-end gap-2 md:col-span-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
+                        addUserFieldErrors.lastName ? "border-red-500" : ""
+                      }`}
+                      placeholder="e.g. Doe"
+                      value={addUserForm.lastName}
+                      onChange={(e) =>
+                        handleAddUserField("lastName", e.target.value)
+                      }
+                    />
+                    {addUserFieldErrors.lastName && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {addUserFieldErrors.lastName}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Phone Number
+                    </label>
+                    <input
+                      type="text"
+                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
+                        addUserFieldErrors.phoneNumber ? "border-red-500" : ""
+                      }`}
+                      placeholder="0123456789"
+                      value={addUserForm.phoneNumber}
+                      onChange={(e) =>
+                        handleAddUserField("phoneNumber", e.target.value)
+                      }
+                    />
+                    {addUserFieldErrors.phoneNumber && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {addUserFieldErrors.phoneNumber}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Gender
+                    </label>
+                    <select
+                      className="h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500"
+                      value={addUserForm.gender}
+                      onChange={(e) =>
+                        handleAddUserField("gender", e.target.value)
+                      }
+                    >
+                      <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Address
+                    </label>
+                    <input
+                      type="text"
+                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
+                        addUserFieldErrors.address ? "border-red-500" : ""
+                      }`}
+                      placeholder="123 Campus St."
+                      value={addUserForm.address}
+                      onChange={(e) =>
+                        handleAddUserField("address", e.target.value)
+                      }
+                    />
+                    {addUserFieldErrors.address && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {addUserFieldErrors.address}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Department
+                    </label>
+                    <input
+                      type="text"
+                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
+                        addUserFieldErrors.department ? "border-red-500" : ""
+                      }`}
+                      placeholder="IT / Marketing"
+                      value={addUserForm.department}
+                      onChange={(e) =>
+                        handleAddUserField("department", e.target.value)
+                      }
+                    />
+                    {addUserFieldErrors.department && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {addUserFieldErrors.department}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
+                        addUserFieldErrors.email ? "border-red-500" : ""
+                      }`}
+                      placeholder="john.doe@university.edu"
+                      value={addUserForm.email}
+                      onChange={(e) =>
+                        handleAddUserField("email", e.target.value)
+                      }
+                    />
+                    {addUserFieldErrors.email && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {addUserFieldErrors.email}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Password
+                    </label>
+                    <input
+                      type="password"
+                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
+                        addUserFieldErrors.password ? "border-red-500" : ""
+                      }`}
+                      placeholder="••••••••"
+                      value={addUserForm.password}
+                      onChange={(e) =>
+                        handleAddUserField("password", e.target.value)
+                      }
+                    />
+                    {addUserFieldErrors.password && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {addUserFieldErrors.password}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Role
+                    </label>
+                    <select
+                      className="h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500"
+                      value={addUserForm.role}
+                      onChange={(e) =>
+                        handleAddUserField("role", e.target.value)
+                      }
+                    >
+                      <option value="USER">Student / Staff</option>
+                      <option value="ADMIN">Administrator</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-center justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -638,14 +697,14 @@ const AdminUserManagementPage: React.FC = () => {
                       resetAddUserForm();
                       setAddUserFieldErrors({});
                     }}
-                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+                    className="h-10 rounded-xl px-5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={addingUser}
-                    className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    className="h-10 rounded-xl bg-orange-500 px-6 text-sm font-bold text-white shadow-sm hover:bg-orange-600 disabled:opacity-50"
                   >
                     {addingUser ? "Adding..." : "Add User"}
                   </button>
@@ -654,6 +713,26 @@ const AdminUserManagementPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Import Modal */}
+        <ImportModal
+          isOpen={showImportModal}
+          onClose={() => {
+            setShowImportModal(false);
+            setImportFile(null);
+            setImportError(null);
+          }}
+          onImport={handleImportExcel}
+          importFile={importFile}
+          setImportFile={setImportFile}
+          title="Import Users"
+          description="Chỉ hỗ trợ file .xlsx"
+          structureInfo="Cấu trúc Excel: firstName, lastName, email, phoneNumber, gender, address, department, password, role."
+          loading={importing}
+          error={importError}
+          templateDownloadLink="/template file add user.xlsx"
+          templateFileName="template file add user.xlsx"
+        />
 
         {error && (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

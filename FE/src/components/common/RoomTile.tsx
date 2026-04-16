@@ -1,5 +1,5 @@
 import React from "react";
-import { getStatusStyles, type MapRoom } from "../../../utils";
+import { getStatusStyles, type MapRoom } from "../../utils";
 
 type RoomTileProps = {
   room: MapRoom;

@@ -1,5 +1,5 @@
-import type { RoomsMapBuilding } from "../../../services/roomService";
-import type { BuildingLayoutVariant, RawMapRoom } from "../types";
+import type { RoomsMapBuilding } from "../services/roomService";
+import type { BuildingLayoutVariant, RawMapRoom } from "../types/roomMap";
 
 export const formatFeedbackName = (name?: string | null) => {
   const trimmed = String(name || "").trim();

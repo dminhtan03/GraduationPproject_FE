@@ -37,10 +37,13 @@ import AnimatedDropdown, {
   type AnimatedDropdownOption,
 } from "../../components/common/AnimatedDropdown";
 import BookingLockCountdown from "../../components/common/BookingLockCountdown";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import { useRealtimeClock, useRoomStatusWebSocket } from "../../hooks";
 import type { UserProfile } from "../../types";
-import RoomTile from "./components/RoomTile";
+import RoomTile from "../../components/common/RoomTile";
 import {
   FEEDBACK_PAGE_SIZE,
   ROOM_LAYOUT_STORAGE_KEY,
@@ -51,7 +54,7 @@ import type {
   RawMapBuilding,
   RawMapRoom,
   RoomDetail,
-} from "./types";
+} from "../../types/roomMap";
 import {
   chunkRooms,
   formatCheckInDateTime,
@@ -62,7 +65,7 @@ import {
   resolveLayoutVariant,
   resolveLocationCode,
   resolveRoomId,
-} from "./utils";
+} from "../../utils/roomMapHelpers";
 
 const RoomMapPage: React.FC = () => {
   const navigate = useNavigate();
@@ -116,6 +119,19 @@ const RoomMapPage: React.FC = () => {
   const [draggedRoomId, setDraggedRoomId] = useState<string | null>(null);
   const [dragOverRoomId, setDragOverRoomId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [toastPopup, setToastPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: MessageType, nextMessage: string) => {
+    setToastPopup({ type, message: nextMessage });
+    window.setTimeout(() => {
+      setToastPopup((current) =>
+        current && current.message === nextMessage ? null : current,
+      );
+    }, 3000);
+  };
 
   useRoomStatusWebSocket({
     floorId: selectedFloorId,
@@ -623,7 +639,9 @@ const RoomMapPage: React.FC = () => {
     if (!currentBuilding || !currentFloor) return;
 
     if (!startTime || !endTime) {
-      setFilterError("Please select both start and end time.");
+      const nextError = "Please select both start and end time.";
+      setFilterError(nextError);
+      showToast("warning", nextError);
       return;
     }
 
@@ -633,12 +651,17 @@ const RoomMapPage: React.FC = () => {
     };
 
     if (!isBackendDateTime(startTime) || !isBackendDateTime(endTime)) {
-      setFilterError("Invalid date/time format. Expected yyyy-MM-ddTHH:mm:ss.");
+      const nextError =
+        "Invalid date/time format. Expected yyyy-MM-ddTHH:mm:ss.";
+      setFilterError(nextError);
+      showToast("warning", nextError);
       return;
     }
 
     if (new Date(endTime) <= new Date(startTime)) {
-      setFilterError("End time must be later than start time.");
+      const nextError = "End time must be later than start time.";
+      setFilterError(nextError);
+      showToast("warning", nextError);
       return;
     }
 
@@ -676,8 +699,15 @@ const RoomMapPage: React.FC = () => {
       });
 
       setOverrideStatuses(overrides);
+      if (availableSet.size > 0) {
+        showToast("success", "Time filter applied successfully.");
+      } else {
+        showToast("warning", "No rooms are available in selected time range.");
+      }
     } catch (e: unknown) {
-      setFilterError(extractApiMessage(e, "Unable to apply time filter"));
+      const nextError = extractApiMessage(e, "Unable to apply time filter");
+      setFilterError(nextError);
+      showToast("error", nextError);
     } finally {
       setFilterLoading(false);
     }
@@ -1580,6 +1610,14 @@ const RoomMapPage: React.FC = () => {
           )}
         </aside>
       </div>
+
+      {toastPopup && (
+        <CustomMessage
+          type={toastPopup.type}
+          message={toastPopup.message}
+          onClose={() => setToastPopup(null)}
+        />
+      )}
     </div>
   );
 };

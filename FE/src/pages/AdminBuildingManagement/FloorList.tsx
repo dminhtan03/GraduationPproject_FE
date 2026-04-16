@@ -16,6 +16,7 @@ import { ROUTES } from "../../constants";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
+import { ImportModal } from "../../components/common";
 
 const AdminBuildingFloorsPage: React.FC = () => {
   const { buildingId } = useParams<{ buildingId: string }>();
@@ -24,10 +25,28 @@ const AdminBuildingFloorsPage: React.FC = () => {
   const [floors, setFloors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [importingFloorId, setImportingFloorId] = useState<string | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [targetFloorId, setTargetFloorId] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [buildingName, setBuildingName] = useState<string>("");
   const [toastPopup, setToastPopup] = useState<{ type: MessageType; message: string } | null>(null);
 
   const adminName = "Admin";
   const adminEmail = "admin@unibooking.com";
+
+  const loadBuildingInfo = async () => {
+    if (!buildingId) return;
+    try {
+      const buildings = await adminService.getAllBuildings();
+      const currentBuilding = buildings.find((b: any) => b.id === buildingId);
+      if (currentBuilding) {
+        setBuildingName(currentBuilding.name);
+      }
+    } catch (err) {
+      console.error("Failed to load building info:", err);
+    }
+  };
 
   const loadFloors = async () => {
     if (!buildingId) return;
@@ -60,6 +79,7 @@ const AdminBuildingFloorsPage: React.FC = () => {
   };
 
   useEffect(() => {
+    loadBuildingInfo();
     loadFloors();
   }, [buildingId]);
 
@@ -78,26 +98,29 @@ const AdminBuildingFloorsPage: React.FC = () => {
     }
   };
 
-  const handleImportExcel = async (floorId: string, event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleImportExcel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile || !targetFloorId) return;
 
-    setImportingFloorId(floorId);
+    setImportingFloorId(targetFloorId);
+    setImportError(null);
     try {
-      await adminService.importRoomsExcel(file, floorId);
+      await adminService.importRoomsExcel(importFile, targetFloorId);
       setToastPopup({ type: "success", message: "Rooms imported successfully" });
+      setShowImportModal(false);
+      setImportFile(null);
+      setTargetFloorId(null);
       loadFloors();
     } catch (err: any) {
       const errorMsg = err.message || "Failed to import rooms";
-      // If error code is ROOM_409 (ROOM_ALREADY_EXISTS), show as warning
       const isWarning = err.code === "ROOM_409";
+      setImportError(errorMsg);
       setToastPopup({
         type: isWarning ? "warning" : "error",
         message: errorMsg,
       });
     } finally {
       setImportingFloorId(null);
-      event.target.value = "";
     }
   };
 
@@ -120,7 +143,9 @@ const AdminBuildingFloorsPage: React.FC = () => {
             <ArrowLeftIcon className="h-5 w-5 text-slate-600" />
           </button>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-slate-900">Floors Management</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              Floors Management {buildingName && `- ${buildingName}`}
+            </h1>
             <p className="text-sm text-slate-500">Import rooms and manage layouts for each floor</p>
           </div>
           <button
@@ -156,6 +181,17 @@ const AdminBuildingFloorsPage: React.FC = () => {
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-3">
                       <button
+                        onClick={() => {
+                          setTargetFloorId(floor.id);
+                          setShowImportModal(true);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+                        title="Import Rooms"
+                      >
+                        <ArrowUpTrayIcon className="h-4 w-4" />
+                        Import Rooms
+                      </button>
+                      <button
                         onClick={() => navigate(`/admin/buildings/${buildingId}/floors/${floor.id}/rooms`)}
                         className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
                         title="View Room List"
@@ -184,6 +220,26 @@ const AdminBuildingFloorsPage: React.FC = () => {
           )}
         </div>
       </main>
+
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => {
+          setShowImportModal(false);
+          setImportFile(null);
+          setTargetFloorId(null);
+          setImportError(null);
+        }}
+        onImport={handleImportExcel}
+        importFile={importFile}
+        setImportFile={setImportFile}
+        title="Import Rooms"
+        description="Chỉ hỗ trợ file .xlsx"
+        structureInfo="Cấu trúc Excel: locationCode, capacity, status (AVAILABLE, BROKEN, etc.), score, amenityNames (ngăn cách bằng dấu phẩy)."
+        loading={importingFloorId !== null}
+        error={importError}
+        templateDownloadLink="/template file add room.xlsx"
+        templateFileName="template file add room.xlsx"
+      />
 
       {toastPopup && (
         <CustomMessage

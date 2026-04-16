@@ -420,8 +420,9 @@ export const adminService = {
   },
 
   // start add admin api calls
-  async adminAddUser(payload: RegisterUserPayload): Promise<void> {
-    await api.post(API_ENDPOINTS.USERS.ADMIN_ADD, payload);
+  async adminAddUser(payload: RegisterUserPayload): Promise<string> {
+    const res = await api.post(API_ENDPOINTS.USERS.ADMIN_ADD, payload);
+    return extractSuccessMessage(res.data, "User created successfully");
   },
 
   async importUsersExcel(file: File): Promise<void> {
@@ -468,7 +469,17 @@ export const adminService = {
     );
   },
 
-  async searchAcademicSchedules(params: any): Promise<any> {
+  async searchAcademicSchedules(params: {
+    page?: number;
+    size?: number;
+    roomName?: string;
+    buildingId?: string;
+    floorId?: string;
+    fromDate?: string;
+    toDate?: string;
+    sortBy?: string;
+    sortDirection?: "asc" | "desc";
+  }): Promise<any> {
     const res = await api.get(API_ENDPOINTS.ACADEMIC_SCHEDULES.LIST, {
       params,
     });

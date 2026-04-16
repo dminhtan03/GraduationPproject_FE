@@ -62,6 +62,27 @@ const parseRoles = (roles: unknown): string[] => {
     .filter(Boolean);
 };
 
+const extractBackendMessage = (
+  payload: BackendResponse<unknown> | undefined,
+  fallback: string,
+): string => {
+  if (!payload) return fallback;
+
+  if (
+    typeof payload.meta?.message === "string" &&
+    payload.meta.message.trim()
+  ) {
+    return payload.meta.message;
+  }
+
+  const data = payload.data as { message?: unknown } | undefined;
+  if (typeof data?.message === "string" && data.message.trim()) {
+    return data.message;
+  }
+
+  return fallback;
+};
+
 const extractUserFromToken = (accessToken: string | undefined): User | null => {
   if (!accessToken) return null;
   const payload = decodeJwt(accessToken);
@@ -110,6 +131,7 @@ export const loginWithEmail = async (
 
   return {
     ...response,
+    message: extractBackendMessage(backendData, "Login successful"),
     data: {
       user: extractUserFromToken(accessToken),
       accessToken: accessToken || "",
@@ -146,6 +168,7 @@ export const loginWithGoogle = async (
 
   return {
     ...response,
+    message: extractBackendMessage(backendData, "Login with Google successful"),
     data: {
       user,
       accessToken: accessToken || "",
