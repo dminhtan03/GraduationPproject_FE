@@ -102,6 +102,8 @@ const AdminAcademicSchedulePage: React.FC = () => {
 
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [selectedSchedules, setSelectedSchedules] = useState<string[]>([]);
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [toastPopup, setToastPopup] = useState<{
     type: MessageType;
     message: string;
@@ -278,6 +280,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
 
       setSchedules(fetchedSchedules);
       setTotalPages(totalPagesCount);
+      setSelectedSchedules([]); // Clear selection on reload
     } catch (err) {
       console.error(err);
       setToastPopup({ type: "error", message: "Failed to load schedules" });
@@ -299,6 +302,39 @@ const AdminAcademicSchedulePage: React.FC = () => {
     e.preventDefault();
     setPage(0);
     loadSchedules();
+  };
+
+  const toggleDay = (day: string, isEdit: boolean = false) => {
+    if (isEdit) {
+      setEditingSchedule((prev: any) => {
+        if (!prev) return prev;
+        const currentDays = Array.isArray(prev.daysOfWeek)
+          ? prev.daysOfWeek
+          : typeof prev.daysOfWeek === "string"
+            ? prev.daysOfWeek.split(",").filter(Boolean)
+            : [];
+
+        const nextDays = currentDays.includes(day)
+          ? currentDays.filter((d: string) => d !== day)
+          : [...currentDays, day];
+
+        return { ...prev, daysOfWeek: nextDays };
+      });
+    } else {
+      setNewSchedule((prev: any) => {
+        const currentDays = Array.isArray(prev.daysOfWeek)
+          ? prev.daysOfWeek
+          : typeof prev.daysOfWeek === "string"
+            ? prev.daysOfWeek.split(",").filter(Boolean)
+            : [];
+
+        const nextDays = currentDays.includes(day)
+          ? currentDays.filter((d: string) => d !== day)
+          : [...currentDays, day];
+
+        return { ...prev, daysOfWeek: nextDays };
+      });
+    }
   };
 
   const handleCreateSchedule = async (e: React.FormEvent) => {
@@ -391,10 +427,68 @@ const AdminAcademicSchedulePage: React.FC = () => {
     }
   };
 
+  const handleToggleSelectAll = () => {
+    if (selectedSchedules.length === schedules.length) {
+      setSelectedSchedules([]);
+    } else {
+      setSelectedSchedules(schedules.map((s) => s.id));
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedSchedules((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete ${selectedSchedules.length} selected schedules?`
+      )
+    )
+      return;
+
+    setLoading(true);
+    try {
+      await adminService.deleteSchedules(selectedSchedules);
+      setToastPopup({
+        type: "success",
+        message: `Deleted ${selectedSchedules.length} schedules successfully`,
+      });
+      loadSchedules();
+    } catch (err) {
+      setToastPopup({ type: "error", message: "Failed to delete schedules" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkEditSubmit = async (data: any) => {
+    setLoading(true);
+    try {
+      await adminService.bulkUpdateSchedules(selectedSchedules, data);
+      setToastPopup({
+        type: "success",
+        message: "Updated selected schedules successfully",
+      });
+      setIsBulkEditModalOpen(false);
+      loadSchedules();
+    } catch (err: any) {
+      setToastPopup({
+        type: "error",
+        message: err.message || "Failed to update schedules",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importFile) return;
     setImportError(null);
+    setLoading(true);
     try {
       await adminService.importAcademicSchedules(importFile);
       setToastPopup({
@@ -405,39 +499,15 @@ const AdminAcademicSchedulePage: React.FC = () => {
       setImportFile(null);
       loadSchedules();
     } catch (err: any) {
+      // Backend now returns all errors joined by \n
       const errorMessage = err.message || "Failed to import schedules";
       setImportError(errorMessage);
       setToastPopup({
         type: "error",
-        message: errorMessage,
+        message: "Import failed. See errors below.",
       });
-    }
-  };
-
-  const toggleDay = (day: string, isNew: boolean) => {
-    if (isNew) {
-      const current = [...newSchedule.daysOfWeek];
-      if (current.includes(day)) {
-        setNewSchedule({
-          ...newSchedule,
-          daysOfWeek: current.filter((d) => d !== day),
-        });
-      } else {
-        setNewSchedule({ ...newSchedule, daysOfWeek: [...current, day] });
-      }
-    } else {
-      const current = editingSchedule.daysOfWeek
-        ? typeof editingSchedule.daysOfWeek === "string"
-          ? editingSchedule.daysOfWeek.split(",")
-          : editingSchedule.daysOfWeek
-        : [];
-      let next;
-      if (current.includes(day)) {
-        next = current.filter((d: string) => d !== day);
-      } else {
-        next = [...current, day];
-      }
-      setEditingSchedule({ ...editingSchedule, daysOfWeek: next });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -573,11 +643,59 @@ const AdminAcademicSchedulePage: React.FC = () => {
         </div>
 
         {/* Table */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {selectedSchedules.length > 0 && (
+            <div className="flex items-center justify-between bg-slate-900 px-6 py-3 animate-in slide-in-from-top duration-300">
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-bold text-white">
+                  {selectedSchedules.length} schedules selected
+                </span>
+                <div className="h-4 w-px bg-slate-700" />
+                <button
+                  onClick={handleToggleSelectAll}
+                  className="text-xs font-medium text-slate-400 hover:text-white transition-colors"
+                >
+                  {selectedSchedules.length === schedules.length
+                    ? "Deselect All"
+                    : "Select All"}
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setNewSchedule(defaultNewSchedule);
+                    setIsBulkEditModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-bold text-white hover:bg-white/20 transition-all"
+                >
+                  <PencilIcon className="h-4 w-4" />
+                  Bulk Edit
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-2 rounded-xl bg-red-500/10 px-4 py-2 text-sm font-bold text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/20"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  Delete Selected
+                </button>
+              </div>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                 <tr>
+                  <th className="px-6 py-4 w-10">
+                    <input
+                      type="checkbox"
+                      checked={
+                        schedules.length > 0 &&
+                        selectedSchedules.length === schedules.length
+                      }
+                      onChange={handleToggleSelectAll}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    />
+                  </th>
                   <th className="px-6 py-4 font-semibold">Room & Location</th>
                   <th className="px-6 py-4 font-semibold">Time</th>
                   <th className="px-6 py-4 font-semibold">Days</th>
@@ -589,7 +707,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="py-10 text-center text-slate-500"
                     >
                       Loading...
@@ -598,7 +716,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
                 ) : schedules.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="py-10 text-center text-slate-500"
                     >
                       No schedules found
@@ -606,7 +724,15 @@ const AdminAcademicSchedulePage: React.FC = () => {
                   </tr>
                 ) : (
                   schedules.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-50/50">
+                    <tr key={s.id} className={`hover:bg-slate-50/50 transition-colors ${selectedSchedules.includes(s.id) ? 'bg-orange-50/30' : ''}`}>
+                      <td className="px-6 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedSchedules.includes(s.id)}
+                          onChange={() => handleToggleSelect(s.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                        />
+                      </td>
                       <td className="px-6 py-4">
                         <div className="font-semibold text-slate-900">
                           {s.roomName}
@@ -894,7 +1020,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
                       <button
                         key={day}
                         type="button"
-                        onClick={() => toggleDay(day, true)}
+                        onClick={() => toggleDay(day, false)}
                         className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                           newSchedule.daysOfWeek.includes(day)
                             ? "bg-orange-600 text-white shadow-md shadow-orange-200"
@@ -1049,7 +1175,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
                       <button
                         key={day}
                         type="button"
-                        onClick={() => toggleDay(day, false)}
+                        onClick={() => toggleDay(day, true)}
                         className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                           (editingSchedule.daysOfWeek || []).includes(day)
                             ? "bg-orange-600 text-white shadow-md shadow-orange-200"
@@ -1117,6 +1243,210 @@ const AdminAcademicSchedulePage: React.FC = () => {
         templateDownloadLink="/Import Academic Schedule.xlsx"
         templateFileName="Import Academic Schedule.xlsx"
       />
+
+      {/* Bulk Edit Modal */}
+      {isBulkEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between border-b pb-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  Bulk Edit Schedules
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Updating {selectedSchedules.length} selected schedules
+                </p>
+              </div>
+              <button
+                onClick={() => setIsBulkEditModalOpen(false)}
+                className="rounded-full p-2 hover:bg-slate-100"
+              >
+                <XMarkIcon className="h-6 w-6 text-slate-400" />
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleBulkEditSubmit(newSchedule);
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Start Time
+                  </label>
+                  <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-orange-50 p-3">
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                      <select
+                        required
+                        className="h-10 w-full rounded-lg border border-orange-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none"
+                        value={getHourFromTime(newSchedule.startTime)}
+                        onChange={(e) =>
+                          setNewSchedule({
+                            ...newSchedule,
+                            startTime: `${e.target.value}:${getMinuteFromTime(newSchedule.startTime)}`,
+                          })
+                        }
+                      >
+                        {HOUR_OPTIONS.map((hour) => (
+                          <option key={`bulk-start-hour-${hour}`} value={hour}>
+                            {hour}h
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-base font-bold text-orange-500">
+                        :
+                      </span>
+                      <select
+                        required
+                        className="h-10 w-full rounded-lg border border-orange-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none"
+                        value={getMinuteFromTime(newSchedule.startTime)}
+                        onChange={(e) =>
+                          setNewSchedule({
+                            ...newSchedule,
+                            startTime: `${getHourFromTime(newSchedule.startTime)}:${e.target.value}`,
+                          })
+                        }
+                      >
+                        {MINUTE_OPTIONS.map((minute) => (
+                          <option
+                            key={`bulk-start-minute-${minute}`}
+                            value={minute}
+                          >
+                            {minute}m
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    End Time
+                  </label>
+                  <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-orange-50 p-3">
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                      <select
+                        required
+                        className="h-10 w-full rounded-lg border border-orange-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none"
+                        value={getHourFromTime(newSchedule.endTime)}
+                        onChange={(e) =>
+                          setNewSchedule({
+                            ...newSchedule,
+                            endTime: `${e.target.value}:${getMinuteFromTime(newSchedule.endTime)}`,
+                          })
+                        }
+                      >
+                        {HOUR_OPTIONS.map((hour) => (
+                          <option key={`bulk-end-hour-${hour}`} value={hour}>
+                            {hour}h
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-base font-bold text-orange-500">
+                        :
+                      </span>
+                      <select
+                        required
+                        className="h-10 w-full rounded-lg border border-orange-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none"
+                        value={getMinuteFromTime(newSchedule.endTime)}
+                        onChange={(e) =>
+                          setNewSchedule({
+                            ...newSchedule,
+                            endTime: `${getHourFromTime(newSchedule.endTime)}:${e.target.value}`,
+                          })
+                        }
+                      >
+                        {MINUTE_OPTIONS.map((minute) => (
+                          <option
+                            key={`bulk-end-minute-${minute}`}
+                            value={minute}
+                          >
+                            {minute}m
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <DatePickerField
+                    label="From date"
+                    value={newSchedule.fromDate}
+                    onChange={(nextDate) =>
+                      setNewSchedule({ ...newSchedule, fromDate: nextDate })
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <DatePickerField
+                    label="To date"
+                    value={newSchedule.toDate}
+                    minDate={newSchedule.fromDate || undefined}
+                    onChange={(nextDate) =>
+                      setNewSchedule({ ...newSchedule, toDate: nextDate })
+                    }
+                  />
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Days of Week
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {DAYS_OF_WEEK.map((day) => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => toggleDay(day, false)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                          newSchedule.daysOfWeek.includes(day)
+                            ? "bg-orange-600 text-white shadow-md shadow-orange-200"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {day.substring(0, 3)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-700">
+                    Description (Optional)
+                  </label>
+                  <textarea
+                    className="w-full rounded-xl border-slate-200"
+                    rows={2}
+                    value={newSchedule.description}
+                    placeholder="Leave empty to keep existing descriptions"
+                    onChange={(e) =>
+                      setNewSchedule({
+                        ...newSchedule,
+                        description: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkEditModalOpen(false)}
+                  className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 rounded-xl bg-orange-600 py-2.5 text-sm font-bold text-white hover:bg-orange-700 shadow-lg shadow-orange-100"
+                >
+                  Update {selectedSchedules.length} Schedules
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {toastPopup && (
         <CustomMessage
