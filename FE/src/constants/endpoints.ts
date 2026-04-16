@@ -82,8 +82,12 @@ export const API_ENDPOINTS = {
   },
   // AI assistant endpoints
   AI: {
+    ADD_CHAT: "/api/v1/chatbot/session",
     CHAT: "/api/v1/chatbot/message",
     VOICE: "/api/v1/chatbot/voice",
+    DELETE_CHAT: "/api/v1/chatbot/session/:sessionId",
+    HISTORY: "/api/v1/chatbot/history",
+    HISTORY_DETAIL: "/api/v1/chatbot/history/:sessionId",
     RESERVE: "/api/v1/ai/reserve",
   },
 

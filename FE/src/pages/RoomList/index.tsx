@@ -597,8 +597,8 @@ const DashboardPage: React.FC = () => {
 
       {/* Filter + Search */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4 mb-6 flex flex-col gap-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[max-content_max-content_max-content_minmax(16rem,1fr)] gap-3 items-end">
+          <div className="w-full xl:min-w-[150px] xl:w-auto">
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
               Status
             </div>
@@ -614,7 +614,7 @@ const DashboardPage: React.FC = () => {
             />
           </div>
 
-          <div>
+          <div className="w-full xl:min-w-[180px] xl:w-auto">
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
               Building
             </div>
@@ -633,7 +633,7 @@ const DashboardPage: React.FC = () => {
             />
           </div>
 
-          <div>
+          <div className="w-full xl:min-w-[160px] xl:w-auto">
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
               Floor
             </div>
@@ -651,14 +651,30 @@ const DashboardPage: React.FC = () => {
               ariaLabel="Filter rooms by floor"
             />
           </div>
+
+          <div className="w-full xl:min-w-[280px]">
+            <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
+              Search
+            </div>
+            <input
+              type="text"
+              placeholder="Search by room or building..."
+              value={tableSearch}
+              onChange={(e) => {
+                setTableSearch(e.target.value);
+                setPage(0);
+              }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1fr_1fr_auto_auto_1fr] gap-3 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-3 items-end">
           <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-2">
               Start time
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
               <div className="min-w-0">
                 <DatePickerField
                   value={startDate}
@@ -676,9 +692,9 @@ const DashboardPage: React.FC = () => {
                   setStartHour(nextValue);
                   setPage(0);
                 }}
-                buttonClassName="h-[40px] border-gray-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                buttonClassName="h-[40px] border-gray-200 bg-white px-3 text-sm font-semibold tabular-nums"
                 menuClassName="max-h-56 overflow-y-auto"
-                optionClassName="text-xs tabular-nums"
+                optionClassName="text-sm tabular-nums"
                 ariaLabel="Select start hour"
               />
               <AnimatedDropdown<string>
@@ -688,9 +704,9 @@ const DashboardPage: React.FC = () => {
                   setStartMinute(nextValue);
                   setPage(0);
                 }}
-                buttonClassName="h-[40px] border-gray-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                buttonClassName="h-[40px] border-gray-200 bg-white px-3 text-sm font-semibold tabular-nums"
                 menuClassName="max-h-56 overflow-y-auto"
-                optionClassName="text-xs tabular-nums"
+                optionClassName="text-sm tabular-nums"
                 ariaLabel="Select start minute"
               />
             </div>
@@ -700,7 +716,7 @@ const DashboardPage: React.FC = () => {
             <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-2">
               End time
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
               <div className="min-w-0">
                 <DatePickerField
                   value={endDate}
@@ -718,9 +734,9 @@ const DashboardPage: React.FC = () => {
                   setEndHour(nextValue);
                   setPage(0);
                 }}
-                buttonClassName="h-[40px] border-gray-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                buttonClassName="h-[40px] border-gray-200 bg-white px-3 text-sm font-semibold tabular-nums"
                 menuClassName="max-h-56 overflow-y-auto"
-                optionClassName="text-xs tabular-nums"
+                optionClassName="text-sm tabular-nums"
                 ariaLabel="Select end hour"
               />
               <AnimatedDropdown<string>
@@ -730,9 +746,9 @@ const DashboardPage: React.FC = () => {
                   setEndMinute(nextValue);
                   setPage(0);
                 }}
-                buttonClassName="h-[40px] border-gray-200 bg-white px-2.5 text-xs font-semibold tabular-nums"
+                buttonClassName="h-[40px] border-gray-200 bg-white px-3 text-sm font-semibold tabular-nums"
                 menuClassName="max-h-56 overflow-y-auto"
-                optionClassName="text-xs tabular-nums"
+                optionClassName="text-sm tabular-nums"
                 ariaLabel="Select end minute"
               />
             </div>
@@ -765,22 +781,6 @@ const DashboardPage: React.FC = () => {
           >
             Clear time
           </button>
-
-          <div>
-            <div className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 mb-1">
-              Search
-            </div>
-            <input
-              type="text"
-              placeholder="Search by room or building..."
-              value={tableSearch}
-              onChange={(e) => {
-                setTableSearch(e.target.value);
-                setPage(0);
-              }}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-            />
-          </div>
         </div>
       </div>
 

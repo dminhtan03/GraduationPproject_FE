@@ -11,6 +11,7 @@ import CustomMessage, {
 } from "../../components/common/CustomMessage";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
+import { message } from "antd";
 import { setAuthenticatedUser, useAppDispatch } from "../../store";
 import campusBackground from "../../assets/image.png";
 
@@ -106,10 +107,10 @@ const LoginPage: React.FC = () => {
       const res = await loginWithEmail({ email, password });
 
       if (res.success) {
+        message.success(res.message || "Login successful");
         dispatch(setAuthenticatedUser(res.data?.user ?? null));
-        showPopup("success", "Login successful");
         const target = getDefaultRouteByRole(res.data?.user ?? null);
-        setTimeout(() => navigate(target), 800);
+        navigate(target, { replace: true });
       } else {
         showPopup("error", res.message || "Login failed");
       }
@@ -130,10 +131,10 @@ const LoginPage: React.FC = () => {
 
         const res = await loginWithGoogle(token);
         if (res.success) {
+          message.success(res.message || "Login with Google successful");
           dispatch(setAuthenticatedUser(res.data?.user ?? null));
-          showPopup("success", res.message || "Login with Google successful");
           const target = getDefaultRouteByRole(res.data?.user ?? null);
-          setTimeout(() => navigate(target), 800);
+          navigate(target, { replace: true });
         } else {
           showPopup("error", res.message || "Login with Google failed");
         }
