@@ -1,8 +1,28 @@
 // ===== AI ASSISTANT SERVICE =====
 
 import { api } from "./api";
-import { API_ENDPOINTS } from "../constants/endpoints";
+import { API_ENDPOINTS, buildUrl } from "../constants/endpoints";
 import type { AiChatRequestDto, AiChatResponseDto } from "../types/api";
+
+export interface AiChatHistorySummaryDto {
+  sessionId: string;
+  messageCount: number;
+  startedAt: string;
+  lastMessageAt: string;
+  lastSender: string;
+  lastMessage: string;
+}
+
+export interface AiChatHistoryDetailMessageDto {
+  id: string;
+  sender: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface AiChatHistoryDetailDto extends AiChatHistorySummaryDto {
+  messages: AiChatHistoryDetailMessageDto[];
+}
 
 type BackendChatbotRoomItem = {
   id?: string;
@@ -40,6 +60,79 @@ type BackendChatbotResponse = {
   reservation?: AiChatResponseDto["reservation"];
   availableRooms?: BackendChatbotRoomItem[];
   alternativeRooms?: BackendChatbotRoomItem[];
+};
+
+type BackendChatHistorySummary = {
+  sessionId?: string;
+  messageCount?: number;
+  startedAt?: string;
+  lastMessageAt?: string;
+  lastSender?: string;
+  lastMessage?: string;
+};
+
+type BackendChatHistoryDetailMessage = {
+  id?: string;
+  sender?: string;
+  message?: string;
+  createdAt?: string;
+};
+
+type BackendChatHistoryDetail = BackendChatHistorySummary & {
+  messages?: BackendChatHistoryDetailMessage[];
+};
+
+const unwrapData = <T>(value: unknown): T => {
+  return ((value as { data?: T })?.data ?? value) as T;
+};
+
+const normalizeHistorySummary = (
+  item: BackendChatHistorySummary,
+): AiChatHistorySummaryDto | null => {
+  const sessionId =
+    typeof item.sessionId === "string" ? item.sessionId.trim() : "";
+  if (!sessionId) return null;
+
+  return {
+    sessionId,
+    messageCount: Number(item.messageCount ?? 0),
+    startedAt: item.startedAt || item.lastMessageAt || new Date().toISOString(),
+    lastMessageAt:
+      item.lastMessageAt || item.startedAt || new Date().toISOString(),
+    lastSender: item.lastSender || "BOT",
+    lastMessage: item.lastMessage || "",
+  };
+};
+
+const normalizeHistoryDetail = (
+  item: BackendChatHistoryDetail,
+): AiChatHistoryDetailDto => {
+  const summary = normalizeHistorySummary(item) ?? {
+    sessionId: "",
+    messageCount: 0,
+    startedAt: new Date().toISOString(),
+    lastMessageAt: new Date().toISOString(),
+    lastSender: "BOT",
+    lastMessage: "",
+  };
+
+  const messages = Array.isArray(item.messages)
+    ? item.messages
+        .filter((message) => typeof message?.message === "string")
+        .map((message) => ({
+          id:
+            (typeof message.id === "string" && message.id) ||
+            Math.random().toString(36).slice(2),
+          sender: message.sender || "BOT",
+          message: message.message || "",
+          createdAt: message.createdAt || new Date().toISOString(),
+        }))
+    : [];
+
+  return {
+    ...summary,
+    messages,
+  };
 };
 
 const mapRoomsToSuggestions = (rooms?: BackendChatbotRoomItem[]) => {
@@ -106,11 +199,21 @@ const normalizeChatResponse = (
 };
 
 export const aiService = {
+  async addChat(): Promise<string> {
+    const res = await api.post<unknown>(API_ENDPOINTS.AI.ADD_CHAT);
+    const payloadData = unwrapData<{ sessionId?: string }>(res.data);
+    const sessionId = payloadData?.sessionId;
+
+    if (!sessionId) {
+      throw new Error("Failed to create chat session");
+    }
+
+    return sessionId;
+  },
+
   async chat(payload: AiChatRequestDto): Promise<AiChatResponseDto> {
     const res = await api.post<unknown>(API_ENDPOINTS.AI.CHAT, payload);
-    const payloadData =
-      (res.data as { data?: BackendChatbotResponse }).data ??
-      (res.data as BackendChatbotResponse);
+    const payloadData = unwrapData<BackendChatbotResponse>(res.data);
     return normalizeChatResponse(payloadData);
   },
 
@@ -131,10 +234,48 @@ export const aiService = {
     }
 
     const res = await api.post<unknown>(API_ENDPOINTS.AI.VOICE, formData);
-    const payloadData =
-      (res.data as { data?: BackendChatbotResponse }).data ??
-      (res.data as BackendChatbotResponse);
+    const payloadData = unwrapData<BackendChatbotResponse>(res.data);
     return normalizeChatResponse(payloadData);
+  },
+
+  async getChatHistory(): Promise<AiChatHistorySummaryDto[]> {
+    const res = await api.get<unknown>(API_ENDPOINTS.AI.HISTORY);
+    const payloadData = unwrapData<BackendChatHistorySummary[]>(res.data);
+
+    if (!Array.isArray(payloadData)) {
+      return [];
+    }
+
+    return payloadData
+      .map((item) => normalizeHistorySummary(item))
+      .filter((item): item is AiChatHistorySummaryDto => item !== null);
+  },
+
+  async getChatHistoryDetail(
+    sessionId: string,
+  ): Promise<AiChatHistoryDetailDto> {
+    const res = await api.get<unknown>(
+      buildUrl(API_ENDPOINTS.AI.HISTORY_DETAIL, { sessionId }),
+    );
+    const payloadData = unwrapData<BackendChatHistoryDetail>(res.data);
+    return normalizeHistoryDetail(payloadData);
+  },
+
+  async deleteChat(
+    sessionId: string,
+  ): Promise<{ sessionId: string; deletedMessages: number }> {
+    const res = await api.delete<unknown>(
+      buildUrl(API_ENDPOINTS.AI.DELETE_CHAT, { sessionId }),
+    );
+    const payloadData = unwrapData<{
+      sessionId?: string;
+      deletedMessages?: number;
+    }>(res.data);
+
+    return {
+      sessionId: payloadData.sessionId || sessionId,
+      deletedMessages: Number(payloadData.deletedMessages ?? 0),
+    };
   },
 
   async reserve(payload: {
@@ -145,9 +286,7 @@ export const aiService = {
     attendeeCount?: number;
   }): Promise<AiChatResponseDto> {
     const res = await api.post<unknown>(API_ENDPOINTS.AI.RESERVE, payload);
-    const payloadData =
-      (res.data as { data?: AiChatResponseDto }).data ??
-      (res.data as AiChatResponseDto);
+    const payloadData = unwrapData<AiChatResponseDto>(res.data);
     return payloadData;
   },
 };

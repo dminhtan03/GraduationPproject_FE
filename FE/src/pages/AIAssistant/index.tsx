@@ -6,13 +6,19 @@ import React, {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { aiService } from "../../services/aiService";
+import { TrashIcon } from "@heroicons/react/24/outline";
+import {
+  aiService,
+  type AiChatHistoryDetailMessageDto,
+  type AiChatHistorySummaryDto,
+} from "../../services/aiService";
 import type { AiChatResponseDto, AiRoomSuggestion } from "../../types/api";
 import type { Reservation, UserProfile } from "../../types";
 import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
 import { roomService } from "../../services/roomService";
+import { ConfirmDialog } from "../../components/common";
 
 type Sender = "user" | "bot";
 
@@ -54,6 +60,52 @@ const createWelcomeMessage = (): ChatMessage => ({
   text: "Hello, I am UniBot. I can help you find available rooms, check capacity, and book quickly.",
   createdAt: new Date().toISOString(),
 });
+
+const DEFAULT_CHAT_TITLE = "New Conversation";
+const DEFAULT_CHAT_SUBTITLE = "Start chatting with UniBot";
+
+const toSessionTitle = (value: string) => {
+  const content = value.trim();
+  if (!content) return DEFAULT_CHAT_TITLE;
+  return content.slice(0, 36) + (content.length > 36 ? "..." : "");
+};
+
+const toSessionSubtitle = (value: string) => {
+  const content = value.trim();
+  return content || DEFAULT_CHAT_SUBTITLE;
+};
+
+const mapHistorySender = (sender: string): Sender => {
+  return sender.toUpperCase() === "USER" ? "user" : "bot";
+};
+
+const mapDetailMessageToChatMessage = (
+  message: AiChatHistoryDetailMessageDto,
+): ChatMessage | null => {
+  const text = toText(message.message);
+  if (!text) return null;
+
+  return {
+    id: message.id || createId(),
+    sender: mapHistorySender(message.sender),
+    text,
+    createdAt: message.createdAt || new Date().toISOString(),
+  };
+};
+
+const mapHistorySessionToSummary = (
+  session: AiChatHistorySummaryDto,
+): ChatSessionSummary => {
+  const lastMessage = toText(session.lastMessage);
+  return {
+    id: session.sessionId,
+    title: toSessionTitle(lastMessage),
+    subtitle: toSessionSubtitle(lastMessage),
+    createdAt:
+      session.startedAt || session.lastMessageAt || new Date().toISOString(),
+    aiSessionId: session.sessionId,
+  };
+};
 
 const statusClass: Record<string, string> = {
   AVAILABLE: "border-emerald-200 bg-emerald-100 text-emerald-700",
@@ -158,8 +210,6 @@ const getBookingCardData = (reservation?: Reservation | null) => {
   };
 };
 
-const AI_ASSISTANT_STORAGE_KEY = "ai_assistant_chat_state_v1";
-
 interface SpeechRecognitionAlternativeLike {
   transcript: string;
 }
@@ -192,101 +242,102 @@ const getSpeechRecognitionCtor = () => {
   return maybeWindow.SpeechRecognition || maybeWindow.webkitSpeechRecognition;
 };
 
-interface StoredAIAssistantState {
-  sessions: ChatSessionSummary[];
-  selectedSessionId: string;
-  messagesBySession: Record<string, ChatMessage[]>;
-}
-
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const initialSession = useMemo<ChatSessionSummary>(
-    () => ({
-      id: createId(),
-      title: "New Conversation",
-      subtitle: "Start chatting with UniBot",
-      createdAt: new Date().toISOString(),
-    }),
-    [],
-  );
-
-  const [sessions, setSessions] = useState<ChatSessionSummary[]>([
-    initialSession,
-  ]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string>(
-    initialSession.id,
-  );
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>("");
   const [messagesBySession, setMessagesBySession] = useState<
     Record<string, ChatMessage[]>
-  >({
-    [initialSession.id]: [createWelcomeMessage()],
-  });
+  >({});
 
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [isDeletingSession, setIsDeletingSession] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
   const [isMobileHistoryOpen, setIsMobileHistoryOpen] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const [pendingDeleteSession, setPendingDeleteSession] =
+    useState<ChatSessionSummary | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
   const [dismissedSuggestionMessageId, setDismissedSuggestionMessageId] =
     useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const manualStopRef = useRef(false);
+  const loadedSessionDetailsRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(AI_ASSISTANT_STORAGE_KEY);
-      if (!raw) {
-        setIsHydrated(true);
-        return;
-      }
+  const createEmptySession = useCallback(async () => {
+    const aiSessionId = await aiService.addChat();
+    const now = new Date().toISOString();
 
-      const parsed = JSON.parse(raw) as Partial<StoredAIAssistantState>;
-      const sessionsData = Array.isArray(parsed.sessions)
-        ? parsed.sessions
-        : [];
-      const messagesData =
-        parsed.messagesBySession && typeof parsed.messagesBySession === "object"
-          ? (parsed.messagesBySession as Record<string, ChatMessage[]>)
-          : null;
-
-      if (sessionsData.length > 0 && messagesData) {
-        const selectedId =
-          typeof parsed.selectedSessionId === "string" &&
-          sessionsData.some(
-            (session) => session.id === parsed.selectedSessionId,
-          )
-            ? parsed.selectedSessionId
-            : sessionsData[0].id;
-
-        setSessions(sessionsData);
-        setSelectedSessionId(selectedId);
-        setMessagesBySession(messagesData);
-      }
-    } catch {
-      // Ignore invalid storage payload.
-    } finally {
-      setIsHydrated(true);
-    }
+    return {
+      id: aiSessionId,
+      title: DEFAULT_CHAT_TITLE,
+      subtitle: DEFAULT_CHAT_SUBTITLE,
+      createdAt: now,
+      aiSessionId,
+    } satisfies ChatSessionSummary;
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    let cancelled = false;
 
-    const payload: StoredAIAssistantState = {
-      sessions,
-      selectedSessionId,
-      messagesBySession,
+    const bootstrapChatHistory = async () => {
+      setIsLoadingHistory(true);
+      try {
+        const history = await aiService.getChatHistory();
+        if (cancelled) return;
+
+        if (history.length > 0) {
+          const mappedSessions = history.map(mapHistorySessionToSummary);
+          setSessions(mappedSessions);
+          setSelectedSessionId(mappedSessions[0].id);
+          return;
+        }
+
+        const session = await createEmptySession();
+        if (cancelled) return;
+
+        loadedSessionDetailsRef.current.add(session.id);
+        setSessions([session]);
+        setSelectedSessionId(session.id);
+        setMessagesBySession({
+          [session.id]: [createWelcomeMessage()],
+        });
+      } catch {
+        if (cancelled) return;
+
+        const fallbackId = createId();
+        loadedSessionDetailsRef.current.add(fallbackId);
+        setSessions([
+          {
+            id: fallbackId,
+            title: DEFAULT_CHAT_TITLE,
+            subtitle: DEFAULT_CHAT_SUBTITLE,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+        setSelectedSessionId(fallbackId);
+        setMessagesBySession({
+          [fallbackId]: [createWelcomeMessage()],
+        });
+      } finally {
+        if (!cancelled) {
+          setIsLoadingHistory(false);
+        }
+      }
     };
 
-    window.localStorage.setItem(
-      AI_ASSISTANT_STORAGE_KEY,
-      JSON.stringify(payload),
-    );
-  }, [isHydrated, messagesBySession, selectedSessionId, sessions]);
+    void bootstrapChatHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [createEmptySession]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -312,6 +363,88 @@ const AIAssistantPage: React.FC = () => {
   const selectedMessages = useMemo(() => {
     return messagesBySession[selectedSessionId] ?? [];
   }, [messagesBySession, selectedSessionId]);
+
+  const isSelectedSessionLoading =
+    !!selectedSession &&
+    loadingSessionId === selectedSession.id &&
+    selectedMessages.length === 0;
+
+  useEffect(() => {
+    if (!selectedSession?.aiSessionId) return;
+    if (loadedSessionDetailsRef.current.has(selectedSession.id)) return;
+
+    let cancelled = false;
+    loadedSessionDetailsRef.current.add(selectedSession.id);
+    setLoadingSessionId(selectedSession.id);
+
+    const loadSessionDetail = async () => {
+      try {
+        const detail = await aiService.getChatHistoryDetail(
+          selectedSession.aiSessionId as string,
+        );
+        if (cancelled) return;
+
+        const mappedMessages = detail.messages
+          .map((message) => mapDetailMessageToChatMessage(message))
+          .filter((message): message is ChatMessage => message !== null);
+
+        setMessagesBySession((prev) => {
+          if ((prev[selectedSession.id]?.length ?? 0) > 0) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            [selectedSession.id]:
+              mappedMessages.length > 0
+                ? mappedMessages
+                : [createWelcomeMessage()],
+          };
+        });
+
+        setSessions((prev) =>
+          prev.map((session) => {
+            if (session.id !== selectedSession.id) return session;
+
+            const lastMessage = toText(detail.lastMessage);
+            const shouldUpdateTitle = session.title === DEFAULT_CHAT_TITLE;
+
+            return {
+              ...session,
+              title: shouldUpdateTitle
+                ? toSessionTitle(lastMessage)
+                : session.title,
+              subtitle: toSessionSubtitle(lastMessage),
+              createdAt: detail.startedAt || session.createdAt,
+            };
+          }),
+        );
+      } catch {
+        if (cancelled) return;
+
+        setMessagesBySession((prev) => {
+          if ((prev[selectedSession.id]?.length ?? 0) > 0) return prev;
+
+          return {
+            ...prev,
+            [selectedSession.id]: [createWelcomeMessage()],
+          };
+        });
+      } finally {
+        if (!cancelled) {
+          setLoadingSessionId((current) =>
+            current === selectedSession.id ? null : current,
+          );
+        }
+      }
+    };
+
+    void loadSessionDetail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSession]);
 
   const latestMessage = useMemo(
     () => selectedMessages[selectedMessages.length - 1] ?? null,
@@ -353,6 +486,8 @@ const AIAssistantPage: React.FC = () => {
         createdAt: now,
       };
 
+      loadedSessionDetailsRef.current.add(selectedSession.id);
+
       setMessagesBySession((prev) => ({
         ...prev,
         [selectedSession.id]: [
@@ -364,7 +499,7 @@ const AIAssistantPage: React.FC = () => {
       setSessions((prev) =>
         prev.map((session) => {
           if (session.id !== selectedSession.id) return session;
-          const shouldUpdateTitle = session.title === "New Conversation";
+          const shouldUpdateTitle = session.title === DEFAULT_CHAT_TITLE;
           return {
             ...session,
             title: shouldUpdateTitle
@@ -518,7 +653,7 @@ const AIAssistantPage: React.FC = () => {
   }, [isListening, isSending, selectedSession, sendMessageToAi]);
 
   const handleQuickAction = (prompt: string) => {
-    handleSend(prompt);
+    void handleSend(prompt);
   };
 
   useEffect(() => {
@@ -955,30 +1090,94 @@ const AIAssistantPage: React.FC = () => {
 
   const suggestions = latestSuggestionMessage?.suggestions || [];
   const isSingleSuggestion = suggestions.length === 1;
+  const shouldEnableConversationScroll = sessions.length > 5;
 
   const handleSelectSession = (sessionId: string) => {
     setSelectedSessionId(sessionId);
     setIsMobileHistoryOpen(false);
   };
 
-  const handleNewChat = () => {
-    const id = createId();
-    const now = new Date().toISOString();
-    const newSession: ChatSessionSummary = {
-      id,
-      title: "New Conversation",
-      subtitle: "Start chatting with UniBot",
-      createdAt: now,
-    };
-    setSessions((prev) => [newSession, ...prev]);
-    setSelectedSessionId(id);
-    setMessagesBySession((prev) => ({
-      ...prev,
-      [id]: [createWelcomeMessage()],
-    }));
-    setInputValue("");
+  const requestDeleteSession = useCallback((session: ChatSessionSummary) => {
+    setPendingDeleteSession(session);
+  }, []);
+
+  const handleNewChat = useCallback(async () => {
+    if (isCreatingChat) return;
+
+    setIsCreatingChat(true);
+    try {
+      const newSession = await createEmptySession();
+      loadedSessionDetailsRef.current.add(newSession.id);
+
+      setSessions((prev) => [
+        newSession,
+        ...prev.filter((session) => session.id !== newSession.id),
+      ]);
+      setSelectedSessionId(newSession.id);
+      setMessagesBySession((prev) => ({
+        ...prev,
+        [newSession.id]: [createWelcomeMessage()],
+      }));
+      setInputValue("");
+    } catch {
+      // Keep current chat if creating a new chat fails.
+    } finally {
+      setIsCreatingChat(false);
+      setIsMobileHistoryOpen(false);
+    }
+  }, [createEmptySession, isCreatingChat]);
+
+  const handleDeleteSession = useCallback(async () => {
+    if (!pendingDeleteSession || isDeletingSession) return;
+
+    const targetSession = pendingDeleteSession;
+    const sessionId = targetSession.aiSessionId || targetSession.id;
+
+    if (!sessionId) {
+      setPendingDeleteSession(null);
+      return;
+    }
+
+    setIsDeletingSession(true);
+    try {
+      await aiService.deleteChat(sessionId);
+    } catch {
+      return;
+    } finally {
+      setIsDeletingSession(false);
+    }
+
+    loadedSessionDetailsRef.current.delete(targetSession.id);
+
+    const remainingSessions = sessions.filter(
+      (item) => item.id !== targetSession.id,
+    );
+
+    setSessions(remainingSessions);
+    setMessagesBySession((prev) => {
+      const next = { ...prev };
+      delete next[targetSession.id];
+      return next;
+    });
+
+    if (selectedSessionId === targetSession.id) {
+      if (remainingSessions.length > 0) {
+        setSelectedSessionId(remainingSessions[0].id);
+      } else {
+        setSelectedSessionId("");
+        await handleNewChat();
+      }
+    }
+
+    setPendingDeleteSession(null);
     setIsMobileHistoryOpen(false);
-  };
+  }, [
+    handleNewChat,
+    isDeletingSession,
+    pendingDeleteSession,
+    selectedSessionId,
+    sessions,
+  ]);
 
   return (
     <section className="relative overflow-hidden rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-amber-50 to-white p-3 sm:p-6">
@@ -997,45 +1196,75 @@ const AIAssistantPage: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={handleNewChat}
+                onClick={() => void handleNewChat()}
+                disabled={isCreatingChat}
                 className="rounded-lg border border-orange-200 px-3 py-1.5 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
               >
-                New Chat
+                {isCreatingChat ? "Creating..." : "New Chat"}
               </button>
             </div>
 
-            <div className="space-y-2 overflow-y-auto pr-1">
+            <div
+              className={`space-y-2 pr-1 ${
+                shouldEnableConversationScroll
+                  ? "max-h-[22rem] overflow-y-auto"
+                  : ""
+              }`}
+            >
+              {isLoadingHistory && sessions.length === 0 && (
+                <p className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-600">
+                  Loading conversations...
+                </p>
+              )}
+
               {sessions.map((session) => {
                 const active = session.id === selectedSessionId;
                 return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => handleSelectSession(session.id)}
-                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
-                      active
-                        ? "border-orange-500 bg-orange-500 text-white shadow"
-                        : "border-orange-200 bg-white hover:border-orange-300 hover:bg-orange-50"
-                    }`}
-                  >
-                    <div className="truncate text-sm font-semibold">
-                      {session.title}
-                    </div>
-                    <div
-                      className={`mt-1 truncate text-xs ${
-                        active ? "text-orange-50/85" : "text-orange-700/80"
+                  <div key={session.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectSession(session.id)}
+                      className={`w-full rounded-xl border px-3 py-2.5 pr-10 text-left transition ${
+                        active
+                          ? "border-orange-500 bg-orange-500 text-white shadow"
+                          : "border-orange-200 bg-white hover:border-orange-300 hover:bg-orange-50"
                       }`}
                     >
-                      {session.subtitle}
-                    </div>
-                    <div
-                      className={`mt-1 text-[11px] ${
-                        active ? "text-orange-100/80" : "text-orange-500"
+                      <div className="truncate text-sm font-semibold">
+                        {session.title}
+                      </div>
+                      <div
+                        className={`mt-1 truncate text-xs ${
+                          active ? "text-orange-50/85" : "text-orange-700/80"
+                        }`}
+                      >
+                        {session.subtitle}
+                      </div>
+                      <div
+                        className={`mt-1 text-[11px] ${
+                          active ? "text-orange-100/80" : "text-orange-500"
+                        }`}
+                      >
+                        {formatDate(session.createdAt)}
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        requestDeleteSession(session);
+                      }}
+                      className={`absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold transition ${
+                        active
+                          ? "border-white/35 text-white hover:bg-white/15"
+                          : "border-orange-200 text-orange-600 hover:border-orange-300 hover:bg-orange-100"
                       }`}
+                      aria-label="Delete conversation"
                     >
-                      {formatDate(session.createdAt)}
-                    </div>
-                  </button>
+                      <TrashIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -1067,7 +1296,16 @@ const AIAssistantPage: React.FC = () => {
             </header>
 
             <div className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-orange-50/40 px-4 py-5 sm:px-6">
-              {selectedMessages.map((message) => renderMessage(message))}
+              {isSelectedSessionLoading && (
+                <div className="mb-5 flex justify-center">
+                  <div className="rounded-xl border border-orange-200 bg-white px-4 py-2 text-xs font-medium text-orange-600">
+                    Loading conversation...
+                  </div>
+                </div>
+              )}
+
+              {!isSelectedSessionLoading &&
+                selectedMessages.map((message) => renderMessage(message))}
 
               {isSending && (
                 <div className="mb-5 flex justify-start">
@@ -1193,7 +1431,7 @@ const AIAssistantPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleMicClick}
-                  disabled={isSending}
+                  disabled={isSending || !selectedSession}
                   title={isListening ? "Stop recording" : "Speech to text"}
                   className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-1 ${
                     isListening
@@ -1254,7 +1492,7 @@ const AIAssistantPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleSend()}
-                  disabled={isSending || !inputValue.trim()}
+                  disabled={isSending || !inputValue.trim() || !selectedSession}
                   className="inline-flex h-10 items-center rounded-xl bg-orange-500 px-4 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
                 >
                   {isSending ? "Sending..." : "Send"}
@@ -1300,44 +1538,74 @@ const AIAssistantPage: React.FC = () => {
 
             <button
               type="button"
-              onClick={handleNewChat}
+              onClick={() => void handleNewChat()}
+              disabled={isCreatingChat}
               className="mb-3 w-full rounded-lg border border-orange-200 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
             >
-              New Chat
+              {isCreatingChat ? "Creating..." : "New Chat"}
             </button>
 
-            <div className="max-h-[calc(100vh-11rem)] space-y-2 overflow-y-auto pr-1">
+            <div
+              className={`space-y-2 pr-1 ${
+                shouldEnableConversationScroll
+                  ? "max-h-[calc(100vh-11rem)] overflow-y-auto"
+                  : ""
+              }`}
+            >
+              {isLoadingHistory && sessions.length === 0 && (
+                <p className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-600">
+                  Loading conversations...
+                </p>
+              )}
+
               {sessions.map((session) => {
                 const active = session.id === selectedSessionId;
                 return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => handleSelectSession(session.id)}
-                    className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
-                      active
-                        ? "border-orange-500 bg-orange-500 text-white shadow"
-                        : "border-orange-200 bg-white hover:border-orange-300 hover:bg-orange-50"
-                    }`}
-                  >
-                    <div className="truncate text-sm font-semibold">
-                      {session.title}
-                    </div>
-                    <div
-                      className={`mt-1 truncate text-xs ${
-                        active ? "text-orange-50/85" : "text-orange-700/80"
+                  <div key={session.id} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectSession(session.id)}
+                      className={`w-full rounded-xl border px-3 py-2.5 pr-10 text-left transition ${
+                        active
+                          ? "border-orange-500 bg-orange-500 text-white shadow"
+                          : "border-orange-200 bg-white hover:border-orange-300 hover:bg-orange-50"
                       }`}
                     >
-                      {session.subtitle}
-                    </div>
-                    <div
-                      className={`mt-1 text-[11px] ${
-                        active ? "text-orange-100/80" : "text-orange-500"
+                      <div className="truncate text-sm font-semibold">
+                        {session.title}
+                      </div>
+                      <div
+                        className={`mt-1 truncate text-xs ${
+                          active ? "text-orange-50/85" : "text-orange-700/80"
+                        }`}
+                      >
+                        {session.subtitle}
+                      </div>
+                      <div
+                        className={`mt-1 text-[11px] ${
+                          active ? "text-orange-100/80" : "text-orange-500"
+                        }`}
+                      >
+                        {formatDate(session.createdAt)}
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        requestDeleteSession(session);
+                      }}
+                      className={`absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold transition ${
+                        active
+                          ? "border-white/35 text-white hover:bg-white/15"
+                          : "border-orange-200 text-orange-600 hover:border-orange-300 hover:bg-orange-100"
                       }`}
+                      aria-label="Delete conversation"
                     >
-                      {formatDate(session.createdAt)}
-                    </div>
-                  </button>
+                      <TrashIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -1371,6 +1639,22 @@ const AIAssistantPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingDeleteSession}
+        tone="danger"
+        title="Delete conversation"
+        description={
+          pendingDeleteSession
+            ? `Delete "${pendingDeleteSession.title}" from chat history? This action cannot be undone.`
+            : "Delete this conversation from chat history?"
+        }
+        confirmText="Delete"
+        cancelText="Keep"
+        loading={isDeletingSession}
+        onClose={() => setPendingDeleteSession(null)}
+        onConfirm={handleDeleteSession}
+      />
     </section>
   );
 };
