@@ -118,9 +118,9 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
                 "h-9 w-9 rounded-md text-sm font-semibold text-slate-900 hover:bg-slate-100",
               day_selected: "!bg-orange-500 !text-white hover:!bg-orange-600",
               day_today: "border border-orange-300 text-orange-600",
-              day_outside: "text-slate-300",
+              day_outside: "text-slate-300 opacity-30",
               day_disabled:
-                "text-slate-400 opacity-90 cursor-not-allowed pointer-events-none",
+                "!opacity-10 cursor-not-allowed pointer-events-none line-through text-slate-400 bg-slate-400 saturate-0 brightness-50",
             }}
           />
         </div>

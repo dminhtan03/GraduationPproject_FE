@@ -12,6 +12,7 @@ import {
 import { reservationService } from "../../services/reservationService";
 import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
+import { useRealtimeClock } from "../../hooks/useRealtimeClock";
 import type { Room } from "../../types";
 import DatePickerField from "../../components/common/DatePickerField";
 import AnimatedDropdown, {
@@ -23,6 +24,14 @@ import CustomMessage, {
 
 interface LocationState {
   room?: Room;
+  timeRange?: {
+    startDate: string;
+    startHour: string;
+    startMinute: string;
+    endDate: string;
+    endHour: string;
+    endMinute: string;
+  };
 }
 
 type BookingStep = "form" | "review";
@@ -216,12 +225,60 @@ const BookRoomPage: React.FC = () => {
   };
 
   const room = (state as LocationState | null)?.room;
+  const timeRangeFromState = (state as LocationState | null)?.timeRange;
+
   const normalizedRoomId = useMemo(
     () => roomId || room?.id || "",
     [roomId, room],
   );
   const minDate = useMemo(() => formatDateInput(new Date()), []);
   const nowHour = useMemo(() => new Date().getHours(), []);
+
+  // Real-time clock for monitoring
+  const _clockTick = useRealtimeClock(10_000); // Check every 10 seconds
+
+  // Initialize time range from navigation state
+  React.useEffect(() => {
+    if (timeRangeFromState && !startDate) {
+      setStartDate(timeRangeFromState.startDate);
+      setStartClock(`${timeRangeFromState.startHour}:${timeRangeFromState.startMinute}`);
+      setEndDate(timeRangeFromState.endDate);
+      setEndClock(`${timeRangeFromState.endHour}:${timeRangeFromState.endMinute}`);
+    }
+  }, [timeRangeFromState]);
+
+  // Auto-adjust start time if it falls in the past
+  React.useEffect(() => {
+    if (!startDate || !startClock) return;
+
+    const now = new Date();
+    const startDateTime = new Date(`${startDate}T${startClock}:00`);
+
+    // If start time is in the past, auto-adjust to next available slot
+    if (startDateTime <= now && startDate === minDate) {
+      const nextSlot = getMinStartSlot(startDate);
+      if (nextSlot) {
+        const newStartTime = `${pad(nextSlot.minHour)}:${pad(nextSlot.minMinute)}`;
+        setStartClock(newStartTime);
+        showPopup(
+          "info",
+          `Start time auto-adjusted to ${newStartTime} to prevent past booking`,
+        );
+
+        // Also auto-adjust end time to start + 1 hour
+        const endDateTime = new Date(startDateTime);
+        endDateTime.setHours(nextSlot.minHour);
+        endDateTime.setMinutes(nextSlot.minMinute);
+        endDateTime.setHours(endDateTime.getHours() + 1);
+
+        setEndDate(formatDateInput(endDateTime));
+        setEndClock(
+          `${pad(endDateTime.getHours())}:${pad(endDateTime.getMinutes())}`,
+        );
+      }
+    }
+  }, [_clockTick, startDate, startClock, minDate]);
+
   const isStartDateToday = useMemo(
     () => startDate === minDate,
     [startDate, minDate],

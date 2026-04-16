@@ -12,7 +12,7 @@ import {
   Modal,
 } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
-import { EyeIcon } from "@heroicons/react/24/outline";
+import { EyeIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { adminService } from "../../services/adminService";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
@@ -771,45 +771,58 @@ const AdminAllBookingListPage: React.FC = () => {
         {/* Main Content */}
         <main className="flex-1 overflow-auto px-4 pb-8 pt-5 lg:px-8">
           <Modal
-            title="Are you sure to cancel booking?"
+            title={
+              <div className="flex items-center gap-2">
+                <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+                <span>Force cancel booking</span>
+              </div>
+            }
             open={forceCancelModalOpen}
             onCancel={() => setForceCancelModalOpen(false)}
             onOk={submitForceCancel}
-            okText="Force Cancel"
-            cancelText="Close"
+            okText="Confirm Force Cancel"
+            cancelText="Cancel"
             okButtonProps={{
               danger: true,
               loading: Boolean(forceCancelLoadingId),
             }}
+            width={700}
+            className="[&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:shadow-lg"
           >
-            <div className="mt-2 space-y-3">
-              <p className="text-sm text-gray-600">
-                This action will force cancel the booking and a notification
-                email will be sent to the user.
-              </p>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase text-gray-600">
-                  Quick action
-                </label>
-                <Select
-                  value={forceCancelReason || undefined}
-                  onChange={(value) => setForceCancelReason(value || "")}
-                  className="w-full"
-                  placeholder="Choose a quick reason"
-                  options={forceCancelReasonOptions}
-                />
+            <div className="space-y-4">
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <p className="font-semibold">⚠️ Warning: This action will force cancel the booking</p>
+                <p className="mt-1 text-sm">A notification email will be sent to the user explaining the reason for cancellation.</p>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase text-gray-600">
-                  Reason
-                </label>
-                <Input.TextArea
-                  value={forceCancelReason}
-                  placeholder="Reason for force cancel"
-                  autoSize={{ minRows: 3, maxRows: 5 }}
-                  maxLength={500}
-                  onChange={(event) => setForceCancelReason(event.target.value)}
-                />
+              
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Quick action reason
+                  </label>
+                  <Select
+                    value={forceCancelReason || undefined}
+                    onChange={(value) => setForceCancelReason(value || "")}
+                    className="w-full"
+                    placeholder="Choose a predefined reason"
+                    options={forceCancelReasonOptions}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Custom reason <span className="text-slate-400 font-normal text-xs">(optional)</span>
+                  </label>
+                  <Input.TextArea
+                    value={forceCancelReason}
+                    placeholder="Or enter custom reason (max 500 characters)"
+                    autoSize={{ minRows: 4, maxRows: 6 }}
+                    maxLength={500}
+                    showCount
+                    onChange={(event) => setForceCancelReason(event.target.value)}
+                    className="border-slate-200 rounded-lg text-slate-800"
+                  />
+                </div>
               </div>
             </div>
           </Modal>

@@ -22,7 +22,9 @@ import type { TablePaginationConfig } from "antd/es/table";
 import { CalendarOutlined, ClockCircleOutlined } from "@ant-design/icons";
 import {
   ChatBubbleLeftRightIcon,
+  CheckBadgeIcon,
   ClockIcon,
+  ExclamationTriangleIcon,
   MapPinIcon,
   SparklesIcon,
   StarIcon,
@@ -1786,13 +1788,29 @@ const MyBookingsPage: React.FC = () => {
         open={!!actionModal}
         onCancel={closeActionModal}
         title={
-          actionModal?.type === "check-in"
-            ? "Check-in meeting"
-            : actionModal?.type === "return-room"
-              ? "Return room"
-              : actionModal?.type === "extend"
-                ? "Extend room"
-                : "Cancel booking"
+          <div className="flex items-center gap-2">
+            {actionModal?.type === "check-in" ? (
+              <>
+                <CheckBadgeIcon className="h-5 w-5 text-emerald-600" />
+                <span>Check-in meeting</span>
+              </>
+            ) : actionModal?.type === "return-room" ? (
+              <>
+                <ClockIcon className="h-5 w-5 text-blue-600" />
+                <span>Return room</span>
+              </>
+            ) : actionModal?.type === "extend" ? (
+              <>
+                <ClockIcon className="h-5 w-5 text-orange-600" />
+                <span>Extend room</span>
+              </>
+            ) : (
+              <>
+                <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+                <span>Cancel booking</span>
+              </>
+            )}
+          </div>
         }
         okText={
           actionModal?.type === "check-in"
@@ -1805,163 +1823,180 @@ const MyBookingsPage: React.FC = () => {
         }
         cancelText="Close"
         onOk={handleConfirmAction}
+        width={700}
         okButtonProps={{
           loading:
             !!actionModal?.booking?.id &&
             actionLoadingId === actionModal.booking.id,
         }}
+        className="[&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:shadow-lg"
       >
-        <p className="text-gray-600 mb-4">
-          {actionModal?.type === "check-in"
-            ? "Review booking details before check-in."
-            : actionModal?.type === "return-room"
-              ? "Review booking details before returning the room."
-              : actionModal?.type === "extend"
-                ? "Choose extended hours before confirming."
-                : "Review booking details before canceling this booking."}
-        </p>
-
-        {actionModalError && (
-          <Alert
-            className="mb-4"
-            type="error"
-            showIcon
-            message="Action failed"
-            description={actionModalError}
-          />
-        )}
-
-        {/* start add cancellation warning alert */}
-        {actionModal?.type === "cancel" && userProfile?.cancellationCount === 2 && (
-          <Alert
-            className="mb-4"
-            type="warning"
-            showIcon
-            message="Cảnh báo quan trọng"
-            description="Bạn đã hủy đặt phòng 2 lần trong ngày hôm nay. Nếu hủy thêm lần này (lần thứ 3), chức năng đặt phòng của bạn sẽ bị khóa trong 24 giờ tới."
-          />
-        )}
-        {/* end add cancellation warning alert */}
-
-        {actionModal?.type === "extend" && (
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Extend hour(s)
-            </label>
-            <InputNumber
-              min={1}
-              max={4}
-              step={1}
-              value={extendHour}
-              onChange={(value) =>
-                setExtendHour(typeof value === "number" ? value : 1)
-              }
-            />
+        <div className="space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+            {actionModal?.type === "check-in"
+              ? "Review booking details before check-in."
+              : actionModal?.type === "return-room"
+                ? "Review booking details before returning the room."
+                : actionModal?.type === "extend"
+                  ? "Choose extended hours before confirming."
+                  : "Review booking details before canceling this booking."}
           </div>
-        )}
 
-        {actionModal?.type === "cancel" && (
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Cancellation reason <span className="text-red-500">*</span>
-            </label>
-            <Input.TextArea
-              rows={3}
-              maxLength={400}
-              showCount
-              value={cancelReason}
-              onChange={(event) => setCancelReason(event.target.value)}
-              placeholder="Enter reason for cancellation"
+          {actionModalError && (
+            <Alert
+              type="error"
+              showIcon
+              message="Action failed"
+              description={actionModalError}
+              className="border-red-200 bg-red-50"
             />
-          </div>
-        )}
+          )}
 
-        <Descriptions
-          size="small"
-          column={1}
-          bordered
-          items={[
-            {
-              key: "location",
-              label: "Location",
-              children: actionModal?.booking.locationCode || "-",
-            },
-            {
-              key: "floor",
-              label: "Floor",
-              children: actionModal?.booking.floor || "-",
-            },
-            {
-              key: "building",
-              label: "Building",
-              children: actionModal?.booking.buildingName || actionModal?.booking.address || "-",
-            },
-            {
-              key: "timeStart",
-              label: "Start time",
-              children: formatDateTime(actionModal?.booking.startTime || ""),
-            },
-            {
-              key: "timeEnd",
-              label: "End time",
-              children: formatDateTime(actionModal?.booking.endTime || ""),
-            },
-            {
-              key: "status",
-              label: "Status",
-              children: (
-                <Tag color={getStatusColor(actionModal?.booking.status || "")}>
-                  {actionModal?.booking.status || "-"}
-                </Tag>
-              ),
-            },
-            {
-              key: "purpose",
-              label: "Purpose",
-              children: actionModal?.booking.purpose || "-",
-            },
-            {
-              key: "note",
-              label: "Note",
-              children: actionModal?.booking.note || "-",
-            },
-          ]}
-        />
+          {actionModal?.type === "cancel" && userProfile?.cancellationCount === 2 && (
+            <Alert
+              type="warning"
+              showIcon
+              message="Cảnh báo quan trọng"
+              description="Bạn đã hủy đặt phòng 2 lần trong ngày hôm nay. Nếu hủy thêm lần này (lần thứ 3), chức năng đặt phòng của bạn sẽ bị khóa trong 24 giờ tới."
+              className="border-amber-200 bg-amber-50"
+            />
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-slate-50 p-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase">Location</p>
+                <p className="text-sm font-semibold text-slate-800 mt-1">
+                  {actionModal?.booking.locationCode || "-"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase">Floor</p>
+                <p className="text-sm font-semibold text-slate-800 mt-1">
+                  {actionModal?.booking.floor || "-"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase">Building</p>
+                <p className="text-sm font-semibold text-slate-800 mt-1">
+                  {actionModal?.booking.buildingName || actionModal?.booking.address || "-"}
+                </p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase">Status</p>
+                <div className="mt-1">
+                  <Tag color={getStatusColor(actionModal?.booking.status || "")}>
+                    {actionModal?.booking.status || "-"}
+                  </Tag>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-slate-50 p-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase">Start time</p>
+                <p className="text-sm font-semibold text-slate-800 mt-1">
+                  {formatDateTime(actionModal?.booking.startTime || "")}
+                </p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase">End time</p>
+                <p className="text-sm font-semibold text-slate-800 mt-1">
+                  {formatDateTime(actionModal?.booking.endTime || "")}
+                </p>
+              </div>
+            </div>
+            {(actionModal?.booking.purpose || actionModal?.booking.note) && (
+              <div className="border-t border-slate-100 pt-3 space-y-2">
+                {actionModal?.booking.purpose && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase">Purpose</p>
+                    <p className="text-sm text-slate-700 mt-1">{actionModal.booking.purpose}</p>
+                  </div>
+                )}
+                {actionModal?.booking.note && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase">Note</p>
+                    <p className="text-sm text-slate-700 mt-1">{actionModal.booking.note}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {actionModal?.type === "extend" && (
+            <div className="rounded-xl border border-slate-200 bg-blue-50 p-3">
+              <label className="block text-sm font-semibold text-slate-700 mb-3">
+                Extend hour(s)
+              </label>
+              <InputNumber
+                min={1}
+                max={4}
+                step={1}
+                value={extendHour}
+                onChange={(value) =>
+                  setExtendHour(typeof value === "number" ? value : 1)
+                }
+                className="w-24 text-center"
+              />
+              <p className="text-xs text-slate-600 mt-2">
+                Extend your meeting by {extendHour} hour{extendHour > 1 ? 's' : ''}
+              </p>
+            </div>
+          )}
+
+          {actionModal?.type === "cancel" && (
+            <div className="rounded-xl border border-slate-200 bg-red-50 p-3">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Cancellation reason <span className="text-red-500">*</span>
+              </label>
+              <Input.TextArea
+                rows={3}
+                maxLength={400}
+                showCount
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                placeholder="Enter reason for cancellation"
+                className="border-slate-200 rounded-lg"
+              />
+            </div>
+          )}
+        </div>
       </Modal>
 
       <Modal
         open={!!feedbackModal}
         onCancel={closeFeedbackModal}
-        width={760}
+        width={800}
         title={
           <div className="flex items-center gap-2">
             <SparklesIcon className="h-5 w-5 text-sky-600" />
-            <span>Feedback after return room</span>
+            <span>Share your feedback</span>
           </div>
         }
         okText="Submit feedback"
         cancelText="Skip"
         onOk={handleSubmitFeedback}
-        okButtonProps={{ loading: submittingFeedback }}
+        okButtonProps={{ loading: submittingFeedback, className: "bg-sky-600 hover:bg-sky-700" }}
         cancelButtonProps={{ disabled: submittingFeedback }}
+        className="[&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:shadow-lg"
       >
-        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-4 md:p-5">
-          <p className="mb-4 text-sm text-slate-600 md:text-base">
-            Share your experience about the meeting room you just used.
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-5">
+          <p className="text-base text-slate-700 font-medium mb-5">
+            Help us improve! Share your experience about the meeting room you just used.
           </p>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
                 <MapPinIcon className="h-4 w-4 text-sky-600" />
                 Booking details
               </h4>
 
-              <div className="space-y-2 text-sm">
+              <div className="space-y-3 text-sm">
                 <div className="flex items-start gap-2">
-                  <MapPinIcon className="mt-0.5 h-4 w-4 text-slate-500" />
+                  <MapPinIcon className="mt-0.5 h-4 w-4 text-slate-400" />
                   <div>
-                    <p className="text-xs text-slate-500">Location</p>
+                    <p className="text-xs text-slate-500 font-semibold">Location</p>
                     <p className="font-medium text-slate-800">
                       {feedbackModal?.booking.locationCode || "-"}
                     </p>
@@ -1969,9 +2004,9 @@ const MyBookingsPage: React.FC = () => {
                 </div>
 
                 <div className="flex items-start gap-2">
-                  <ClockIcon className="mt-0.5 h-4 w-4 text-slate-500" />
+                  <ClockIcon className="mt-0.5 h-4 w-4 text-slate-400" />
                   <div>
-                    <p className="text-xs text-slate-500">Start time</p>
+                    <p className="text-xs text-slate-500 font-semibold">Start time</p>
                     <p className="font-medium text-slate-800">
                       {formatDateTime(feedbackModal?.booking.startTime || "")}
                     </p>
@@ -1979,28 +2014,40 @@ const MyBookingsPage: React.FC = () => {
                 </div>
 
                 <div className="flex items-start gap-2">
-                  <ClockIcon className="mt-0.5 h-4 w-4 text-slate-500" />
+                  <ClockIcon className="mt-0.5 h-4 w-4 text-slate-400" />
                   <div>
-                    <p className="text-xs text-slate-500">End time</p>
+                    <p className="text-xs text-slate-500 font-semibold">End time</p>
                     <p className="font-medium text-slate-800">
                       {formatDateTime(feedbackModal?.booking.endTime || "")}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2">
+                  <StarIcon className="mt-0.5 h-4 w-4 text-slate-400" />
+                  <div>
+                    <p className="text-xs text-slate-500 font-semibold">Building</p>
+                    <p className="font-medium text-slate-800">
+                      {feedbackModal?.booking.buildingName || feedbackModal?.booking.address || "-"}
                     </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
                 <StarIcon className="h-4 w-4 text-amber-500" />
                 Your rating
               </h4>
 
-              <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
-                <Rate value={feedbackRating} onChange={setFeedbackRating} />
-                <p className="mt-2 text-xs text-slate-600">
+              <div className="rounded-lg border-2 border-amber-100 bg-amber-50 p-4">
+                <div className="flex justify-center">
+                  <Rate value={feedbackRating} onChange={setFeedbackRating} />
+                </div>
+                <p className="text-center mt-3 text-sm text-slate-700">
                   Satisfaction level:{" "}
-                  <span className="font-semibold">{feedbackRating}/5</span>
+                  <span className="font-bold text-amber-600">{feedbackRating}/5</span>
                 </p>
               </div>
             </div>
@@ -2009,16 +2056,20 @@ const MyBookingsPage: React.FC = () => {
           <div className="mt-4">
             <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800">
               <ChatBubbleLeftRightIcon className="h-4 w-4 text-sky-600" />
-              Feedback description
+              Your feedback <span className="text-red-500">*</span>
             </label>
             <Input.TextArea
               rows={4}
               maxLength={500}
               showCount
-              placeholder="Enter your feedback"
+              placeholder="Share your thoughts about this room..."
               value={feedbackDescription}
               onChange={(event) => setFeedbackDescription(event.target.value)}
+              className="text-sm border-slate-200 rounded-lg"
             />
+            <p className="text-xs text-slate-500 mt-2">
+              Your feedback helps us provide better room facilities and services.
+            </p>
           </div>
         </div>
       </Modal>

@@ -838,9 +838,25 @@ const DashboardPage: React.FC = () => {
                   const targetRoute = isAvailable
                     ? ROUTES.BOOK_ROOM
                     : ROUTES.ROOM_DETAIL;
-                  navigate(targetRoute.replace(":roomId", room.id), {
-                    state: { room },
-                  });
+                  if (isAvailable && timeFilterActive) {
+                    navigate(targetRoute.replace(":roomId", room.id), {
+                      state: {
+                        room,
+                        timeRange: {
+                          startDate,
+                          startHour,
+                          startMinute,
+                          endDate,
+                          endHour,
+                          endMinute,
+                        },
+                      },
+                    });
+                  } else {
+                    navigate(targetRoute.replace(":roomId", room.id), {
+                      state: { room },
+                    });
+                  }
                 }}
               >
                 {isAvailable ? "Book" : "View"}
