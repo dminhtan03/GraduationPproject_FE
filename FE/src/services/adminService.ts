@@ -469,6 +469,34 @@ export const adminService = {
     );
   },
 
+  async deleteSchedules(scheduleIds: string[]): Promise<any> {
+    const res = await api.delete(`${API_ENDPOINTS.ACADEMIC_SCHEDULES.LIST}/bulk`, {
+      data: scheduleIds,
+    });
+    return res.data;
+  },
+
+  async bulkUpdateSchedules(
+    scheduleIds: string[],
+    data: {
+      startTime: string;
+      endTime: string;
+      daysOfWeek: string[];
+      fromDate: string;
+      toDate: string;
+      description?: string;
+    }
+  ): Promise<any> {
+    const res = await api.put(
+      `${API_ENDPOINTS.ACADEMIC_SCHEDULES.LIST}/bulk`,
+      data,
+      {
+        params: { scheduleIds: scheduleIds.join(",") },
+      }
+    );
+    return res.data;
+  },
+
   async searchAcademicSchedules(params: {
     page?: number;
     size?: number;

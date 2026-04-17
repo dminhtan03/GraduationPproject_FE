@@ -63,10 +63,18 @@ const ImportModal: React.FC<ImportModalProps> = ({
             </div>
           </div>
           {error && (
-            <div className="rounded-xl bg-red-50 p-4 border border-red-100">
-              <p className="text-xs font-medium text-red-700 leading-relaxed">
-                {error}
-              </p>
+            <div className="rounded-xl bg-red-50 p-4 border border-red-100 max-h-40 overflow-y-auto shadow-inner shadow-red-100/50">
+              <div className="flex flex-col gap-1">
+                {error.split("\n").map((err, index) => (
+                  <p
+                    key={index}
+                    className="text-xs font-medium text-red-700 leading-relaxed flex items-start gap-2"
+                  >
+                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
+                    {err}
+                  </p>
+                ))}
+              </div>
             </div>
           )}
           <div className="rounded-xl bg-blue-50 p-4 border border-blue-100">
