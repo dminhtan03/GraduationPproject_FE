@@ -106,10 +106,29 @@ export interface AiRoomSuggestion {
   availableTimeSlots?: string[];
 }
 
+export interface AiRoomDetailDto {
+  id?: string;
+  locationCode?: string;
+  capacity?: number | null;
+  score?: number | null;
+  currentUserId?: string;
+  currentUserName?: string;
+  checkInTime?: string;
+  amenities?: string[];
+  images?: string[];
+  feedbacks?: Array<{
+    id?: string;
+    rating?: number | null;
+    description?: string;
+    createdAt?: string;
+  }>;
+}
+
 export interface AiChatResponseDto {
   sessionId?: string;
   reply: string;
   suggestions?: AiRoomSuggestion[];
+  roomDetail?: AiRoomDetailDto | null;
   reservationCreated: boolean;
   reservation?: Reservation | null;
 }

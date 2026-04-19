@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { TrashIcon } from "@heroicons/react/24/outline";
+import { ChevronDownIcon, TrashIcon } from "@heroicons/react/24/outline";
 import {
   aiService,
   type AiChatHistoryDetailMessageDto,
@@ -19,6 +19,10 @@ import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
 import { roomService } from "../../services/roomService";
 import { ConfirmDialog } from "../../components/common";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
+import { extractApiMessage } from "../../utils/errorHandlers";
 
 type Sender = "user" | "bot";
 
@@ -28,6 +32,7 @@ interface ChatMessage {
   text: string;
   createdAt: string;
   suggestions?: AiRoomSuggestion[];
+  roomDetail?: AiChatResponseDto["roomDetail"];
   reservation?: Reservation | null;
   reservationCreated?: boolean;
 }
@@ -262,12 +267,18 @@ const AIAssistantPage: React.FC = () => {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [pendingDeleteSession, setPendingDeleteSession] =
     useState<ChatSessionSummary | null>(null);
+  const [deleteToast, setDeleteToast] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [dismissedSuggestionMessageId, setDismissedSuggestionMessageId] =
+  const [collapsedSuggestionMessageId, setCollapsedSuggestionMessageId] =
     useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const manualStopRef = useRef(false);
+  const keepListeningRef = useRef(false);
+  const transcriptRef = useRef("");
   const loadedSessionDetailsRef = useRef<Set<string>>(new Set());
 
   const createEmptySession = useCallback(async () => {
@@ -457,9 +468,11 @@ const AIAssistantPage: React.FC = () => {
     return latestMessage;
   }, [latestMessage]);
 
-  const isSuggestionsVisible =
-    !!latestSuggestionMessage &&
-    latestSuggestionMessage.id !== dismissedSuggestionMessageId;
+  const latestSuggestionMessageId = latestSuggestionMessage?.id || "";
+
+  const isSuggestionsCollapsed =
+    !!latestSuggestionMessageId &&
+    latestSuggestionMessageId === collapsedSuggestionMessageId;
 
   let userInitials = "U";
   if (profile) {
@@ -523,6 +536,7 @@ const AIAssistantPage: React.FC = () => {
           text: response.reply,
           createdAt: new Date().toISOString(),
           suggestions: response.suggestions,
+          roomDetail: response.roomDetail,
           reservation: response.reservation,
           reservationCreated: response.reservationCreated,
         };
@@ -582,8 +596,8 @@ const AIAssistantPage: React.FC = () => {
 
     if (isListening) {
       manualStopRef.current = true;
+      keepListeningRef.current = false;
       recognitionRef.current?.stop();
-      setIsListening(false);
       return;
     }
 
@@ -608,9 +622,11 @@ const AIAssistantPage: React.FC = () => {
     recognitionRef.current = recognition;
     recognition.lang = "en-US";
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = true;
 
-    let finalTranscript = "";
+    transcriptRef.current = "";
+    manualStopRef.current = false;
+    keepListeningRef.current = true;
 
     recognition.onstart = () => {
       setIsListening(true);
@@ -618,35 +634,52 @@ const AIAssistantPage: React.FC = () => {
 
     recognition.onresult = (event: SpeechRecognitionEventLike) => {
       let transcript = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      for (let i = 0; i < event.results.length; i += 1) {
         transcript += event.results[i][0].transcript;
       }
 
-      finalTranscript = transcript.trim();
-      if (finalTranscript) {
-        setInputValue(finalTranscript);
+      const normalizedTranscript = transcript.trim();
+      if (normalizedTranscript) {
+        transcriptRef.current = normalizedTranscript;
+        setInputValue(normalizedTranscript);
       }
     };
 
     recognition.onerror = () => {
+      keepListeningRef.current = false;
+      manualStopRef.current = false;
+      transcriptRef.current = "";
       setIsListening(false);
       recognitionRef.current = null;
     };
 
     recognition.onend = () => {
-      setIsListening(false);
-      recognitionRef.current = null;
-
       if (manualStopRef.current) {
         manualStopRef.current = false;
+        keepListeningRef.current = false;
+        setIsListening(false);
+        recognitionRef.current = null;
+
+        const spokenText = transcriptRef.current.trim();
+        transcriptRef.current = "";
+        if (!spokenText) return;
+
+        setInputValue("");
+        void sendMessageToAi(spokenText, "voice");
         return;
       }
 
-      const spokenText = finalTranscript.trim();
-      if (!spokenText) return;
+      if (keepListeningRef.current && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+          return;
+        } catch {
+          keepListeningRef.current = false;
+        }
+      }
 
-      setInputValue("");
-      void sendMessageToAi(spokenText, "voice");
+      setIsListening(false);
+      recognitionRef.current = null;
     };
 
     recognition.start();
@@ -666,6 +699,9 @@ const AIAssistantPage: React.FC = () => {
 
   useEffect(() => {
     return () => {
+      keepListeningRef.current = false;
+      manualStopRef.current = false;
+      transcriptRef.current = "";
       if (recognitionRef.current) {
         recognitionRef.current.stop();
         recognitionRef.current = null;
@@ -675,6 +711,29 @@ const AIAssistantPage: React.FC = () => {
 
   const renderMessage = (message: ChatMessage) => {
     const isUser = message.sender === "user";
+    const roomDetail = message.roomDetail;
+    const roomDetailImage =
+      Array.isArray(roomDetail?.images) && roomDetail.images.length > 0
+        ? roomDetail.images[0]
+        : null;
+    const roomDetailAmenities = Array.isArray(roomDetail?.amenities)
+      ? roomDetail.amenities
+      : [];
+    const roomDetailId = toText(roomDetail?.id);
+    const roomDetailLocationCodeRaw = toText(roomDetail?.locationCode);
+    const roomDetailLocationCode = roomDetailLocationCodeRaw || "-";
+    const roomDetailCapacity =
+      typeof roomDetail?.capacity === "number" ? roomDetail.capacity : null;
+    const roomDetailScore =
+      typeof roomDetail?.score === "number" ? roomDetail.score : null;
+    const roomDetailCurrentUser = toText(roomDetail?.currentUserName);
+    const roomDetailCheckInTime = toText(roomDetail?.checkInTime);
+    const roomDetailCheckInLabel = roomDetailCheckInTime
+      ? formatDateTimeLabel(roomDetailCheckInTime)
+      : "";
+    const roomDetailFeedbacks = Array.isArray(roomDetail?.feedbacks)
+      ? roomDetail.feedbacks
+      : [];
     const booking = getBookingCardData(message.reservation);
     const bookingId =
       toText(message.reservation?.id) ||
@@ -705,6 +764,181 @@ const AIAssistantPage: React.FC = () => {
             }`}
           >
             <div>{message.text}</div>
+
+            {!isUser && roomDetail && (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-md hover:shadow-lg transition-shadow">
+                <div className="flex items-center justify-between gap-2 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-3 py-2.5">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-orange-700">
+                    Room Detail
+                  </p>
+                  {roomDetailScore !== null && (
+                    <span className="rounded-lg border border-orange-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-orange-700">
+                      Score {roomDetailScore.toFixed(1)}
+                    </span>
+                  )}
+                </div>
+
+                {roomDetailImage && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewImageUrl(roomDetailImage)}
+                    className="block w-full bg-gradient-to-br from-orange-100 to-amber-100"
+                  >
+                    <img
+                      src={roomDetailImage}
+                      alt={roomDetailLocationCode}
+                      className="h-36 w-full object-cover transition-transform duration-300 hover:scale-[1.02]"
+                      loading="lazy"
+                    />
+                  </button>
+                )}
+
+                <div className="space-y-2.5 px-3 py-3 text-[12px] text-slate-700">
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-2.5">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-orange-600">
+                        Room Code
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {roomDetailLocationCode}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-2.5">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-orange-600">
+                        Capacity
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {roomDetailCapacity ?? "-"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-600">
+                        Current User
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {roomDetailCurrentUser || "No active user"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 sm:col-span-2">
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-600">
+                        Check-in Time
+                      </p>
+                      {roomDetailCheckInLabel ? (
+                        <p className="mt-1 font-semibold text-slate-900">
+                          {roomDetailCheckInLabel}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-[11px] font-medium text-black">
+                          No active check-in.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {roomDetailAmenities.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                        Amenities
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {roomDetailAmenities.slice(0, 8).map((amenity) => (
+                          <span
+                            key={`${roomDetailId || roomDetailLocationCode}-${amenity}`}
+                            className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-medium text-orange-700"
+                          >
+                            • {amenity}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                      Feedback
+                    </p>
+
+                    {roomDetailFeedbacks.length > 0 ? (
+                      <div className="space-y-2">
+                        {roomDetailFeedbacks
+                          .slice(0, 3)
+                          .map((feedback, index) => {
+                            const rating =
+                              typeof feedback?.rating === "number"
+                                ? Math.max(
+                                    0,
+                                    Math.min(5, Math.round(feedback.rating)),
+                                  )
+                                : 0;
+                            const description = toText(feedback?.description);
+                            const createdAt = toText(feedback?.createdAt);
+
+                            return (
+                              <div
+                                key={
+                                  feedback?.id ||
+                                  `${roomDetailId || roomDetailLocationCode}-feedback-${index}`
+                                }
+                                className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5"
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-[11px] font-semibold text-amber-600">
+                                    {rating > 0
+                                      ? "★".repeat(rating)
+                                      : "No rating"}
+                                  </div>
+                                  {createdAt && (
+                                    <span className="text-[10px] text-slate-500">
+                                      {formatDateTimeLabel(createdAt)}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="mt-1 text-[11px] text-slate-700">
+                                  {description || "No feedback description."}
+                                </p>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      <p className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-[11px] text-slate-600">
+                        No feedback available for this room.
+                      </p>
+                    )}
+                  </div>
+
+                  {(roomDetailId || roomDetailLocationCodeRaw) && (
+                    <div className="flex items-center justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleViewDetails({
+                            roomId: roomDetailLocationCodeRaw
+                              ? ""
+                              : roomDetailId,
+                            locationCode:
+                              roomDetailLocationCodeRaw || roomDetailId,
+                            status: "AVAILABLE",
+                            capacity: roomDetailCapacity ?? undefined,
+                            amenities:
+                              roomDetailAmenities.length > 0
+                                ? roomDetailAmenities
+                                : undefined,
+                            imageUrl: roomDetailImage || undefined,
+                          });
+                        }}
+                        className="rounded-lg border border-orange-500 bg-orange-500 px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md"
+                      >
+                        View Room Detail →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {!isUser && (booking || message.reservationCreated) && (
               <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-md hover:shadow-lg transition-shadow">
@@ -1127,6 +1361,28 @@ const AIAssistantPage: React.FC = () => {
     }
   }, [createEmptySession, isCreatingChat]);
 
+  const showDeleteToast = useCallback(
+    (type: MessageType, nextMessage: string) => {
+      setDeleteToast({ type, message: nextMessage });
+      window.setTimeout(() => {
+        setDeleteToast((current) =>
+          current && current.type === type && current.message === nextMessage
+            ? null
+            : current,
+        );
+      }, 3000);
+    },
+    [],
+  );
+
+  const toggleSuggestionsAccordion = useCallback(() => {
+    if (!latestSuggestionMessageId) return;
+
+    setCollapsedSuggestionMessageId((current) =>
+      current === latestSuggestionMessageId ? null : latestSuggestionMessageId,
+    );
+  }, [latestSuggestionMessageId]);
+
   const handleDeleteSession = useCallback(async () => {
     if (!pendingDeleteSession || isDeletingSession) return;
 
@@ -1139,13 +1395,27 @@ const AIAssistantPage: React.FC = () => {
     }
 
     setIsDeletingSession(true);
+    let deleteResult: {
+      sessionId: string;
+      deletedMessages: number;
+      message?: string;
+    } | null = null;
     try {
-      await aiService.deleteChat(sessionId);
-    } catch {
+      deleteResult = await aiService.deleteChat(sessionId);
+    } catch (error) {
+      showDeleteToast(
+        "error",
+        extractApiMessage(error, "Unable to delete conversation."),
+      );
       return;
     } finally {
       setIsDeletingSession(false);
     }
+
+    showDeleteToast(
+      "success",
+      toText(deleteResult?.message) || "Conversation deleted successfully.",
+    );
 
     loadedSessionDetailsRef.current.delete(targetSession.id);
 
@@ -1177,6 +1447,7 @@ const AIAssistantPage: React.FC = () => {
     pendingDeleteSession,
     selectedSessionId,
     sessions,
+    showDeleteToast,
   ]);
 
   return (
@@ -1333,45 +1604,55 @@ const AIAssistantPage: React.FC = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {isSuggestionsVisible && (
+            {!!latestSuggestionMessage && (
               <div className="border-t border-orange-100 bg-gradient-to-br from-orange-50 via-amber-50/30 to-white px-4 py-4 sm:px-6">
-                <div className="mb-3 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={toggleSuggestionsAccordion}
+                  className="flex w-full items-center justify-between rounded-xl border border-orange-200 bg-white/80 px-3 py-2.5 text-left transition hover:border-orange-300 hover:bg-orange-50"
+                  aria-expanded={!isSuggestionsCollapsed}
+                  aria-controls="suggested-rooms-panel"
+                >
                   <div>
                     <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">
                       Suggested Rooms
                     </h3>
+                    <p className="mt-0.5 text-[11px] font-medium text-orange-700/80">
+                      {suggestions.length} suggestion
+                      {suggestions.length > 1 ? "s" : ""}
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDismissedSuggestionMessageId(
-                        latestSuggestionMessage?.id ?? null,
-                      )
-                    }
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-orange-200 text-sm font-semibold text-orange-600 transition hover:border-orange-300 hover:bg-orange-50"
-                    aria-label="Close suggested rooms"
-                  >
-                    ×
-                  </button>
-                </div>
 
-                <div className="max-h-[16rem] space-y-2.5 overflow-y-auto pr-1">
-                  {isSingleSuggestion && (
-                    <div className="mb-2">
-                      {renderSuggestionCard(suggestions[0], true)}
+                  <span className="inline-flex items-center justify-center text-orange-700">
+                    <ChevronDownIcon
+                      className={`h-4 w-4 transition-transform duration-200 ${
+                        isSuggestionsCollapsed ? "rotate-0" : "rotate-180"
+                      }`}
+                    />
+                  </span>
+                </button>
+
+                {!isSuggestionsCollapsed && (
+                  <div id="suggested-rooms-panel" className="mt-3">
+                    <div className="max-h-[16rem] space-y-2.5 overflow-y-auto pr-1">
+                      {isSingleSuggestion && (
+                        <div className="mb-2">
+                          {renderSuggestionCard(suggestions[0], true)}
+                        </div>
+                      )}
+
+                      {(isSingleSuggestion
+                        ? suggestions.slice(1)
+                        : suggestions
+                      ).map((s) => renderSuggestionCard(s))}
                     </div>
-                  )}
 
-                  {(isSingleSuggestion
-                    ? suggestions.slice(1)
-                    : suggestions
-                  ).map((s) => renderSuggestionCard(s))}
-                </div>
-
-                {suggestions.length > 3 && (
-                  <p className="mt-3 flex items-center justify-center text-[10px] font-medium text-orange-600/80">
-                    Scroll to view more suggestions
-                  </p>
+                    {suggestions.length > 3 && (
+                      <p className="mt-3 flex items-center justify-center text-[10px] font-medium text-orange-600/80">
+                        Scroll to view more suggestions
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -1381,9 +1662,7 @@ const AIAssistantPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() =>
-                    handleQuickAction(
-                      "Suggest available rooms for 10 people this afternoon",
-                    )
+                    handleQuickAction("Suggest available rooms right now")
                   }
                   className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
                 >
@@ -1392,24 +1671,11 @@ const AIAssistantPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() =>
-                    handleQuickAction(
-                      "I want to reserve a room from 14:00 to 15:00 for 6 people",
-                    )
+                    handleQuickAction("I want to reserve a room for 10 people")
                   }
                   className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
                 >
                   Quick reserve
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleQuickAction(
-                      "Guide me through booking a meeting room in this system",
-                    )
-                  }
-                  className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-                >
-                  Booking guide
                 </button>
               </div>
 
@@ -1655,6 +1921,14 @@ const AIAssistantPage: React.FC = () => {
         onClose={() => setPendingDeleteSession(null)}
         onConfirm={handleDeleteSession}
       />
+
+      {deleteToast && (
+        <CustomMessage
+          type={deleteToast.type}
+          message={deleteToast.message}
+          onClose={() => setDeleteToast(null)}
+        />
+      )}
     </section>
   );
 };

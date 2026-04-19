@@ -58,6 +58,23 @@ type BackendChatbotResponse = {
   }>;
   reservationCreated?: boolean;
   reservation?: AiChatResponseDto["reservation"];
+  roomDetail?: {
+    id?: string;
+    locationCode?: string;
+    capacity?: number | null;
+    score?: number | null;
+    currentUserId?: string;
+    currentUserName?: string;
+    checkInTime?: string;
+    amenities?: Array<{ name?: string } | string>;
+    images?: Array<{ imageUrl?: string } | string>;
+    feedbacks?: Array<{
+      id?: string;
+      rating?: number | null;
+      description?: string;
+      createdAt?: string;
+    }>;
+  };
   availableRooms?: BackendChatbotRoomItem[];
   alternativeRooms?: BackendChatbotRoomItem[];
 };
@@ -170,6 +187,45 @@ const mapRoomsToSuggestions = (rooms?: BackendChatbotRoomItem[]) => {
 const normalizeChatResponse = (
   raw: BackendChatbotResponse,
 ): AiChatResponseDto => {
+  const roomDetail = raw.roomDetail
+    ? {
+        id: raw.roomDetail.id,
+        locationCode: raw.roomDetail.locationCode,
+        capacity: raw.roomDetail.capacity ?? null,
+        score: raw.roomDetail.score ?? null,
+        currentUserId: raw.roomDetail.currentUserId,
+        currentUserName: raw.roomDetail.currentUserName,
+        checkInTime: raw.roomDetail.checkInTime,
+        amenities: Array.isArray(raw.roomDetail.amenities)
+          ? raw.roomDetail.amenities
+              .map((item) =>
+                typeof item === "string" ? item : (item?.name ?? ""),
+              )
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : [],
+        images: Array.isArray(raw.roomDetail.images)
+          ? raw.roomDetail.images
+              .map((item) =>
+                typeof item === "string" ? item : (item?.imageUrl ?? ""),
+              )
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : [],
+        feedbacks: Array.isArray(raw.roomDetail.feedbacks)
+          ? raw.roomDetail.feedbacks.map((item) => ({
+              id: item.id,
+              rating:
+                typeof item.rating === "number" && Number.isFinite(item.rating)
+                  ? item.rating
+                  : null,
+              description: item.description || "",
+              createdAt: item.createdAt,
+            }))
+          : [],
+      }
+    : null;
+
   const mappedSuggestions =
     raw.suggestions && raw.suggestions.length > 0
       ? raw.suggestions.map((item) => ({
@@ -193,6 +249,7 @@ const normalizeChatResponse = (
     sessionId: raw.sessionId,
     reply: raw.reply || "I could not generate a response. Please try again.",
     suggestions: mappedSuggestions,
+    roomDetail,
     reservationCreated: raw.reservationCreated ?? Boolean(raw.reservation),
     reservation: raw.reservation ?? null,
   };
@@ -263,18 +320,35 @@ export const aiService = {
 
   async deleteChat(
     sessionId: string,
-  ): Promise<{ sessionId: string; deletedMessages: number }> {
+  ): Promise<{ sessionId: string; deletedMessages: number; message?: string }> {
     const res = await api.delete<unknown>(
       buildUrl(API_ENDPOINTS.AI.DELETE_CHAT, { sessionId }),
     );
+    const rawResponse = (res.data ?? null) as {
+      message?: unknown;
+      meta?: { message?: unknown };
+    };
     const payloadData = unwrapData<{
       sessionId?: string;
       deletedMessages?: number;
+      message?: string;
     }>(res.data);
+
+    const toOptionalMessage = (value: unknown) => {
+      if (typeof value !== "string") return undefined;
+      const normalized = value.trim();
+      return normalized || undefined;
+    };
+
+    const message =
+      toOptionalMessage(payloadData?.message) ||
+      toOptionalMessage(rawResponse?.message) ||
+      toOptionalMessage(rawResponse?.meta?.message);
 
     return {
       sessionId: payloadData.sessionId || sessionId,
       deletedMessages: Number(payloadData.deletedMessages ?? 0),
+      message,
     };
   },
 
