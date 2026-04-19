@@ -56,6 +56,15 @@ const combineDateTime = (dateValue: string, timeValue: string) => {
   return `${dateValue}T${timeValue}`;
 };
 
+const formatDisplayDateTime = (dateTimeValue: string) => {
+  if (!dateTimeValue) return "";
+  const [datePart, timePart] = dateTimeValue.split("T");
+  if (!datePart || !timePart) return "";
+  
+  const [year, month, day] = datePart.split("-");
+  return `${day}/${month}/${year} ${timePart}`;
+};
+
 const toDate = (dateValue: string, timeValue: string) => {
   if (!dateValue || !timeValue) return null;
   const parsed = new Date(`${dateValue}T${timeValue}:00`);
@@ -868,7 +877,7 @@ const BookRoomPage: React.FC = () => {
                         Start
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-800">
-                        {startTime || "-"}
+                        {formatDisplayDateTime(startTime) || "-"}
                       </p>
                     </div>
 
@@ -878,7 +887,7 @@ const BookRoomPage: React.FC = () => {
                         End
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-800">
-                        {endTime || "-"}
+                        {formatDisplayDateTime(endTime) || "-"}
                       </p>
                     </div>
 

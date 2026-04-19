@@ -184,7 +184,7 @@ const AdminAllBookingListPage: React.FC = () => {
   const [roomNameFilter, setRoomNameFilter] = useState<string>("");
   const [floorNameFilter, setFloorNameFilter] = useState<string>("");
   const [buildingNameFilter, setBuildingNameFilter] = useState<string>("");
-  const [selectedBuildingId, setSelectedBuildingId] = useState<string>("");
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>("All");
   const [buildingOptions, setBuildingOptions] = useState<BuildingOption[]>([]);
   const [floorOptions, setFloorOptions] = useState<FloorOption[]>([]);
   const [forceCancelLoadingId, setForceCancelLoadingId] = useState<
@@ -266,7 +266,7 @@ const AdminAllBookingListPage: React.FC = () => {
 
   const loadFloorOptions = useCallback(async (buildingId: string) => {
     const normalizedBuildingId = String(buildingId || "").trim();
-    if (!normalizedBuildingId) {
+    if (!normalizedBuildingId || normalizedBuildingId === "All") {
       setFloorOptions([]);
       return;
     }
@@ -423,7 +423,7 @@ const AdminAllBookingListPage: React.FC = () => {
     setUserEmailFilter("");
     setRoomNameFilter("");
     setFloorNameFilter("");
-    setSelectedBuildingId("");
+    setSelectedBuildingId("All");
     setFloorOptions([]);
     setBuildingNameFilter("");
     setAppliedStatus("All");
@@ -981,21 +981,23 @@ const AdminAllBookingListPage: React.FC = () => {
                   Building
                 </div>
                 <Select
-                  value={selectedBuildingId || undefined}
+                  value={selectedBuildingId || "All"}
                   onChange={(value) => {
-                    const buildingId = String(value || "");
+                    const buildingId = String(value || "All");
                     const matched = buildingOptions.find(
                       (option) => option.value === buildingId,
                     );
                     setSelectedBuildingId(buildingId);
-                    setBuildingNameFilter(matched?.name || "");
+                    setBuildingNameFilter(buildingId === "All" ? "" : (matched?.name || ""));
                     setFloorNameFilter("");
                     setFloorOptions([]);
                   }}
-                  allowClear
                   placeholder="Select building"
                   className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
-                  options={buildingOptions}
+                  options={[
+                    { label: "All Buildings", value: "All" },
+                    ...buildingOptions
+                  ]}
                 />
               </div>
 
@@ -1007,11 +1009,11 @@ const AdminAllBookingListPage: React.FC = () => {
                   value={floorNameFilter || undefined}
                   onChange={(value) => setFloorNameFilter(value || "")}
                   allowClear
-                  disabled={!selectedBuildingId}
+                  disabled={!selectedBuildingId || selectedBuildingId === "All"}
                   placeholder={
-                    selectedBuildingId
-                      ? "Select floor"
-                      : "Select building first"
+                    !selectedBuildingId || selectedBuildingId === "All"
+                      ? "Select building first"
+                      : "Select floor"
                   }
                   className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
                   options={floorOptions}

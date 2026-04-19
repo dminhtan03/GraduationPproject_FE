@@ -1273,7 +1273,7 @@ const AIAssistantPage: React.FC = () => {
 
         <main className="xl:col-span-8 2xl:col-span-9">
           <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-2xl border border-orange-200 bg-white/95 shadow-sm sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px]">
-            <header className="border-b border-orange-100 bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-4 text-white sm:px-6">
+            <header className="border-b border-orange-100 bg-gradient-to-r from-orange-500 to-amber-950 px-4 py-4 text-white sm:px-6">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <h1 className="text-lg font-semibold">AI Assistant</h1>

@@ -206,7 +206,7 @@ const formatDateTime = (value: string) => {
   if (!value) return "-";
   const date = parseBookingDateTime(value);
   if (!date) return value;
-  return date.toLocaleString();
+  return date.toLocaleString([], { hour12: false });
 };
 
 const formatDatePart = (value?: string) => {
@@ -218,7 +218,7 @@ const formatDatePart = (value?: string) => {
 const formatTimePart = (value?: string) => {
   const date = parseBookingDateTime(value);
   if (!date) return "-";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 };
 
 const isInvalidDateFormatError = (error: unknown) => {
@@ -404,13 +404,18 @@ const canCheckOut = (status: string, startTime?: string, endTime?: string, now: 
 
 const canExtend = (status: string, startTime?: string, endTime?: string, now: Date = new Date()) => {
   const normalized = status.toUpperCase();
-  if (!["IN_USE", "CHECKED_IN"].includes(normalized)) return false;
+  if (!["RESERVED", "IN_USE", "CHECKED_IN"].includes(normalized)) return false;
   if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
 
   const start = parseBookingDateTime(startTime);
   const end = parseBookingDateTime(endTime);
   if (!start || !end) return false;
 
+  // For RESERVED: allow extend before booking ends
+  if (normalized === "RESERVED") {
+    return now < end;
+  }
+  // For IN_USE/CHECKED_IN: allow extend during booking
   return now >= start && now <= end;
 };
 
@@ -495,7 +500,7 @@ const getExtendDisabledReason = (record: Reservation, now: Date = new Date()) =>
   if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
 
   const status = (record.status || "").toUpperCase();
-  if (!["IN_USE", "CHECKED_IN"].includes(status)) {
+  if (!["RESERVED", "IN_USE", "CHECKED_IN"].includes(status)) {
     return `Booking đang ở trạng thái ${status || "N/A"} nên chưa thể gia hạn.`;
   }
 
@@ -505,6 +510,15 @@ const getExtendDisabledReason = (record: Reservation, now: Date = new Date()) =>
     return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể gia hạn.";
   }
 
+  // For RESERVED: allow extend before booking ends
+  if (status === "RESERVED") {
+    if (now >= end) {
+      return "Booking đã kết thúc nên không thể gia hạn.";
+    }
+    return undefined;
+  }
+
+  // For IN_USE/CHECKED_IN: allow extend during booking
   if (now < start || now > end) {
     return "Chỉ có thể gia hạn khi cuộc họp đang diễn ra.";
   }
@@ -669,6 +683,7 @@ const MyBookingsPage: React.FC = () => {
     ) => {
       setLoading(true);
       setError(null);
+      setBookings([]); // Clear old data immediately to prevent showing stale records
       try {
         const selectedBuilding =
           buildingId !== "all"
@@ -930,8 +945,8 @@ const MyBookingsPage: React.FC = () => {
 
   const handleSubmitFeedback = async () => {
     if (!feedbackModal?.reservationId) return;
-    if (!feedbackDescription.trim()) {
-      message.warning("Please enter your feedback.");
+    if (feedbackDescription.trim().length === 0) {
+      message.warning("Please enter your feedback (at least 1 character).");
       return;
     }
 
@@ -1104,7 +1119,7 @@ const MyBookingsPage: React.FC = () => {
               : "Không thể hủy booking",
       );
       setActionModalError(actionErrorMessage);
-      message.error(actionErrorMessage);
+      showToast("error", actionErrorMessage);
     } finally {
       setLoading(false);
       setActionLoadingId(null);
@@ -1115,6 +1130,21 @@ const MyBookingsPage: React.FC = () => {
     const nextTab = key as BookingTabKey;
     setActiveTab(nextTab);
     setPage(1);
+    handleClearStartTimeSearch();
+    // Load data immediately with new tab to avoid showing old data
+    window.setTimeout(() => {
+      loadBookings(
+        1,
+        pageSize,
+        nextTab,
+        "all",
+        "all",
+        "",
+        "all",
+        "",
+        ""
+      );
+    }, 0);
   };
 
   const handleTableChange = (
@@ -1440,66 +1470,86 @@ const MyBookingsPage: React.FC = () => {
           currentTime,
         );
         const cancelEnabled = canCancel(status, record.startTime, currentTime);
+        const canShowFeedback = activeTab === "ongoing" && status?.toUpperCase() === "COMPLETED" && record.id && !record.feedbackSubmitted;
         const canRender = {
           checkIn: !!record.id && checkInEnabled,
           returnRoom: !!record.id && returnRoomEnabled,
           extend: !!record.id && extendEnabled,
           cancel: !!record.id && cancelEnabled,
+          feedback: canShowFeedback,
         };
 
-        if (!canRender.checkIn && !canRender.returnRoom && !canRender.extend && !canRender.cancel) {
+        if (!canRender.checkIn && !canRender.returnRoom && !canRender.extend && !canRender.cancel && !canRender.feedback) {
           return <span className="text-xs text-gray-400">No available actions</span>;
         }
 
         return (
-          <Space>
+          <Space wrap>
             {canRender.checkIn && (
               <span>
-                <Button
-                  type="primary"
-                  size="small"
-                  loading={isLoading && checkInEnabled}
+                <button
+                  type="button"
+                  disabled={isLoading && checkInEnabled}
                   onClick={() => openActionModal("check-in", record)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
+                  {isLoading && checkInEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-white" />}
                   Check-in
-                </Button>
+                </button>
               </span>
             )}
 
             {canRender.returnRoom && (
               <span>
-                <Button
-                  size="small"
-                  loading={isLoading && returnRoomEnabled}
+                <button
+                  type="button"
+                  disabled={isLoading && returnRoomEnabled}
                   onClick={() => openActionModal("return-room", record)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
+                  {isLoading && returnRoomEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-white" />}
                   Check Out
-                </Button>
+                </button>
               </span>
             )}
 
             {canRender.extend && (
               <span>
-                <Button
-                  size="small"
-                  loading={isLoading && extendEnabled}
+                <button
+                  type="button"
+                  disabled={isLoading && extendEnabled}
                   onClick={() => openActionModal("extend", record)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
+                  {isLoading && extendEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-white" />}
                   Extend
-                </Button>
+                </button>
               </span>
             )}
 
             {canRender.cancel && (
               <span>
-                <Button
-                  danger
-                  size="small"
-                  loading={isLoading && cancelEnabled}
+                <button
+                  type="button"
+                  disabled={isLoading && cancelEnabled}
                   onClick={() => openActionModal("cancel", record)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
+                  {isLoading && cancelEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-white" />}
                   Cancel
-                </Button>
+                </button>
+              </span>
+            )}
+
+            {canRender.feedback && (
+              <span>
+                <button
+                  type="button"
+                  onClick={() => openFeedbackModal(record)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-amber-600"
+                >
+                  Feedback
+                </button>
               </span>
             )}
           </Space>
@@ -1828,6 +1878,10 @@ const MyBookingsPage: React.FC = () => {
           loading:
             !!actionModal?.booking?.id &&
             actionLoadingId === actionModal.booking.id,
+          className: "!bg-emerald-600 hover:!bg-emerald-700 !border-emerald-600 !text-white !h-10 !rounded-lg !font-semibold !transition-all"
+        }}
+        cancelButtonProps={{
+          className: "!bg-slate-200 !hover:bg-slate-300 !text-slate-800 !border-slate-200 !h-10 !rounded-lg !font-semibold !transition-all"
         }}
         className="[&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:shadow-lg"
       >
@@ -1841,16 +1895,6 @@ const MyBookingsPage: React.FC = () => {
                   ? "Choose extended hours before confirming."
                   : "Review booking details before canceling this booking."}
           </div>
-
-          {actionModalError && (
-            <Alert
-              type="error"
-              showIcon
-              message="Action failed"
-              description={actionModalError}
-              className="border-red-200 bg-red-50"
-            />
-          )}
 
           {actionModal?.type === "cancel" && userProfile?.cancellationCount === 2 && (
             <Alert
@@ -1930,7 +1974,7 @@ const MyBookingsPage: React.FC = () => {
               </label>
               <InputNumber
                 min={1}
-                max={4}
+                max={8}
                 step={1}
                 value={extendHour}
                 onChange={(value) =>
@@ -1976,8 +2020,14 @@ const MyBookingsPage: React.FC = () => {
         okText="Submit feedback"
         cancelText="Skip"
         onOk={handleSubmitFeedback}
-        okButtonProps={{ loading: submittingFeedback, className: "bg-sky-600 hover:bg-sky-700" }}
-        cancelButtonProps={{ disabled: submittingFeedback }}
+        okButtonProps={{ 
+          loading: submittingFeedback,
+          className: "!bg-sky-600 hover:!bg-sky-700 !border-sky-600 !text-white !h-10 !rounded-lg !font-semibold !transition-all"
+        }}
+        cancelButtonProps={{ 
+          disabled: submittingFeedback,
+          className: "!bg-slate-200 !hover:bg-slate-300 !text-slate-800 !border-slate-200 !h-10 !rounded-lg !font-semibold !transition-all"
+        }}
         className="[&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:shadow-lg"
       >
         <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-5">
