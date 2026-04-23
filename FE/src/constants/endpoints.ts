@@ -27,6 +27,9 @@ export const API_ENDPOINTS = {
     EXTEND_ROOM: "/api/v1/reservations/extend/:id",
     CANCEL_BOOKING: "/api/v1/reservations/cancel/:id",
     FORCE_CANCEL_BOOKING: "/api/v1/reservations/force-cancel/:id",
+    // start+ chức năng sự kiện (gọi thêm dịch vụ/tiện ích trong lúc diễn ra)
+    RESERVATION_SERVICE_ITEMS: "/api/v1/reservations/:id/service-items",
+    // end+ chức năng sự kiện (gọi thêm dịch vụ/tiện ích trong lúc diễn ra)
     ROOM_IMAGES_BY_ROOM: "/api/v1/room-images/room/:roomId",
     // start add layout endpoint
     UPDATE_LAYOUT: "/api/v1/rooms/floors/:floorId/layout",
@@ -109,6 +112,33 @@ export const API_ENDPOINTS = {
     IMPORT: "/api/v1/academic-schedules/import",
     BY_ROOM: "/api/v1/academic-schedules/room/:roomId",
   },
+
+  // start+ chức năng CRUD dịch vụ đi kèm + đặt phòng theo sự kiện + QR + đặt phòng lặp lại
+  SERVICE_ITEMS: {
+    LIST: "/api/v1/service-items",
+    CREATE: "/api/v1/service-items",
+    UPDATE: "/api/v1/service-items/:id",
+    DELETE: "/api/v1/service-items/:id",
+  },
+  EVENTS: {
+    CREATE: "/api/v1/events",
+    BY_RESERVATION: "/api/v1/events/by-reservation/:reservationId",
+    PARTICIPANTS: "/api/v1/events/:eventId/participants",
+    INVITE_PARTICIPANT: "/api/v1/events/participants",
+    REMOVE_PARTICIPANT: "/api/v1/events/participants/:participantId",
+  },
+  CHECKIN_QR: {
+    GENERATE_RESERVATION: "/api/v1/checkin-qr/reservation/:reservationId",
+    GENERATE_PARTICIPANT: "/api/v1/checkin-qr/participant/:participantId",
+    CONSUME: "/api/v1/checkin-qr/consume",
+  },
+  RESERVATION_SERIES: {
+    CREATE: "/api/v1/reservation-series",
+    MY: "/api/v1/reservation-series/my",
+    SYNC: "/api/v1/reservation-series/:seriesId/sync",
+    CANCEL: "/api/v1/reservation-series/:seriesId",
+  },
+  // end+ chức năng CRUD dịch vụ đi kèm + đặt phòng theo sự kiện + QR + đặt phòng lặp lại
 
   DASHBOARD: {
     OVERVIEW_STATS: "/api/v1/dashboard/overview-stats",

@@ -8,6 +8,7 @@ import {
   BuildingOfficeIcon,
   WrenchScrewdriverIcon,
   CalendarDaysIcon,
+  ClipboardDocumentListIcon,
 } from "@heroicons/react/24/outline";
 import { Link, useLocation } from "react-router-dom";
 import { ROUTES } from "../../constants";
@@ -136,6 +137,21 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
             <WrenchScrewdriverIcon className="h-5 w-5" />
             Amenity Management
           </Link>
+
+          {/* // start+ chức năng CRUD dịch vụ đi kèm (menu admin) */}
+          <Link
+            to={ROUTES.ADMIN_SERVICE_ITEMS}
+            className={[
+              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
+              location.pathname === ROUTES.ADMIN_SERVICE_ITEMS
+                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
+                : "text-slate-600 hover:bg-slate-50",
+            ].join(" ")}
+          >
+            <ClipboardDocumentListIcon className="h-5 w-5" />
+            Service Items
+          </Link>
+          {/* // end+ chức năng CRUD dịch vụ đi kèm (menu admin) */}
 
           <Link
             to={ROUTES.ADMIN_ACADEMIC_SCHEDULE}

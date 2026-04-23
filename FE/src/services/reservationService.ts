@@ -153,6 +153,9 @@ export const reservationService = {
       endTime: payload.endTime,
       attendeeCount: payload.attendeeCount,
       note: payload.note,
+      // start+ chức năng đặt thêm dịch vụ đi kèm khi đặt phòng
+      serviceItems: payload.serviceItems,
+      // end+ chức năng đặt thêm dịch vụ đi kèm khi đặt phòng
     });
   },
 
