@@ -34,7 +34,7 @@ const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
 const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
 const QrCheckInPage = React.lazy(() => import("../pages/QrCheckIn"));
 const MyRecurringSeriesPage = React.lazy(() => import("../pages/MyRecurringSeries"));
-const EventDemoPage = React.lazy(() => import("../pages/EventDemo"));
+// const EventDemoPage = React.lazy(() => import("../pages/EventDemo"));
 const EventSetupPage = React.lazy(() => import("../pages/EventSetup"));
 const EventLivePage = React.lazy(() => import("../pages/EventLive"));
 const AdminDashboardPage = React.lazy(() => import("../pages/AdminDashboard"));
@@ -509,16 +509,16 @@ export const router = createBrowserRouter([
         ),
         // end+ chức năng đặt phòng lặp lại (route demo)
       },
-      {
-        // start+ chức năng đặt phòng theo sự kiện (route demo)
-        path: ROUTES.EVENT_DEMO,
-        element: (
-          <SuspenseWrapper>
-            <EventDemoPage />
-          </SuspenseWrapper>
-        ),
-        // end+ chức năng đặt phòng theo sự kiện (route demo)
-      },
+      // {
+      //   // start+ chức năng đặt phòng theo sự kiện (route demo)
+      //   path: ROUTES.EVENT_DEMO,
+      //   element: (
+      //     <SuspenseWrapper>
+      //       <EventDemoPage />
+      //     </SuspenseWrapper>
+      //   ),
+      //   // end+ chức năng đặt phòng theo sự kiện (route demo)
+      // },
       {
         // start+ chức năng đặt phòng theo sự kiện (route setup)
         path: ROUTES.EVENT_SETUP,
