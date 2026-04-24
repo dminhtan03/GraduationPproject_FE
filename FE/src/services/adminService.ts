@@ -762,5 +762,12 @@ export const adminService = {
       "Force cancel success. User will receive an email notification.",
     );
   },
+
+  async getAdminEvents(page = 0, size = 10): Promise<any> {
+    const res = await api.get(API_ENDPOINTS.EVENTS.ADMIN_ALL, {
+      params: { page, size },
+    });
+    return res.data;
+  },
   // end add admin booking list api
 };

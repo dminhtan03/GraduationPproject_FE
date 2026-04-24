@@ -68,6 +68,12 @@ const AdminFloorLayoutPage = React.lazy(
 const AdminAcademicSchedulePage = React.lazy(
   () => import("../pages/AdminAcademicSchedule"),
 );
+const AdminEventBookingListPage = React.lazy(
+  () => import("../pages/AdminEventBookingList"),
+);
+const AdminEventBookingDetailPage = React.lazy(
+  () => import("../pages/AdminEventBookingDetail"),
+);
 const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
 const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 
@@ -324,6 +330,28 @@ export const router = createBrowserRouter([
       <ProtectedRoute mode="admin-only">
         <SuspenseWrapper>
           <AdminAcademicSchedulePage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_EVENT_BOOKINGS,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminEventBookingListPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_EVENT_BOOKING_DETAIL,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminEventBookingDetailPage />
         </SuspenseWrapper>
       </ProtectedRoute>
     ),

@@ -42,6 +42,8 @@ export const ROUTES = {
   ADMIN_AMENITY_MANAGEMENT: "/admin/amenities",
   ADMIN_FLOOR_LAYOUT: "/admin/buildings/:buildingId/floors/:floorId/layout",
   ADMIN_ACADEMIC_SCHEDULE: "/admin/academic-schedules",
+  ADMIN_EVENT_BOOKINGS: "/admin/event-bookings",
+  ADMIN_EVENT_BOOKING_DETAIL: "/admin/event-bookings/:reservationId",
   // start+ chức năng CRUD dịch vụ đi kèm + check-in QR + đặt phòng lặp lại
   ADMIN_SERVICE_ITEMS: "/admin/service-items",
   CHECKIN_QR: "/checkin-qr",

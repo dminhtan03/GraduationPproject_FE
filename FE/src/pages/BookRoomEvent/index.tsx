@@ -43,6 +43,8 @@ const BookRoomEventPage: React.FC = () => {
   const [eventTitle, setEventTitle] = useState("Meeting Event");
   const [eventDescription, setEventDescription] = useState("");
   const [visibility, setVisibility] = useState<"INVITE_ONLY" | "PUBLIC">("INVITE_ONLY");
+  const [participantEmails, setParticipantEmails] = useState<string[]>([]);
+  const [newEmail, setNewEmail] = useState("");
 
   const [acceptedRules, setAcceptedRules] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -110,15 +112,26 @@ const BookRoomEventPage: React.FC = () => {
         return;
       }
 
-      await api.post(API_ENDPOINTS.EVENTS.CREATE, {
+      const eventRes = await api.post(API_ENDPOINTS.EVENTS.CREATE, {
         reservationId,
         title: eventTitle.trim(),
         description: eventDescription.trim() || null,
         visibility,
       });
 
-      showPopup("success", "Event booking created. Redirecting to setup...");
-      window.setTimeout(() => navigate(`/events/setup/${reservationId}`, { state: { room } }), 500);
+      const eventData = (eventRes as any)?.data?.data ?? (eventRes as any)?.data;
+      const eventId = eventData?.id;
+
+      if (eventId && participantEmails.length > 0) {
+        await Promise.all(
+          participantEmails.map((email) =>
+            api.post(API_ENDPOINTS.EVENTS.INVITE_PARTICIPANT, { eventId, email }),
+          ),
+        );
+      }
+
+      showPopup("success", "Event booking created successfully!");
+      window.setTimeout(() => navigate(ROUTES.MY_BOOKINGS), 1500);
     } catch (error: any) {
       const msg = error?.response?.data?.message || error?.message || "Unable to create event booking";
       showPopup("error", String(msg));
@@ -234,6 +247,56 @@ const BookRoomEventPage: React.FC = () => {
                   <option value="INVITE_ONLY">INVITE_ONLY</option>
                   <option value="PUBLIC">PUBLIC</option>
                 </select>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-800">Invite Participants</p>
+              <div className="mt-3 flex gap-2">
+                <input
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (newEmail.trim()) {
+                        setParticipantEmails((prev) => [...new Set([...prev, newEmail.trim()])]);
+                        setNewEmail("");
+                      }
+                    }
+                  }}
+                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                  placeholder="Enter email and press Enter"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newEmail.trim()) {
+                      setParticipantEmails((prev) => [...new Set([...prev, newEmail.trim()])]);
+                      setNewEmail("");
+                    }
+                  }}
+                  className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                >
+                  Add
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {participantEmails.map((email) => (
+                  <span
+                    key={email}
+                    className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-inset ring-orange-600/20"
+                  >
+                    {email}
+                    <button
+                      type="button"
+                      onClick={() => setParticipantEmails((prev) => prev.filter((e) => e !== email))}
+                      className="text-orange-600 hover:text-orange-800"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
               </div>
             </div>
 
