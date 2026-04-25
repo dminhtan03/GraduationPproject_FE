@@ -14,38 +14,10 @@ import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 import { message } from "antd";
 import { setAuthenticatedUser, useAppDispatch } from "../../store";
 import campusBackground from "../../assets/image.png";
-
-/* ===== Google types ===== */
-type GoogleCredentialResponse = { credential?: string };
-
-type GoogleInitializeConfig = {
-  client_id: string;
-  callback: (response: GoogleCredentialResponse) => void;
-};
-
-type GoogleRenderButtonOptions = {
-  theme: "outline" | "filled_blue" | "filled_black";
-  size: "large" | "medium" | "small";
-  width?: string | number;
-};
-
-type GoogleIdentity = {
-  initialize: (config: GoogleInitializeConfig) => void;
-  renderButton: (
-    element: HTMLElement,
-    options: GoogleRenderButtonOptions,
-  ) => void;
-};
-
-declare global {
-  interface Window {
-    google?: {
-      accounts?: {
-        id?: GoogleIdentity;
-      };
-    };
-  }
-}
+import type {
+  GoogleCredentialResponse,
+  GoogleIdentity,
+} from "../../types/google.d";
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();

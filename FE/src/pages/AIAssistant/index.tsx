@@ -24,228 +24,28 @@ import CustomMessage, {
 } from "../../components/common/CustomMessage";
 import { extractApiMessage } from "../../utils/errorHandlers";
 
-type Sender = "user" | "bot";
-
-interface ChatMessage {
-  id: string;
-  sender: Sender;
-  text: string;
-  createdAt: string;
-  suggestions?: AiRoomSuggestion[];
-  roomDetail?: AiChatResponseDto["roomDetail"];
-  reservation?: Reservation | null;
-  reservationCreated?: boolean;
-}
-
-interface ChatSessionSummary {
-  id: string;
-  title: string;
-  subtitle: string;
-  createdAt: string;
-  aiSessionId?: string;
-}
-
-const createId = () => Math.random().toString(36).slice(2);
-
-const formatClock = (value: string) =>
-  new Date(value).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-const formatDate = (value: string) =>
-  new Date(value).toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-  });
-
-const createWelcomeMessage = (): ChatMessage => ({
-  id: createId(),
-  sender: "bot",
-  text: "Hello, I am UniBot. I can help you find available rooms, check capacity, and book quickly.",
-  createdAt: new Date().toISOString(),
-});
-
-const DEFAULT_CHAT_TITLE = "New Conversation";
-const DEFAULT_CHAT_SUBTITLE = "Start chatting with UniBot";
-
-const toSessionTitle = (value: string) => {
-  const content = value.trim();
-  if (!content) return DEFAULT_CHAT_TITLE;
-  return content.slice(0, 36) + (content.length > 36 ? "..." : "");
-};
-
-const toSessionSubtitle = (value: string) => {
-  const content = value.trim();
-  return content || DEFAULT_CHAT_SUBTITLE;
-};
-
-const mapHistorySender = (sender: string): Sender => {
-  return sender.toUpperCase() === "USER" ? "user" : "bot";
-};
-
-const mapDetailMessageToChatMessage = (
-  message: AiChatHistoryDetailMessageDto,
-): ChatMessage | null => {
-  const text = toText(message.message);
-  if (!text) return null;
-
-  return {
-    id: message.id || createId(),
-    sender: mapHistorySender(message.sender),
-    text,
-    createdAt: message.createdAt || new Date().toISOString(),
-  };
-};
-
-const mapHistorySessionToSummary = (
-  session: AiChatHistorySummaryDto,
-): ChatSessionSummary => {
-  const lastMessage = toText(session.lastMessage);
-  return {
-    id: session.sessionId,
-    title: toSessionTitle(lastMessage),
-    subtitle: toSessionSubtitle(lastMessage),
-    createdAt:
-      session.startedAt || session.lastMessageAt || new Date().toISOString(),
-    aiSessionId: session.sessionId,
-  };
-};
-
-const statusClass: Record<string, string> = {
-  AVAILABLE: "border-emerald-200 bg-emerald-100 text-emerald-700",
-  RESERVED: "border-emerald-200 bg-emerald-100 text-emerald-700",
-};
-
-const toText = (value: unknown) =>
-  typeof value === "string" ? value.trim() : "";
-
-const toPositiveNumber = (value: unknown) => {
-  const numeric = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
-};
-
-const toRecord = (value: unknown): Record<string, unknown> | null => {
-  if (!value || typeof value !== "object") return null;
-  return value as Record<string, unknown>;
-};
-
-const toNumberOrNull = (value: unknown) => {
-  const numeric = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-};
-
-const formatDateTimeLabel = (value: unknown) => {
-  if (!value) return "-";
-
-  const raw = String(value);
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return raw;
-
-  return parsed.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const bookingStatusClass = (status: string) => {
-  const upper = status.toUpperCase();
-  if (
-    upper === "APPROVED" ||
-    upper === "CHECKED_IN" ||
-    upper === "IN_USE" ||
-    upper === "RESERVED"
-  ) {
-    return "border-emerald-200 bg-emerald-100 text-emerald-700";
-  }
-  if (upper === "CANCELLED" || upper === "REJECTED") {
-    return "border-rose-200 bg-rose-100 text-rose-700";
-  }
-  if (upper === "COMPLETED") {
-    return "border-slate-200 bg-slate-100 text-slate-700";
-  }
-  return "border-amber-200 bg-amber-100 text-amber-700";
-};
-
-const getBookingCardData = (reservation?: Reservation | null) => {
-  if (!reservation) return null;
-
-  const source = toRecord(reservation);
-  if (!source) return null;
-
-  const room = toRecord(source.room);
-  const floor = toRecord(source.floor);
-  const building = toRecord(source.building);
-
-  const id = toText(source.id) || "-";
-  const roomCode =
-    toText(source.locationCode) ||
-    toText(room?.locationCode) ||
-    toText(room?.roomName) ||
-    toText(source.roomId) ||
-    "-";
-  const floorName =
-    toText(source.floor) ||
-    toText(floor?.name) ||
-    toText(floor?.floorName) ||
-    "-";
-  const buildingName =
-    toText(source.buildingName) ||
-    toText(building?.name) ||
-    toText(building?.buildingName) ||
-    "-";
-  const purpose = toText(source.purpose) || "-";
-  const note = toText(source.note);
-  const status = toText(source.status) || "PENDING";
-  const attendeeCount = toNumberOrNull(source.attendeeCount);
-
-  return {
-    id,
-    roomCode,
-    floorName,
-    buildingName,
-    startTime: formatDateTimeLabel(source.startTime),
-    endTime: formatDateTimeLabel(source.endTime),
-    purpose,
-    note,
-    status,
-    attendeeCount,
-  };
-};
-
-interface SpeechRecognitionAlternativeLike {
-  transcript: string;
-}
-
-interface SpeechRecognitionEventLike {
-  resultIndex: number;
-  results: ArrayLike<ArrayLike<SpeechRecognitionAlternativeLike>>;
-}
-
-interface SpeechRecognitionLike {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onstart: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: (() => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
-
-const getSpeechRecognitionCtor = () => {
-  const maybeWindow = window as Window & {
-    SpeechRecognition?: SpeechRecognitionCtor;
-    webkitSpeechRecognition?: SpeechRecognitionCtor;
-  };
-
-  return maybeWindow.SpeechRecognition || maybeWindow.webkitSpeechRecognition;
-};
+import type { ChatMessage, ChatSessionSummary, Sender } from "../../types/chat";
+import type { SpeechRecognitionEventLike, SpeechRecognitionLike } from "../../types/speech.d";
+import {
+  createId,
+  createWelcomeMessage,
+  formatClock,
+  formatDate,
+  formatDateTimeLabel,
+  mapDetailMessageToChatMessage,
+  mapHistorySessionToSummary,
+  statusClass,
+  bookingStatusClass,
+  getBookingCardData,
+  getSpeechRecognitionCtor,
+  toText,
+  toPositiveNumber,
+  toSessionTitle,
+  toSessionSubtitle,
+  DEFAULT_CHAT_TITLE,
+  DEFAULT_CHAT_SUBTITLE,
+  toRecord,
+} from "../../utils/chatHelpers";
 
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();

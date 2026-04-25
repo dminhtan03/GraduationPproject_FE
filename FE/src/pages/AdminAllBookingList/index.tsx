@@ -69,11 +69,6 @@ type ProfilePayload = {
 };
 
 const PAGE_SIZE = 10;
-const FORCE_CANCEL_QUICK_ACTIONS = [
-  "Reclaimed for a university event",
-  "Scheduled maintenance",
-  "Already booked in advance",
-];
 
 const pad = (value: number) => value.toString().padStart(2, "0");
 const ALL_HOURS = Array.from({ length: 24 }, (_, index) => pad(index));
@@ -193,14 +188,6 @@ const AdminAllBookingListPage: React.FC = () => {
   const [forceCancelModalOpen, setForceCancelModalOpen] = useState(false);
   const [forceCancelReservationId, setForceCancelReservationId] = useState("");
   const [forceCancelReason, setForceCancelReason] = useState("");
-  const [forceCancelReasonOptions] = useState<
-    Array<{ label: string; value: string }>
-  >(
-    FORCE_CANCEL_QUICK_ACTIONS.map((reason) => ({
-      label: reason,
-      value: reason,
-    })),
-  );
 
   // Applied filter states (used for backend query)
   const [appliedStatus, setAppliedStatus] = useState<string>("All");
@@ -564,7 +551,7 @@ const AdminAllBookingListPage: React.FC = () => {
 
     const initialReservationId = getReservationKey(record);
     setForceCancelReservationId(initialReservationId);
-    setForceCancelReason(forceCancelReasonOptions[0]?.value || "");
+    setForceCancelReason("");
     setForceCancelModalOpen(true);
   };
 
@@ -772,56 +759,79 @@ const AdminAllBookingListPage: React.FC = () => {
         <main className="flex-1 overflow-auto px-4 pb-8 pt-5 lg:px-8">
           <Modal
             title={
-              <div className="flex items-center gap-2">
-                <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
-                <span>Force cancel booking</span>
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl border border-red-200 bg-red-50 p-2 text-red-600">
+                  <ExclamationTriangleIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-slate-900">
+                    Force Cancel Booking
+                  </p>
+                  <p className="mt-0.5 text-xs font-medium text-slate-500">
+                    Cancel an active reservation and notify the user via email.
+                  </p>
+                </div>
               </div>
             }
             open={forceCancelModalOpen}
-            onCancel={() => setForceCancelModalOpen(false)}
-            onOk={submitForceCancel}
-            okText="Confirm Force Cancel"
-            cancelText="Cancel"
-            okButtonProps={{
-              danger: true,
-              loading: Boolean(forceCancelLoadingId),
+            onCancel={() => {
+              if (!forceCancelLoadingId) {
+                setForceCancelModalOpen(false);
+              }
             }}
+            footer={null}
             width={700}
-            className="[&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:shadow-lg"
+            centered
+            maskClosable={!forceCancelLoadingId}
+            className="[&_.ant-modal-content]:rounded-3xl [&_.ant-modal-content]:border [&_.ant-modal-content]:border-slate-200 [&_.ant-modal-content]:p-0 [&_.ant-modal-header]:mb-0 [&_.ant-modal-header]:rounded-t-3xl [&_.ant-modal-header]:border-b [&_.ant-modal-header]:border-slate-200 [&_.ant-modal-header]:px-6 [&_.ant-modal-header]:py-5 [&_.ant-modal-body]:px-6 [&_.ant-modal-body]:pb-6 [&_.ant-modal-body]:pt-5 [&_.ant-modal-close]:right-5 [&_.ant-modal-close]:top-5 [&_.ant-modal-close]:text-slate-400"
           >
-            <div className="space-y-4">
-              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                <p className="font-semibold">⚠️ Warning: This action will force cancel the booking</p>
-                <p className="mt-1 text-sm">A notification email will be sent to the user explaining the reason for cancellation.</p>
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 to-orange-50 p-4">
+                <p className="text-sm font-semibold text-red-700">
+                  This action will force cancel the selected booking.
+                </p>
+                <p className="mt-1 text-sm text-red-700/90">
+                  A notification email will be sent to the user with the
+                  selected reason.
+                </p>
               </div>
-              
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-5">
                 <div>
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Quick action reason
-                  </label>
-                  <Select
-                    value={forceCancelReason || undefined}
-                    onChange={(value) => setForceCancelReason(value || "")}
-                    className="w-full"
-                    placeholder="Choose a predefined reason"
-                    options={forceCancelReasonOptions}
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Custom reason <span className="text-slate-400 font-normal text-xs">(optional)</span>
+                    Reason
                   </label>
                   <Input.TextArea
                     value={forceCancelReason}
-                    placeholder="Or enter custom reason (max 500 characters)"
+                    placeholder="Enter reason for force cancel (max 500 characters)"
                     autoSize={{ minRows: 4, maxRows: 6 }}
                     maxLength={500}
                     showCount
-                    onChange={(event) => setForceCancelReason(event.target.value)}
-                    className="border-slate-200 rounded-lg text-slate-800"
+                    onChange={(event) =>
+                      setForceCancelReason(event.target.value)
+                    }
+                    className="rounded-xl border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:ring-orange-100"
                   />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-5">
+                  <button
+                    type="button"
+                    onClick={() => setForceCancelModalOpen(false)}
+                    disabled={!!forceCancelLoadingId}
+                    className="h-10 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitForceCancel}
+                    disabled={!!forceCancelLoadingId}
+                    className="h-10 min-w-44 rounded-xl bg-red-600 px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {forceCancelLoadingId
+                      ? "Processing..."
+                      : "Confirm Force Cancel"}
+                  </button>
                 </div>
               </div>
             </div>
@@ -988,7 +998,9 @@ const AdminAllBookingListPage: React.FC = () => {
                       (option) => option.value === buildingId,
                     );
                     setSelectedBuildingId(buildingId);
-                    setBuildingNameFilter(buildingId === "All" ? "" : (matched?.name || ""));
+                    setBuildingNameFilter(
+                      buildingId === "All" ? "" : matched?.name || "",
+                    );
                     setFloorNameFilter("");
                     setFloorOptions([]);
                   }}
@@ -996,7 +1008,7 @@ const AdminAllBookingListPage: React.FC = () => {
                   className="w-full [&_.ant-select-selector]:!h-11 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-slate-50 [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!text-slate-700 [&_.ant-select-selector]:hover:!border-slate-300"
                   options={[
                     { label: "All Buildings", value: "All" },
-                    ...buildingOptions
+                    ...buildingOptions,
                   ]}
                 />
               </div>

@@ -10,6 +10,9 @@ import DatePickerField from "../../components/common/DatePickerField";
 import AnimatedDropdown, {
   type AnimatedDropdownOption,
 } from "../../components/common/AnimatedDropdown";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
 import { useRealtimeClock } from "../../hooks";
 import {
   HOUR_OPTIONS,
@@ -96,6 +99,20 @@ const DashboardPage: React.FC = () => {
   const [timeStatusOverrides, setTimeStatusOverrides] = useState<
     Record<string, RoomListStatus>
   >({});
+  const [toastPopup, setToastPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: MessageType, nextMessage: string) => {
+    setToastPopup({ type, message: nextMessage });
+    window.setTimeout(() => {
+      setToastPopup((current) =>
+        current && current.message === nextMessage ? null : current,
+      );
+    }, 3000);
+  };
+
   const nowParts = useMemo(() => {
     const now = new Date(clockTick);
     return {
@@ -488,7 +505,6 @@ const DashboardPage: React.FC = () => {
   };
 
   const handleApplyTimeFilter = async () => {
-    setError(null);
     setPage(0);
 
     const startTime = buildDateTime(startDate, startHour, startMinute);
@@ -501,17 +517,20 @@ const DashboardPage: React.FC = () => {
     }
 
     if (!startTime || !endTime) {
-      setError("Please select both start time and end time.");
+      showToast("warning", "Please select both start time and end time.");
       return;
     }
 
     if (!isBackendDateTime(startTime) || !isBackendDateTime(endTime)) {
-      setError("Invalid date/time format. Expected yyyy-MM-ddTHH:mm:ss.");
+      showToast(
+        "warning",
+        "Invalid date/time format. Expected yyyy-MM-ddTHH:mm:ss.",
+      );
       return;
     }
 
     if (new Date(endTime) <= new Date(startTime)) {
-      setError("End time must be later than start time.");
+      showToast("warning", "End time must be later than start time.");
       return;
     }
 
@@ -530,7 +549,7 @@ const DashboardPage: React.FC = () => {
 
       const floorResults = await Promise.all(
         floorPairs.map(async (pair) => {
-          const availableRooms = await roomService.searchAvailableRooms({
+          const searchResult = await roomService.searchAvailableRoomsWithMeta({
             buildingId: pair.buildingId,
             floorId: pair.floorId,
             startTime: normalizeLocalDateTime(startTime),
@@ -539,8 +558,9 @@ const DashboardPage: React.FC = () => {
 
           return {
             key: `${pair.buildingId}|${pair.floorId}`,
+            message: searchResult.message,
             statusMap: new Map(
-              availableRooms.map((room) => [room.roomId, room.status]),
+              searchResult.items.map((room) => [room.roomId, room.status]),
             ),
           };
         }),
@@ -569,8 +589,13 @@ const DashboardPage: React.FC = () => {
 
       setTimeStatusOverrides(overrides);
       setTimeFilterActive(true);
+
+      const backendMessage = floorResults.find((item) => item.message)?.message;
+      if (backendMessage) {
+        showToast("success", backendMessage);
+      }
     } catch (e: unknown) {
-      setError(extractApiMessage(e, "Unable to apply time filter"));
+      showToast("error", extractApiMessage(e, "Unable to apply time filter"));
       setTimeFilterActive(false);
       setTimeStatusOverrides({});
     } finally {
@@ -971,6 +996,14 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {toastPopup && (
+        <CustomMessage
+          type={toastPopup.type}
+          message={toastPopup.message}
+          onClose={() => setToastPopup(null)}
+        />
+      )}
     </div>
   );
 };

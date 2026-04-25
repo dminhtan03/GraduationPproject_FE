@@ -49,6 +49,17 @@ const statusFilterOptions: Array<AnimatedDropdownOption<StatusFilter>> = [
   { value: "LOCKED", label: "Locked" },
 ];
 
+const genderOptions: Array<AnimatedDropdownOption<string>> = [
+  { value: "MALE", label: "Male" },
+  { value: "FEMALE", label: "Female" },
+  { value: "OTHER", label: "Other" },
+];
+
+const roleOptions: Array<AnimatedDropdownOption<string>> = [
+  { value: "USER", label: "Student / Staff" },
+  { value: "ADMIN", label: "Administrator" },
+];
+
 const lockReasonPromptOptions = [
   "You violated the room booking policy through repeated no-shows.",
   "You used campus rooms for activities that are not permitted.",
@@ -319,6 +330,23 @@ const AdminUserManagementPage: React.FC = () => {
     });
   };
 
+  const getAddUserInputClassName = (field: keyof RegisterUserPayload) =>
+    [
+      "h-10 w-full rounded-xl border bg-white px-3 text-sm text-slate-800 outline-none transition",
+      "placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100",
+      addUserFieldErrors[field]
+        ? "border-red-500 focus:border-red-500 focus:ring-red-100"
+        : "border-slate-300",
+    ].join(" ");
+
+  const getAddUserDropdownButtonClassName = (
+    field: keyof RegisterUserPayload,
+  ) =>
+    [
+      "h-10 border bg-white px-3 text-slate-800",
+      addUserFieldErrors[field] ? "border-red-500" : "border-slate-300",
+    ].join(" ");
+
   const showToast = (type: MessageType, nextMessage: string) => {
     setToastPopup({ type, message: nextMessage });
     window.setTimeout(() => {
@@ -419,7 +447,10 @@ const AdminUserManagementPage: React.FC = () => {
       setImportFile(null);
       await loadUsers();
     } catch (e: unknown) {
-      const errorMessage = extractApiMessage(e, "Unable to import users from Excel");
+      const errorMessage = extractApiMessage(
+        e,
+        "Unable to import users from Excel",
+      );
       setImportError(errorMessage);
       showToast("error", errorMessage);
     } finally {
@@ -507,9 +538,7 @@ const AdminUserManagementPage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
-                        addUserFieldErrors.firstName ? "border-red-500" : ""
-                      }`}
+                      className={getAddUserInputClassName("firstName")}
                       placeholder="e.g. John"
                       value={addUserForm.firstName}
                       onChange={(e) =>
@@ -529,9 +558,7 @@ const AdminUserManagementPage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
-                        addUserFieldErrors.lastName ? "border-red-500" : ""
-                      }`}
+                      className={getAddUserInputClassName("lastName")}
                       placeholder="e.g. Doe"
                       value={addUserForm.lastName}
                       onChange={(e) =>
@@ -551,9 +578,7 @@ const AdminUserManagementPage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
-                        addUserFieldErrors.phoneNumber ? "border-red-500" : ""
-                      }`}
+                      className={getAddUserInputClassName("phoneNumber")}
                       placeholder="0123456789"
                       value={addUserForm.phoneNumber}
                       onChange={(e) =>
@@ -571,17 +596,22 @@ const AdminUserManagementPage: React.FC = () => {
                     <label className="mb-1 block text-sm font-medium text-slate-700">
                       Gender
                     </label>
-                    <select
-                      className="h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500"
+                    <AnimatedDropdown<string>
                       value={addUserForm.gender}
-                      onChange={(e) =>
-                        handleAddUserField("gender", e.target.value)
+                      options={genderOptions}
+                      onChange={(nextValue) =>
+                        handleAddUserField("gender", nextValue)
                       }
-                    >
-                      <option value="MALE">Male</option>
-                      <option value="FEMALE">Female</option>
-                      <option value="OTHER">Other</option>
-                    </select>
+                      buttonClassName={getAddUserDropdownButtonClassName(
+                        "gender",
+                      )}
+                      ariaLabel="Select gender"
+                    />
+                    {addUserFieldErrors.gender && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {addUserFieldErrors.gender}
+                      </p>
+                    )}
                   </div>
 
                   <div className="col-span-2">
@@ -590,9 +620,7 @@ const AdminUserManagementPage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
-                        addUserFieldErrors.address ? "border-red-500" : ""
-                      }`}
+                      className={getAddUserInputClassName("address")}
                       placeholder="123 Campus St."
                       value={addUserForm.address}
                       onChange={(e) =>
@@ -612,9 +640,7 @@ const AdminUserManagementPage: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
-                        addUserFieldErrors.department ? "border-red-500" : ""
-                      }`}
+                      className={getAddUserInputClassName("department")}
                       placeholder="IT / Marketing"
                       value={addUserForm.department}
                       onChange={(e) =>
@@ -634,9 +660,7 @@ const AdminUserManagementPage: React.FC = () => {
                     </label>
                     <input
                       type="email"
-                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
-                        addUserFieldErrors.email ? "border-red-500" : ""
-                      }`}
+                      className={getAddUserInputClassName("email")}
                       placeholder="john.doe@university.edu"
                       value={addUserForm.email}
                       onChange={(e) =>
@@ -656,9 +680,7 @@ const AdminUserManagementPage: React.FC = () => {
                     </label>
                     <input
                       type="password"
-                      className={`h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500 ${
-                        addUserFieldErrors.password ? "border-red-500" : ""
-                      }`}
+                      className={getAddUserInputClassName("password")}
                       placeholder="••••••••"
                       value={addUserForm.password}
                       onChange={(e) =>
@@ -676,16 +698,22 @@ const AdminUserManagementPage: React.FC = () => {
                     <label className="mb-1 block text-sm font-medium text-slate-700">
                       Role
                     </label>
-                    <select
-                      className="h-10 w-full rounded-xl border-slate-200 text-sm focus:border-orange-500 focus:ring-orange-500"
+                    <AnimatedDropdown<string>
                       value={addUserForm.role}
-                      onChange={(e) =>
-                        handleAddUserField("role", e.target.value)
+                      options={roleOptions}
+                      onChange={(nextValue) =>
+                        handleAddUserField("role", nextValue)
                       }
-                    >
-                      <option value="USER">Student / Staff</option>
-                      <option value="ADMIN">Administrator</option>
-                    </select>
+                      buttonClassName={getAddUserDropdownButtonClassName(
+                        "role",
+                      )}
+                      ariaLabel="Select role"
+                    />
+                    {addUserFieldErrors.role && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {addUserFieldErrors.role}
+                      </p>
+                    )}
                   </div>
                 </div>
 

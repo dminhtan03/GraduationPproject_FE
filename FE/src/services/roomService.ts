@@ -49,6 +49,11 @@ export interface RoomStatusItem {
   score: number | null;
 }
 
+export interface RoomStatusSearchResponse {
+  items: RoomStatusItem[];
+  message?: string;
+}
+
 export interface RoomAcademicScheduleItem {
   id: string;
   roomId?: string;
@@ -125,6 +130,67 @@ const normalizeRoomDetail = (detail: unknown): UnknownRecord => {
   return {
     ...mapped,
     images: normalizeRoomImages(mapped.images),
+  };
+};
+
+const extractResponseMessage = (payload: UnknownRecord): string | undefined => {
+  if (typeof payload.message === "string" && payload.message.trim()) {
+    return payload.message.trim();
+  }
+
+  const meta = payload.meta;
+  if (meta && typeof meta === "object") {
+    const metaRecord = meta as UnknownRecord;
+    if (typeof metaRecord.message === "string" && metaRecord.message.trim()) {
+      return metaRecord.message.trim();
+    }
+  }
+
+  return undefined;
+};
+
+const normalizeRoomStatusItems = (list: unknown): RoomStatusItem[] => {
+  const arr = Array.isArray(list) ? list : [];
+
+  return arr.map((item) => {
+    const record =
+      item && typeof item === "object"
+        ? (item as UnknownRecord)
+        : ({} as UnknownRecord);
+
+    return {
+      roomId:
+        (typeof record.roomId === "string" && record.roomId) ||
+        (typeof record.id === "string" && record.id) ||
+        (typeof record.seatId === "string" && record.seatId) ||
+        "",
+      locationCode:
+        (typeof record.locationCode === "string" && record.locationCode) || "",
+      status:
+        ((typeof record.status === "string"
+          ? record.status
+          : "AVAILABLE") as MapRoomStatus) || "AVAILABLE",
+      score:
+        typeof record.score === "number" && !Number.isNaN(record.score)
+          ? record.score
+          : null,
+    };
+  });
+};
+
+const requestSearchAvailableRooms = async (
+  payload: RoomStatusRequest,
+): Promise<RoomStatusSearchResponse> => {
+  const res = await api.post<unknown>(API_ENDPOINTS.ROOMS.SEARCH, payload);
+  const raw =
+    res.data && typeof res.data === "object"
+      ? (res.data as UnknownRecord)
+      : ({} as UnknownRecord);
+  const list = raw.data ?? raw;
+
+  return {
+    items: normalizeRoomStatusItems(list),
+    message: extractResponseMessage(raw),
   };
 };
 
@@ -239,40 +305,14 @@ export const roomService = {
   async searchAvailableRooms(
     payload: RoomStatusRequest,
   ): Promise<RoomStatusItem[]> {
-    const res = await api.post<unknown>(API_ENDPOINTS.ROOMS.SEARCH, payload);
-    const raw =
-      res.data && typeof res.data === "object"
-        ? (res.data as UnknownRecord)
-        : ({} as UnknownRecord);
-    const list = raw.data ?? raw;
+    const result = await requestSearchAvailableRooms(payload);
+    return result.items;
+  },
 
-    const arr = Array.isArray(list) ? list : [];
-
-    return arr.map((item) => {
-      const record =
-        item && typeof item === "object"
-          ? (item as UnknownRecord)
-          : ({} as UnknownRecord);
-
-      return {
-        roomId:
-          (typeof record.roomId === "string" && record.roomId) ||
-          (typeof record.id === "string" && record.id) ||
-          (typeof record.seatId === "string" && record.seatId) ||
-          "",
-        locationCode:
-          (typeof record.locationCode === "string" && record.locationCode) ||
-          "",
-        status:
-          ((typeof record.status === "string"
-            ? record.status
-            : "AVAILABLE") as MapRoomStatus) || "AVAILABLE",
-        score:
-          typeof record.score === "number" && !Number.isNaN(record.score)
-            ? record.score
-            : null,
-      };
-    });
+  async searchAvailableRoomsWithMeta(
+    payload: RoomStatusRequest,
+  ): Promise<RoomStatusSearchResponse> {
+    return requestSearchAvailableRooms(payload);
   },
 
   async getRoomDetail(roomId: string): Promise<UnknownRecord> {
