@@ -6,6 +6,7 @@ import { api } from "../../services/api";
 import { reservationService } from "../../services/reservationService";
 import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
 import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
+import { formatDateTime24, formatPriceVN } from "../../utils/helpers";
 
 type Amenity = { id: string; name: string };
 
@@ -275,8 +276,7 @@ const EventLivePage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Event Live</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Reservation: <span className="font-semibold">{normalizedReservationId}</span> • Room:{" "}
-            <span className="font-semibold">{roomCode || "-"}</span>
+            Room: <span className="font-semibold">{roomCode || "-"}</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -303,7 +303,7 @@ const EventLivePage: React.FC = () => {
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <h2 className="text-lg font-bold text-slate-900">Event information</h2>
           {eventData ? (
-            <div className="mt-3 space-y-1 text-sm text-slate-700">
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
               <div>
                 <span className="font-semibold">Title:</span> {eventData.title}
               </div>
@@ -316,7 +316,7 @@ const EventLivePage: React.FC = () => {
                 </div>
               ) : null}
               <div>
-                <span className="font-semibold">Time:</span> {String(startTime)} → {String(endTime)}
+                <span className="font-semibold">Time:</span> {formatDateTime24(startTime)} → {formatDateTime24(endTime)}
               </div>
               <div>
                 <span className="font-semibold">Room:</span> {roomCode || "-"}
@@ -426,7 +426,7 @@ const EventLivePage: React.FC = () => {
                         <div>
                           <div className="text-sm font-semibold text-slate-900">{s.name}</div>
                           <div className="text-xs text-slate-500">
-                            {s.price != null ? s.price : "-"} {s.unit ? `/${s.unit}` : ""}
+                            {s.price != null ? formatPriceVN(s.price) : "-"} {s.unit ? `/${s.unit}` : ""}
                           </div>
                         </div>
                         <div className="flex gap-2">

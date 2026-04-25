@@ -9,6 +9,7 @@ import { API_CONFIG, ROUTES } from "../../constants";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
 import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
 import { logout } from "../../services/authService";
+import { formatDateTime24, formatPriceVN } from "../../utils/helpers";
 
 type Amenity = { id: string; name: string };
 
@@ -150,8 +151,7 @@ const AdminEventBookingDetailPage: React.FC = () => {
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Event Detail (Admin)</h1>
               <p className="mt-1 text-sm text-slate-500">
-                Reservation: <span className="font-semibold">{reservationId}</span> • Room:{" "}
-                <span className="font-semibold">{roomCode}</span>
+                Room: <span className="font-semibold">{roomCode}</span>
               </p>
             </div>
             <button
@@ -166,14 +166,14 @@ const AdminEventBookingDetailPage: React.FC = () => {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-900">Event information</h2>
               {eventData ? (
-                <div className="mt-3 space-y-1 text-sm text-slate-700">
+                <div className="mt-3 space-y-2 text-sm text-slate-700">
                   <div><span className="font-semibold">Title:</span> {eventData.title}</div>
                   <div><span className="font-semibold">Visibility:</span> {eventData.visibility}</div>
                   {eventData.description && (
                     <div><span className="font-semibold">Description:</span> {eventData.description}</div>
                   )}
                   <div>
-                    <span className="font-semibold">Time:</span> {new Date(startTime).toLocaleString()} → {new Date(endTime).toLocaleString()}
+                    <span className="font-semibold">Time:</span> {formatDateTime24(startTime)} → {formatDateTime24(endTime)}
                   </div>
                 </div>
               ) : (

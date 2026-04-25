@@ -49,6 +49,47 @@ const BookRoomEventPage: React.FC = () => {
   const [acceptedRules, setAcceptedRules] = useState(false);
   const [loading, setLoading] = useState(false);
   const [popup, setPopup] = useState<{ type: MessageType; message: string } | null>(null);
+  const [timeValidationError, setTimeValidationError] = useState("");
+
+  // Validate end time > start time in real-time
+  const validateDateTime = (sDate: string, sTime: string, eDate: string, eTime: string) => {
+    if (!sDate || !sTime || !eDate || !eTime) {
+      setTimeValidationError("");
+      return true;
+    }
+    const start = new Date(`${sDate}T${sTime}:00`);
+    const end = new Date(`${eDate}T${eTime}:00`);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      setTimeValidationError("");
+      return true;
+    }
+    if (end <= start) {
+      setTimeValidationError("End time must be greater than start time");
+      return false;
+    }
+    setTimeValidationError("");
+    return true;
+  };
+
+  const handleStartDateChange = (value: string) => {
+    setStartDate(value);
+    validateDateTime(value, startTime, endDate, endTime);
+  };
+
+  const handleStartTimeChange = (value: string) => {
+    setStartTime(value);
+    validateDateTime(startDate, value, endDate, endTime);
+  };
+
+  const handleEndDateChange = (value: string) => {
+    setEndDate(value);
+    validateDateTime(startDate, startTime, value, endTime);
+  };
+
+  const handleEndTimeChange = (value: string) => {
+    setEndTime(value);
+    validateDateTime(startDate, startTime, endDate, value);
+  };
 
   const showPopup = (type: MessageType, nextMessage: string) => {
     setPopup({ type, message: nextMessage });
@@ -73,6 +114,12 @@ const BookRoomEventPage: React.FC = () => {
     }
     if (!eventTitle.trim()) {
       message.warning("Event title is required.");
+      return;
+    }
+
+    // Validate date/time
+    if (timeValidationError) {
+      message.warning(timeValidationError);
       return;
     }
 
@@ -162,164 +209,234 @@ const BookRoomEventPage: React.FC = () => {
             </button>
           </div>
 
-          <form onSubmit={submit} className="mt-6 space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-800">Booking time</p>
-              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">Start date</label>
+          <form onSubmit={submit} className="mt-8 space-y-6">
+            {/* Booking Time Section */}
+            <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <div className="h-1 w-1 rounded-full bg-orange-500"></div>
+                <p className="text-base font-bold text-slate-900">Booking Time</p>
+              </div>
+              
+              {/* Date & Time Grid */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {/* Start Date */}
+                <div className="flex flex-col">
+                  <label className="mb-2 text-sm font-semibold text-slate-700">Start Date</label>
                   <input
                     type="date"
                     value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                    onChange={(e) => handleStartDateChange(e.target.value)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
                   />
                 </div>
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">Start time</label>
+
+                {/* Start Time */}
+                <div className="flex flex-col">
+                  <label className="mb-2 text-sm font-semibold text-slate-700">Start Time</label>
                   <input
                     type="time"
                     value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                    onChange={(e) => handleStartTimeChange(e.target.value)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
                   />
                 </div>
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">End date</label>
+
+                {/* End Date */}
+                <div className="flex flex-col">
+                  <label className="mb-2 text-sm font-semibold text-slate-700">End Date</label>
                   <input
                     type="date"
                     value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                    onChange={(e) => handleEndDateChange(e.target.value)}
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium outline-none transition ${
+                      timeValidationError
+                        ? "border-red-400 bg-red-50 text-red-900 focus:border-red-500 focus:ring-2 focus:ring-red-200"
+                        : "border-slate-300 bg-white text-slate-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                    }`}
                   />
                 </div>
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">End time</label>
+
+                {/* End Time */}
+                <div className="flex flex-col">
+                  <label className="mb-2 text-sm font-semibold text-slate-700">End Time</label>
                   <input
                     type="time"
                     value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                    onChange={(e) => handleEndTimeChange(e.target.value)}
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium outline-none transition ${
+                      timeValidationError
+                        ? "border-red-400 bg-red-50 text-red-900 focus:border-red-500 focus:ring-2 focus:ring-red-200"
+                        : "border-slate-300 bg-white text-slate-900 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                    }`}
                   />
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {timeValidationError && (
+                <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 border border-red-200">
+                  <svg className="h-5 w-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-medium text-red-700">{timeValidationError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Purpose & Note */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col">
+                <label className="mb-2 text-sm font-semibold text-slate-700">Purpose <span className="text-red-500">*</span></label>
+                <input
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  placeholder="e.g., Team meeting, Workshop"
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                />
+              </div>
+              <div className="flex flex-col">
+                <label className="mb-2 text-sm font-semibold text-slate-700">Note <span className="text-slate-400">(Optional)</span></label>
+                <input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Additional details..."
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                />
+              </div>
+            </div>
+
+            {/* Event Info Section */}
+            <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-blue-50 to-white p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <div className="h-1 w-1 rounded-full bg-blue-500"></div>
+                <p className="text-base font-bold text-slate-900">Event Information</p>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex flex-col">
+                  <label className="mb-2 text-sm font-semibold text-slate-700">Event Title <span className="text-red-500">*</span></label>
+                  <input
+                    value={eventTitle}
+                    onChange={(e) => setEventTitle(e.target.value)}
+                    placeholder="e.g., Q1 Planning Meeting"
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="mb-2 text-sm font-semibold text-slate-700">Description <span className="text-slate-400">(Optional)</span></label>
+                  <input
+                    value={eventDescription}
+                    onChange={(e) => setEventDescription(e.target.value)}
+                    placeholder="Event details..."
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="mb-2 text-sm font-semibold text-slate-700">Visibility</label>
+                  <select
+                    value={visibility}
+                    onChange={(e) => setVisibility(e.target.value as any)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  >
+                    <option value="INVITE_ONLY">Invite Only</option>
+                    <option value="PUBLIC">Public</option>
+                  </select>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-slate-700">Purpose</label>
-                <input
-                  value={purpose}
-                  onChange={(e) => setPurpose(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-                />
+            {/* Participants Section */}
+            <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-purple-50 to-white p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <div className="h-1 w-1 rounded-full bg-purple-500"></div>
+                <p className="text-base font-bold text-slate-900">Invite Participants</p>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-slate-700">Note (optional)</label>
-                <input
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-                />
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-800">Event info</p>
-              <div className="mt-3 space-y-3">
-                <input
-                  value={eventTitle}
-                  onChange={(e) => setEventTitle(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-                  placeholder="Event title"
-                />
-                <input
-                  value={eventDescription}
-                  onChange={(e) => setEventDescription(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-                  placeholder="Description (optional)"
-                />
-                <select
-                  value={visibility}
-                  onChange={(e) => setVisibility(e.target.value as any)}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-                >
-                  <option value="INVITE_ONLY">INVITE_ONLY</option>
-                  <option value="PUBLIC">PUBLIC</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-800">Invite Participants</p>
-              <div className="mt-3 flex gap-2">
-                <input
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
+              
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (newEmail.trim()) {
+                          setParticipantEmails((prev) => [...new Set([...prev, newEmail.trim()])]);
+                          setNewEmail("");
+                        }
+                      }
+                    }}
+                    placeholder="Enter email and press Enter"
+                    className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
                       if (newEmail.trim()) {
                         setParticipantEmails((prev) => [...new Set([...prev, newEmail.trim()])]);
                         setNewEmail("");
                       }
-                    }
-                  }}
-                  className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-                  placeholder="Enter email and press Enter"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (newEmail.trim()) {
-                      setParticipantEmails((prev) => [...new Set([...prev, newEmail.trim()])]);
-                      setNewEmail("");
-                    }
-                  }}
-                  className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
-                >
-                  Add
-                </button>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {participantEmails.map((email) => (
-                  <span
-                    key={email}
-                    className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-inset ring-orange-600/20"
+                    }}
+                    className="rounded-lg bg-purple-100 px-4 py-2.5 text-sm font-semibold text-purple-700 transition hover:bg-purple-200 active:bg-purple-300"
                   >
-                    {email}
-                    <button
-                      type="button"
-                      onClick={() => setParticipantEmails((prev) => prev.filter((e) => e !== email))}
-                      className="text-orange-600 hover:text-orange-800"
-                    >
-                      &times;
-                    </button>
-                  </span>
-                ))}
+                    Add
+                  </button>
+                </div>
+
+                {participantEmails.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {participantEmails.map((email) => (
+                      <span
+                        key={email}
+                        className="inline-flex items-center gap-2 rounded-full bg-purple-100 px-3 py-1.5 text-xs font-semibold text-purple-700 ring-1 ring-inset ring-purple-300"
+                      >
+                        {email}
+                        <button
+                          type="button"
+                          onClick={() => setParticipantEmails((prev) => prev.filter((e) => e !== email))}
+                          className="font-bold text-purple-600 hover:text-purple-800"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            <label className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 text-sm text-slate-700">
+            {/* Rules Agreement */}
+            <label className="flex items-start gap-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-slate-700 transition hover:bg-emerald-100/50">
               <input
                 type="checkbox"
                 checked={acceptedRules}
                 onChange={(event) => setAcceptedRules(event.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-emerald-600"
+                className="mt-0.5 h-4 w-4 accent-emerald-600 cursor-pointer"
               />
-              <span className="leading-5">I have read and agree to follow all room usage rules.</span>
+              <span className="font-medium leading-relaxed">I have read and agree to follow all room usage rules.</span>
             </label>
 
-            <button
-              disabled={loading}
-              type="submit"
-              className="w-full rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-70"
-            >
-              <span className="inline-flex items-center justify-center gap-2">
+            {/* Action Buttons */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.ROOM_DETAIL.replace(":roomId", normalizedRoomId), { state: { room } })}
+                disabled={loading}
+                className="rounded-lg border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={loading || !!timeValidationError || !acceptedRules}
+                type="submit"
+                className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <CalendarDaysIcon className="h-5 w-5" />
-                {loading ? "Creating..." : "Create event booking"}
-              </span>
-            </button>
+                {loading ? "Creating..." : "Create Event Booking"}
+              </button>
+            </div>
           </form>
         </div>
 

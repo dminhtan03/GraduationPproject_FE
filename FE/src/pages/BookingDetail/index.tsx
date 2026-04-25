@@ -416,7 +416,9 @@ const BookingDetailPage: React.FC = () => {
     };
 
     pushItem("created", "Created", mergedDetail.createAt || mergedDetail.createdAt, 1);
-    pushItem("checkin", "Check-in", mergedDetail.checkinTime || mergedDetail.checkInTime, 2);
+    // Note: Check-in events should only come from history, not from direct checkinTime field
+    // to avoid duplicate timelines. History list is the authoritative source.
+    // pushItem("checkin", "Check-in", mergedDetail.checkinTime || mergedDetail.checkInTime, 2);
 
     const historyList = Array.isArray(mergedDetail.history) ? mergedDetail.history : [];
     let extendIndex = 0;

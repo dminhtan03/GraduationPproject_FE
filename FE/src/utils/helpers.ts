@@ -13,6 +13,40 @@ export const formatCurrency = (amount: number): string => {
   }).format(amount);
 };
 
+// Format price for display (100.000, 1.000.000 VND)
+export const formatPriceVN = (amount: number): string => {
+  if (isNaN(amount)) return "0 VND";
+  return new Intl.NumberFormat("vi-VN").format(amount) + " VND";
+};
+
+// Format date and time as DD/MM/YYYY HH:mm
+export const formatDateTime24 = (dateStr: string | Date): string => {
+  if (!dateStr) return "-";
+  const date = typeof dateStr === "string" ? new Date(dateStr) : dateStr;
+  if (isNaN(date.getTime())) return "-";
+  
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+};
+
+// Format date only as DD/MM/YYYY
+export const formatDateOnly = (dateStr: string | Date): string => {
+  if (!dateStr) return "-";
+  const date = typeof dateStr === "string" ? new Date(dateStr) : dateStr;
+  if (isNaN(date.getTime())) return "-";
+  
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  
+  return `${day}/${month}/${year}`;
+};
+
 // Format date
 export const formatDate = (
   date: string | Date,
