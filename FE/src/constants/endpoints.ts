@@ -17,9 +17,41 @@ export const API_ENDPOINTS = {
   // e.g. GET /api/v1/rooms?page=0&size=5&status=AVAILABLE&minCapacity=20
   ROOMS: {
     LIST: "/api/v1/rooms-map",
+    SEARCH: "/api/v1/rooms/search",
     DETAIL: "/api/v1/rooms/:id",
+    DETAIL_RESERVATION: "/api/v1/reservations/detail-reservation/:id",
     BOOK: "/api/v1/reservations",
+    MY_STATUS: "/api/v1/reservations/my-status",
+    CHECK_IN: "/api/v1/reservations/check-in/:id",
+    RETURN_ROOM: "/api/v1/reservations/return-room/:id",
+    EXTEND_ROOM: "/api/v1/reservations/extend/:id",
+    CANCEL_BOOKING: "/api/v1/reservations/cancel/:id",
+    FORCE_CANCEL_BOOKING: "/api/v1/reservations/force-cancel/:id",
+    ROOM_IMAGES_BY_ROOM: "/api/v1/room-images/room/:roomId",
+    // start add layout endpoint
+    UPDATE_LAYOUT: "/api/v1/rooms/floors/:floorId/layout",
+    IMPORT_EXCEL: "/api/v1/rooms/import-excel",
+    CREATE: "/api/v1/rooms",
+    GET_AMENITIES: "/api/v1/rooms/amenities",
+    // end add layout endpoint
   },
+  AMENITIES: {
+    LIST: "/api/v1/amenities",
+    CREATE: "/api/v1/amenities",
+    UPDATE: "/api/v1/amenities/:id",
+    DELETE: "/api/v1/amenities/:id",
+  },
+  // start add building endpoints
+  BUILDINGS: {
+    ADMIN_BUILDINGS: "/api/v1/dashboard/all-buildings",
+    ADMIN_FLOORS: "/api/v1/dashboard/all-floors-by-buildingId/:buildingId",
+    ADMIN_ROOMS_BY_FLOOR: "/api/v1/dashboard/all-room-by-floorId/:floorId",
+    CREATE_BUILDING: "/api/v1/dashboard/buildings",
+    UPDATE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
+    DELETE_BUILDING: "/api/v1/dashboard/buildings/:buildingId",
+    CREATE_FLOOR: "/api/v1/dashboard/buildings/:buildingId/add-floor",
+  },
+  // end add building endpoints
 
   // User endpoints
   USERS: {
@@ -28,9 +60,16 @@ export const API_ENDPOINTS = {
     CREATE: "/users",
     UPDATE: "/users/:id",
     DELETE: "/users/:id",
+    REGISTER: "/api/v1/user/register",
+    UPDATE_INFO: "/api/v1/user/update-info",
     CHANGE_PASSWORD: "/api/v1/user/change-password",
     FORGOT_PASSWORD_REQUEST: "/api/v1/user/forgot-password",
     FORGOT_PASSWORD_VERIFY: "/api/v1/user/verify-forgot-password",
+    RESEND_OTP: "/api/v1/user/resend-otp",
+    // start add admin endpoints
+    ADMIN_ADD: "/api/v1/user/admin/add",
+    ADMIN_IMPORT_EXCEL: "/api/v1/user/admin/import-excel",
+    // end add admin endpoints
   },
   // Demo data endpoints (sử dụng JSONPlaceholder)
   DEMO: {
@@ -40,6 +79,43 @@ export const API_ENDPOINTS = {
     PHOTOS: "/photos",
     TODOS: "/todos",
     USERS: "/users",
+  },
+  // AI assistant endpoints
+  AI: {
+    ADD_CHAT: "/api/v1/chatbot/session",
+    CHAT: "/api/v1/chatbot/message",
+    VOICE: "/api/v1/chatbot/voice",
+    DELETE_CHAT: "/api/v1/chatbot/session/:sessionId",
+    HISTORY: "/api/v1/chatbot/history",
+    HISTORY_DETAIL: "/api/v1/chatbot/history/:sessionId",
+    RESERVE: "/api/v1/ai/reserve",
+  },
+
+  FEEDBACK: {
+    CREATE: "/api/v1/feedback/add",
+    LIST: "/api/v1/feedback",
+  },
+
+  NOTIFICATIONS: {
+    LIST: "/api/v1/notifications/getAll",
+    MARK_AS_READ: "/api/v1/notifications/markAsRead/:notificationId",
+  },
+
+  ACADEMIC_SCHEDULES: {
+    LIST: "/api/v1/academic-schedules",
+    CREATE: "/api/v1/academic-schedules",
+    UPDATE: "/api/v1/academic-schedules/:id",
+    DELETE: "/api/v1/academic-schedules/:id",
+    IMPORT: "/api/v1/academic-schedules/import",
+    BY_ROOM: "/api/v1/academic-schedules/room/:roomId",
+  },
+
+  DASHBOARD: {
+    OVERVIEW_STATS: "/api/v1/dashboard/overview-stats",
+    ALL_USERS: "/api/v1/dashboard/all-users",
+    LOCK_USER: "/api/v1/dashboard/lock-user/:userId",
+    UNLOCK_USER: "/api/v1/dashboard/unlock-user/:userId",
+    ALL_RESERVATIONS: "/api/v1/dashboard/reservations",
   },
 } as const;
 

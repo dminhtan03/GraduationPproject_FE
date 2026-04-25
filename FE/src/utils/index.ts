@@ -3,3 +3,5 @@
 export * from "./helpers";
 export * from "./errorHandlers";
 export * from "./mockData";
+export * from "./roomMap";
+export * from "./roomTime";

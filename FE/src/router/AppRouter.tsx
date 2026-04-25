@@ -3,20 +3,119 @@
 import React from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { ROUTES } from "../constants";
+import { getDefaultRouteByRole, isAdminUser } from "../services/authService";
+import {
+  selectAuthInitializing,
+  selectAuthUser,
+  useAppSelector,
+} from "../store";
 
 // Lazy load components để optimize performance
 const MainLayout = React.lazy(() => import("../components/Layout/MainLayout"));
 const LoginPage = React.lazy(() => import("../pages/Login"));
 const ForgotPasswordPage = React.lazy(() => import("../pages/ForgotPassword"));
 const DashboardPage = React.lazy(() => import("../pages/RoomList"));
+const RoomDetailPage = React.lazy(() => import("../pages/RoomDetail"));
+const BookRoomPage = React.lazy(() => import("../pages/BookRoom"));
+const RoomMapPage = React.lazy(() => import("../pages/RoomMap"));
 const AboutPage = React.lazy(() => import("../pages/About"));
 const MyBookingsPage = React.lazy(() => import("../pages/MyBookings"));
+const BookingDetailPage = React.lazy(() => import("../pages/BookingDetail"));
 const ProfilePage = React.lazy(() => import("../pages/Profile"));
 const EditProfilePage = React.lazy(
   () => import("../pages/Profile/EditProfile"),
 );
+const ChangePasswordPage = React.lazy(
+  () => import("../pages/Profile/ChangePassword"),
+);
+const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
+const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
+const AdminDashboardPage = React.lazy(() => import("../pages/AdminDashboard"));
+const AdminUserManagementPage = React.lazy(
+  () => import("../pages/AdminUserManagement"),
+);
+const AdminAllBookingListPage = React.lazy(
+  () => import("../pages/AdminAllBookingList"),
+);
+const AdminBookingDetailPage = React.lazy(
+  () => import("../pages/AdminBookingDetail"),
+);
+const AdminBuildingManagementPage = React.lazy(
+  () => import("../pages/AdminBuildingManagement"),
+);
+const AdminBuildingFloorsPage = React.lazy(
+  () => import("../pages/AdminBuildingManagement/FloorList"),
+);
+const AdminRoomManagementPage = React.lazy(
+  () => import("../pages/AdminBuildingManagement/RoomManagement"),
+);
+const AdminAmenityManagementPage = React.lazy(
+  () => import("../pages/AdminAmenityManagement"),
+);
+const AdminFloorLayoutPage = React.lazy(
+  () => import("../pages/AdminFloorLayout"),
+);
+const AdminAcademicSchedulePage = React.lazy(
+  () => import("../pages/AdminAcademicSchedule"),
+);
+const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
+const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
+
+type AccessMode = "authenticated" | "admin-only" | "user-only";
+
+const useResolvedUser = () => {
+  const user = useAppSelector(selectAuthUser);
+  const isResolving = useAppSelector(selectAuthInitializing);
+
+  return { user, isResolving };
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
+const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const { user, isResolving } = useResolvedUser();
+  if (isResolving) return <PageLoading />;
+  if (!user) return <>{children}</>;
+  return <Navigate to={getDefaultRouteByRole(user)} replace />;
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
+const RoleRedirect: React.FC = () => {
+  const { user, isResolving } = useResolvedUser();
+  if (isResolving) return <PageLoading />;
+  if (!user) return <Navigate to={ROUTES.LOGIN} replace />;
+  return <Navigate to={getDefaultRouteByRole(user)} replace />;
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
+const ProtectedRoute: React.FC<{
+  children: React.ReactNode;
+  mode?: AccessMode;
+}> = ({ children, mode = "authenticated" }) => {
+  const { user, isResolving } = useResolvedUser();
+
+  if (isResolving) {
+    return <PageLoading />;
+  }
+
+  if (!user) {
+    return <Navigate to={ROUTES.LOGIN} replace />;
+  }
+
+  if (mode === "admin-only" && !isAdminUser(user)) {
+    return <Navigate to={ROUTES.FORBIDDEN} replace />;
+  }
+
+  if (mode === "user-only" && isAdminUser(user)) {
+    return <Navigate to={ROUTES.FORBIDDEN} replace />;
+  }
+
+  return <>{children}</>;
+};
 
 // Error boundary component cho routes
+// eslint-disable-next-line react-refresh/only-export-components
 const ErrorBoundary: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -35,6 +134,7 @@ const ErrorBoundary: React.FC = () => {
 };
 
 // Loading component cho lazy loading
+// eslint-disable-next-line react-refresh/only-export-components
 const PageLoading: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -47,6 +147,7 @@ const PageLoading: React.FC = () => {
 };
 
 // Wrapper component với Suspense
+// eslint-disable-next-line react-refresh/only-export-components
 const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -58,32 +159,170 @@ export const router = createBrowserRouter([
   {
     path: ROUTES.LOGIN,
     element: (
-      <SuspenseWrapper>
-        <LoginPage />
-      </SuspenseWrapper>
+      <PublicOnlyRoute>
+        <SuspenseWrapper>
+          <LoginPage />
+        </SuspenseWrapper>
+      </PublicOnlyRoute>
     ),
     errorElement: <ErrorBoundary />,
   },
   {
     path: ROUTES.FORGOT_PASSWORD,
     element: (
+      <PublicOnlyRoute>
+        <SuspenseWrapper>
+          <ForgotPasswordPage />
+        </SuspenseWrapper>
+      </PublicOnlyRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.FORBIDDEN,
+    element: (
       <SuspenseWrapper>
-        <ForgotPasswordPage />
+        <ForbiddenPage />
       </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.NOT_FOUND,
+    element: (
+      <SuspenseWrapper>
+        <NotFoundPage />
+      </SuspenseWrapper>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_DASHBOARD,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminDashboardPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_USER_MANAGEMENT,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminUserManagementPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_ALL_BOOKINGS,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminAllBookingListPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_BOOKING_DETAIL,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminBookingDetailPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_BUILDING_MANAGEMENT,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminBuildingManagementPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_BUILDING_FLOORS,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminBuildingFloorsPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_ROOM_MANAGEMENT,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminRoomManagementPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_AMENITY_MANAGEMENT,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminAmenityManagementPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_FLOOR_LAYOUT,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminFloorLayoutPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_ACADEMIC_SCHEDULE,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminAcademicSchedulePage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
     ),
     errorElement: <ErrorBoundary />,
   },
   {
     path: "/",
     element: (
-      <SuspenseWrapper>
-        <MainLayout />
-      </SuspenseWrapper>
+      <ProtectedRoute mode="authenticated">
+        <SuspenseWrapper>
+          <MainLayout />
+        </SuspenseWrapper>
+      </ProtectedRoute>
     ),
     errorElement: <ErrorBoundary />,
     children: [
       {
         index: true,
+        element: <RoleRedirect />,
+      },
+      {
+        path: ROUTES.ROOM_LIST,
         element: (
           <SuspenseWrapper>
             <DashboardPage />
@@ -108,6 +347,30 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: ROUTES.BOOKING_DETAIL,
+        element: (
+          <SuspenseWrapper>
+            <BookingDetailPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.BOOK_ROOM,
+        element: (
+          <SuspenseWrapper>
+            <BookRoomPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.ROOM_DETAIL,
+        element: (
+          <SuspenseWrapper>
+            <RoomDetailPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
         path: ROUTES.PROFILE,
         element: (
           <SuspenseWrapper>
@@ -123,12 +386,48 @@ export const router = createBrowserRouter([
           </SuspenseWrapper>
         ),
       },
+      {
+        path: ROUTES.CHANGE_PASSWORD,
+        element: (
+          <SuspenseWrapper>
+            <ChangePasswordPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.ROOM_MAP,
+        element: (
+          <SuspenseWrapper>
+            <RoomMapPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.AI_ASSISTANT,
+        element: (
+          <SuspenseWrapper>
+            <AIAssistantPage />
+          </SuspenseWrapper>
+        ),
+      },
+      {
+        path: ROUTES.NOTIFICATIONS,
+        element: (
+          <SuspenseWrapper>
+            <NotificationsPage />
+          </SuspenseWrapper>
+        ),
+      },
     ],
   },
   // Catch all route - redirect to home
   {
     path: "*",
-    element: <Navigate to={ROUTES.ROOM_LIST} replace />,
+    element: (
+      <SuspenseWrapper>
+        <NotFoundPage />
+      </SuspenseWrapper>
+    ),
   },
 ]);
 
@@ -142,7 +441,7 @@ export const routeDefinitions = [
   },
   {
     key: "home",
-    path: ROUTES.HOME,
+    path: ROUTES.ROOM_LIST,
     label: "Trang chủ",
     icon: "home",
   },
@@ -154,8 +453,14 @@ export const routeDefinitions = [
   },
   {
     key: "dashboard",
-    path: ROUTES.DASHBOARD,
+    path: ROUTES.ADMIN_DASHBOARD,
     label: "Dashboard",
     icon: "dashboard",
+  },
+  {
+    key: "user-management",
+    path: ROUTES.ADMIN_USER_MANAGEMENT,
+    label: "User Management",
+    icon: "users",
   },
 ] as const;

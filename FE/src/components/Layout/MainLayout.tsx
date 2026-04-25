@@ -7,7 +7,7 @@ import { useAppSelector, selectTheme } from "../../store";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 import Footer from "./Footer";
-import { ChangePasswordModal } from "../common";
+import { AiChatWidget, ChangePasswordModal } from "../common";
 import { STORAGE_KEYS } from "../../constants";
 
 const { Content } = Layout;
@@ -59,7 +59,7 @@ const MainLayout: React.FC = () => {
           {/* Page content */}
           <Content
             className={`
-              min-h-[calc(100vh-128px)] p-6 
+              min-h-[calc(100vh-128px)] px-3 py-4 sm:px-4 sm:py-5 lg:px-6 lg:py-6 
               ${mode === "dark" ? "bg-gray-900" : "bg-gray-50"}
             `}
             style={{
@@ -78,6 +78,9 @@ const MainLayout: React.FC = () => {
           <Footer />
         </Layout>
       </Layout>
+
+      {/* Floating AI chat widget visible on all main screens */}
+      <AiChatWidget />
 
       <ChangePasswordModal
         open={isChangePasswordVisible}

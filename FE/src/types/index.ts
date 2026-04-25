@@ -29,7 +29,14 @@ export interface User {
   avatar?: string;
   /** Role chính (từ JWT claim roles), e.g. "ROLE_ADMIN", "ROLE_USER" */
   role?: string;
+<<<<<<< HEAD
   roles?: string[];
+=======
+  /** Tất cả authorities từ BE */
+  roles?: string[];
+  cancellationCount: number;
+  bookingLockedUntil: string;
+>>>>>>> main
 }
 
 // Interface cho data demo
@@ -71,8 +78,38 @@ export interface WebSocketMessage {
   timestamp: string;
 }
 
+// ===== NOTIFICATIONS =====
+
+export type NotificationCategory =
+  | "system"
+  | "ai"
+  | "booking"
+  | "batch"
+  | "other";
+
+export interface AppNotification {
+  id: string;
+  backendId?: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  category?: NotificationCategory;
+  read?: boolean;
+  /** Optional progress for long-running jobs (0-100) */
+  progress?: number;
+  /** Optional short status label, e.g. "In progress", "Completed" */
+  statusText?: string;
+  reservationId?: string;
+  reservationStatusAtNow?: string;
+}
+
 // ===== ROOM (Campus Room Inventory) =====
-export type RoomStatus = "AVAILABLE" | "OCCUPIED";
+export type RoomStatus =
+  | "AVAILABLE"
+  | "OCCUPIED"
+  | "UNAVAILABLE"
+  | "BROKEN"
+  | "LEARNING";
 
 export interface Room {
   id: string;
@@ -81,6 +118,61 @@ export interface Room {
   floorInfo?: string;
   slot: number;
   status: RoomStatus;
+}
+
+export interface CreateReservationRequest {
+  roomId: string;
+  purpose: string;
+  startTime: string;
+  endTime: string;
+  attendeeCount?: number;
+  note?: string;
+}
+
+export type ReservationStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "IN_USE"
+  | "CHECKED_IN"
+  | "REJECTED"
+  | "CANCELLED"
+  | "COMPLETED"
+  | string;
+
+export interface Reservation {
+  id?: string;
+  roomId?: string;
+  locationCode?: string;
+  floor?: string;
+  address?: string;
+  buildingName?: string;
+  purpose?: string;
+  note?: string;
+  startTime?: string;
+  endTime?: string;
+  attendeeCount?: number;
+  status?: ReservationStatus;
+  feedbackId?: string;
+  feedbackSubmitted?: boolean;
+  rawData?: Record<string, unknown>;
+}
+
+export interface ReservationStatusQuery {
+  page?: number;
+  size?: number;
+  locationCode?: string;
+  address?: string;
+  statuses?: string[];
+  buildingId?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface ReservationPageResult {
+  items: Reservation[];
+  total: number;
+  page: number;
+  size: number;
 }
 
 export interface Building {
@@ -97,4 +189,6 @@ export interface UserProfile {
   department: string;
   email: string;
   gender: string;
+  cancellationCount: number;
+  bookingLockedUntil: Date;
 }

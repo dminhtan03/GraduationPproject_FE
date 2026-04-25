@@ -12,10 +12,14 @@
   --success-color: #388e3c;
 }
 
-.login-container,
-.login-container * {
+.login-container {
   margin: 0;
-  padding: 0;
+  box-sizing: border-box;
+}
+
+.login-container *,
+.login-container *::before,
+.login-container *::after {
   box-sizing: border-box;
 }
 
@@ -168,6 +172,16 @@
   border: 2px solid var(--neutral-gray);
   border-radius: 8px;
   font-size: 14px;
+}
+
+.form-group input.input-invalid {
+  border-color: var(--error-color);
+}
+
+.input-error-message {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--error-color);
 }
 
 /* ===== PASSWORD WITH EYE ICON ===== */

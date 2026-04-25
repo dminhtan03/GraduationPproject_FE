@@ -11,19 +11,40 @@ export const API_CONFIG = {
 // Routes constants
 export const ROUTES = {
   LOGIN: "/login",
+  FORBIDDEN: "/403",
+  NOT_FOUND: "/404",
   FORGOT_PASSWORD: "/forgot-password",
   ABOUT: "/about",
   ADMIN_DASHBOARD: "/admin/dashboard",
-  ROOM_LIST: "/",
+  ADMIN_USER_MANAGEMENT: "/admin/user-management",
+  ADMIN_ALL_BOOKINGS: "/admin/all-bookings",
+  ADMIN_BOOKING_DETAIL: "/admin/all-bookings/:bookingId",
+  ROOM_LIST: "/room-list",
+  ROOM_MAP: "/room-map",
+  ROOM_DETAIL: "/rooms/:roomId",
+  BOOK_ROOM: "/book-room/:roomId",
   MY_BOOKINGS: "/my-bookings",
+  BOOKING_DETAIL: "/my-bookings/:bookingId",
+  AI_ASSISTANT: "/ai-assistant",
+  NOTIFICATIONS: "/notifications",
   PROFILE: "/profile",
   PROFILE_EDIT: "/profile/edit",
+  CHANGE_PASSWORD: "/profile/change-password",
   LOG_OUT: "/logout",
+  // start add admin building routes
+  ADMIN_BUILDING_MANAGEMENT: "/admin/buildings",
+  ADMIN_BUILDING_FLOORS: "/admin/buildings/:buildingId/floors",
+  ADMIN_ROOM_MANAGEMENT: "/admin/buildings/:buildingId/floors/:floorId/rooms",
+  ADMIN_AMENITY_MANAGEMENT: "/admin/amenities",
+  ADMIN_FLOOR_LAYOUT: "/admin/buildings/:buildingId/floors/:floorId/layout",
+  ADMIN_ACADEMIC_SCHEDULE: "/admin/academic-schedules",
+  // end add admin building routes
 } as const;
 
 // LocalStorage keys
 export const STORAGE_KEYS = {
   USER_TOKEN: "user_token",
+  REFRESH_TOKEN: "refresh_token",
   THEME: "app_theme",
   LANGUAGE: "app_language",
   FORCED_PASSWORD_CHANGE: "force_password_change",
@@ -36,6 +57,10 @@ export const WS_MESSAGE_TYPES = {
   UPDATE_DATA: "update_data",
   NOTIFICATION: "notification",
   ERROR: "error",
+} as const;
+
+export const AUTH_EVENTS = {
+  TOKEN_CHANGED: "auth-token-changed",
 } as const;
 
 // App settings

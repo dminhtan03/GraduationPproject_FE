@@ -1,5 +1,12 @@
 // ===== TYPES DÀNH CHO API =====
-import { ApiResponse, ApiError, User, DemoData } from "./index";
+import {
+  ApiResponse,
+  ApiError,
+  User,
+  DemoData,
+  Reservation,
+  RoomStatus,
+} from "./index";
 
 // ===== REQUEST TYPES =====
 export interface LoginRequest {
@@ -25,6 +32,10 @@ export interface ForgotPasswordRequest {
 export interface VerifyOtpRequest {
   email: string;
   otp: string;
+}
+
+export interface ResendOtpRequest {
+  email: string;
 }
 
 export interface ChangePasswordRequest {
@@ -70,6 +81,56 @@ export interface GetDataResponse {
   total: number;
   page: number;
   totalPages: number;
+}
+
+// ===== AI ASSISTANT TYPES =====
+
+export interface AiChatRequestDto {
+  message: string;
+  sessionId?: string;
+  startTime?: string;
+  endTime?: string;
+  capacity?: number;
+}
+
+export interface AiRoomSuggestion {
+  roomId: string;
+  locationCode: string;
+  score?: number | null;
+  status: RoomStatus | string;
+  building?: string;
+  floor?: string;
+  capacity?: number | null;
+  amenities?: string[];
+  imageUrl?: string;
+  availableTimeSlots?: string[];
+}
+
+export interface AiRoomDetailDto {
+  id?: string;
+  locationCode?: string;
+  capacity?: number | null;
+  score?: number | null;
+  currentUserId?: string;
+  currentUserName?: string;
+  checkInTime?: string;
+  amenities?: string[];
+  images?: string[];
+  feedbacks?: Array<{
+    id?: string;
+    rating?: number | null;
+    description?: string;
+    createdAt?: string;
+  }>;
+}
+
+export interface AiChatResponseDto {
+  sessionId?: string;
+  reply: string;
+  suggestions?: AiRoomSuggestion[];
+  roomDetail?: AiRoomDetailDto | null;
+  reservationCreated: boolean;
+  reservation?: Reservation | null;
 }
 
 // API endpoint types

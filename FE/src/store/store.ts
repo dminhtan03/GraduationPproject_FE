@@ -4,12 +4,14 @@ import { configureStore } from "@reduxjs/toolkit";
 import { TypedUseSelectorHook, useDispatch, useSelector } from "react-redux";
 import dataReducer from "./slices/dataSlice";
 import appReducer from "./slices/appSlice";
+import authReducer from "./slices/authSlice";
 
 // Cấu hình store
 export const store = configureStore({
   reducer: {
     data: dataReducer,
     app: appReducer,
+    auth: authReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -46,6 +48,13 @@ export const selectNotifications = (state: RootState) =>
   state.app.notifications;
 export const selectLanguage = (state: RootState) => state.app.language;
 export const selectGlobalLoading = (state: RootState) => state.app.loading;
+
+// Auth selectors
+export const selectAuthUser = (state: RootState) => state.auth.user;
+export const selectIsAuthenticated = (state: RootState) =>
+  state.auth.isAuthenticated;
+export const selectAuthInitializing = (state: RootState) =>
+  state.auth.isInitializing;
 
 // Combined selectors
 export const selectAppConfig = (state: RootState) => ({

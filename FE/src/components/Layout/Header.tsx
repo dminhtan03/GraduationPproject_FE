@@ -1,109 +1,102 @@
 // ===== HEADER COMPONENT (UniBooking) =====
 
 import React, { useEffect, useState } from "react";
-import {
-  Layout,
-  Button,
-  Typography,
-  Input,
-  Avatar,
-  Dropdown,
-  AutoComplete,
-  Spin,
-} from "antd";
+import { Layout, Button, Typography, Avatar, Dropdown } from "antd";
 import {
   BellOutlined,
   UserOutlined,
-  SettingOutlined,
+  LockOutlined,
   LogoutOutlined,
   DownOutlined,
+  MenuOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { useNavigate } from "react-router-dom";
-import { useAppSelector, selectTheme } from "../../store";
-import { STORAGE_KEYS, ROUTES } from "../../constants";
+import {
+  useAppDispatch,
+  useAppSelector,
+  selectLayout,
+  selectTheme,
+  toggleSidebar,
+} from "../../store";
+import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
 import type { UserProfile } from "../../types";
 import { logout } from "../../services/authService";
-import { roomService } from "../../services/roomService";
+import { BookOpenIcon } from "@heroicons/react/24/outline";
+import { useNotifications } from "../../context/NotificationContext";
+import {
+  formatReservationStatusLabel,
+  getReservationStatusClass,
+} from "../../utils/reservationStatusStyles";
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
 
 const APP_NAME = "UniBooking";
 
+const formatNotificationTime = (iso: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (60 * 1000));
+
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString();
+};
+
 const Header: React.FC = () => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { mode } = useAppSelector(selectTheme);
+  const { sidebarCollapsed } = useAppSelector(selectLayout);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 1024 : false,
+  );
 
-  // Search state
-  const [searchValue, setSearchValue] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const { notifications, unreadCount, markAllAsRead, markAsRead } =
+    useNotifications();
 
   useEffect(() => {
     const fetchProfile = async () => {
-      setLoadingProfile(true);
       try {
-        const res = await api.get<any>(API_ENDPOINTS.AUTH.PROFILE);
-        const userData = res.data?.data || res.data;
+        const res = await api.get<UserProfile | { data: UserProfile }>(
+          API_ENDPOINTS.AUTH.PROFILE,
+        );
+        const raw = res.data;
+        const nested = (raw as { data?: UserProfile }).data;
+        const userData: UserProfile | null = nested || (raw as UserProfile);
         setProfile(userData || null);
       } catch {
         setProfile(null);
-      } finally {
-        setLoadingProfile(false);
       }
     };
     fetchProfile();
   }, []);
 
-  // Search handler
-  const handleSearchRoom = async (value: string) => {
-    setSearchValue(value);
-    if (!value || value.trim().length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    setSearchLoading(true);
-    try {
-      // Lấy tất cả phòng, filter theo roomName hoặc building
-      const res = await roomService.getRooms({ page: 0, size: 50 });
-      const keyword = value.trim().toLowerCase();
-      const filtered = res.items.filter(
-        (r) =>
-          r.roomName.toLowerCase().includes(keyword) ||
-          (r.building && r.building.toLowerCase().includes(keyword)),
-      );
-      setSearchResults(
-        filtered.map((r) => ({
-          value: r.roomName + " - " + r.building,
-          label: (
-            <div>
-              <span className="font-semibold">{r.roomName}</span>
-              <span className="text-xs text-gray-500 ml-2">{r.building}</span>
-            </div>
-          ),
-          room: r,
-        })),
-      );
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
+  useEffect(() => {
+    const onResize = () => {
+      setIsMobileView(window.innerWidth < 1024);
+    };
 
-  const handleSelectRoom = (value: string, option: any) => {
-    // Có thể chuyển hướng sang trang chi tiết phòng hoặc highlight phòng
-    // Ví dụ: navigate(`/rooms/${option.room.id}`);
-    // Hiện tại chỉ clear search
-    setSearchValue("");
-    setSearchResults([]);
-  };
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   let initials = "";
   let displayName = "";
@@ -123,76 +116,134 @@ const Header: React.FC = () => {
       initials = "U";
       displayName = "User";
     }
-    if ((profile as any).avatar) avatarUrl = (profile as any).avatar;
+    const profileWithAvatar = profile as UserProfile & { avatar?: string };
+    if (profileWithAvatar.avatar) avatarUrl = profileWithAvatar.avatar;
   }
 
   const userMenuItems: MenuProps["items"] = [
     { key: "1", label: "My Profile", icon: <UserOutlined /> },
-    { key: "2", label: "Settings", icon: <SettingOutlined /> },
+    { key: "2", label: "Change Password", icon: <LockOutlined /> },
     { type: "divider" },
     { key: "3", label: "Logout", icon: <LogoutOutlined />, danger: true },
   ];
 
   const handleUserMenuClick = ({ key }: { key: string }) => {
     if (key === "1") navigate(ROUTES.PROFILE);
-    if (key === "2") navigate(ROUTES.PROFILE_EDIT);
+    if (key === "2") navigate(ROUTES.CHANGE_PASSWORD);
     if (key === "3") logout().then(() => (window.location.href = "/login"));
+  };
+
+  const latestNotifications = notifications.slice(0, 3);
+
+  const getCategoryBadgeClass = (category?: string) => {
+    if (category === "booking") {
+      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+    }
+    if (category === "ai") {
+      return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
+    }
+    return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+  };
+
+  const getCategoryLabel = (category?: string) => {
+    if (category === "booking") {
+      return "Booking";
+    }
+    if (category === "ai") {
+      return "AI";
+    }
+    return "System";
+  };
+
+  const handleBellClick = () => {
+    setIsNotificationOpen((prev) => !prev);
+  };
+
+  const handleNotificationItemClick = (notificationId: string) => {
+    const notification = notifications.find(
+      (item) => item.id === notificationId,
+    );
+    markAsRead(notificationId);
+
+    const bookingId = notification?.reservationId?.trim();
+    if (!bookingId) {
+      return;
+    }
+
+    setIsNotificationOpen(false);
+    navigate(
+      ROUTES.BOOKING_DETAIL.replace(
+        ":bookingId",
+        encodeURIComponent(bookingId),
+      ),
+      {
+        state: {
+          booking: {
+            id: bookingId,
+            status: notification?.reservationStatusAtNow,
+            rawData: {
+              reservationStatusAtNow: notification?.reservationStatusAtNow,
+              status: notification?.reservationStatusAtNow,
+            },
+          },
+        },
+      },
+    );
   };
 
   return (
     <AntHeader
-      className={`flex items-center justify-between px-4 gap-4 ${
+      className={`relative h-auto py-2 px-3 sm:px-4 flex flex-wrap items-center gap-3 ${
         mode === "dark" ? "bg-gray-800" : "bg-white"
       } border-b border-gray-200 shadow-sm`}
       style={{
-        padding: "0 16px",
         background: mode === "dark" ? "#1f2937" : "#ffffff",
       }}
     >
-      {/* Left: Logo */}
+      {/* Left: Mobile menu + Logo */}
       <div className="flex items-center gap-2 flex-shrink-0">
+        {isMobileView && (
+          <Button
+            type="text"
+            icon={<MenuOutlined className="text-lg" />}
+            onClick={() => dispatch(toggleSidebar())}
+            aria-label={sidebarCollapsed ? "Open sidebar" : "Close sidebar"}
+          />
+        )}
         <div
           className="w-9 h-9 rounded-lg flex items-center justify-center"
           style={{ background: "#ff9500" }}
         >
-          <span className="text-white text-lg" aria-hidden>
-            📚
-          </span>
+          <BookOpenIcon className="w-5 h-5 text-white" aria-hidden />
         </div>
         <Text strong className="text-lg hidden sm:inline">
           {APP_NAME}
         </Text>
       </div>
 
-      {/* Center: Search */}
-      <div className="flex-1 max-w-xl mx-4">
-        <AutoComplete
-          value={searchValue}
-          options={searchResults}
-          onSearch={handleSearchRoom}
-          onSelect={handleSelectRoom}
-          allowClear
-          style={{ width: "100%" }}
-          notFoundContent={searchLoading ? <Spin size="small" /> : null}
-        >
-          <Input.Search
-            placeholder="Search rooms by name or building..."
-            enterButton
-            loading={searchLoading}
-            onSearch={handleSearchRoom}
-            className="rounded-lg"
-            style={{ background: mode === "dark" ? "#374151" : "#f3f4f6" }}
-          />
-        </AutoComplete>
-      </div>
+      <div className="flex-1" />
 
       {/* Right: Notifications + User avatar/login button */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <Button
-          type="text"
-          icon={<BellOutlined className="text-lg" />}
-          onClick={() => {}}
-        />
+      <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+        <div className="relative">
+          <Button
+            type="text"
+            icon={
+              <BellOutlined
+                className={`text-lg transition ${
+                  unreadCount > 0 ? "text-orange-500" : "text-slate-700"
+                }`}
+              />
+            }
+            onClick={handleBellClick}
+            className={isNotificationOpen ? "bg-orange-50" : ""}
+          />
+          {unreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-semibold text-white ring-2 ring-white">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </div>
         {profile ? (
           <div className="flex items-center gap-1">
             <div
@@ -244,6 +295,118 @@ const Header: React.FC = () => {
           </Button>
         )}
       </div>
+
+      {isNotificationOpen && (
+        <div className="absolute right-2 top-14 z-50 w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:right-4 sm:top-16 sm:w-[380px] md:w-[420px]">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-orange-50 to-white px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">
+                  Notifications
+                </p>
+                <p className="text-xs text-slate-500">
+                  {unreadCount > 0
+                    ? `${unreadCount} unread notification${unreadCount > 1 ? "s" : ""}`
+                    : "All caught up"}
+                </p>
+              </div>
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={markAllAsRead}
+                  disabled={unreadCount === 0}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold transition ${
+                    unreadCount > 0
+                      ? "text-orange-600 hover:bg-orange-100"
+                      : "cursor-not-allowed text-slate-400"
+                  }`}
+                >
+                  Mark all as read
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="max-h-96 space-y-2 overflow-y-auto bg-slate-50 p-3">
+            {latestNotifications.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                You have no notifications yet.
+              </div>
+            ) : (
+              latestNotifications.map((n) => (
+                <button
+                  type="button"
+                  key={n.id}
+                  onClick={() => handleNotificationItemClick(n.id)}
+                  className={`w-full rounded-xl border px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                    n.read
+                      ? "border-slate-200 bg-white"
+                      : "border-orange-200 bg-orange-50/80"
+                  }`}
+                >
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-semibold text-slate-900">
+                      {n.title}
+                    </p>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span className="text-[11px] text-slate-500">
+                        {formatNotificationTime(n.createdAt)}
+                      </span>
+                      {!n.read && (
+                        <span className="inline-flex h-2.5 w-2.5 rounded-full bg-orange-500" />
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="max-h-10 overflow-hidden text-xs leading-5 text-slate-600">
+                    {n.message}
+                  </p>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-none ${getCategoryBadgeClass(
+                        n.category,
+                      )}`}
+                    >
+                      {getCategoryLabel(n.category)}
+                    </span>
+
+                    {n.reservationStatusAtNow && (
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-none ${getReservationStatusClass(
+                          n.reservationStatusAtNow,
+                        )}`}
+                      >
+                        {formatReservationStatusLabel(n.reservationStatusAtNow)}
+                      </span>
+                    )}
+
+                    {!n.read && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-orange-500 to-amber-500 px-1.5 py-0 text-[9px] font-semibold leading-tight uppercase tracking-[0.04em] text-white shadow-sm">
+                        <span className="inline-flex h-1 w-1 rounded-full bg-white/95 animate-pulse" />
+                        New
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+
+          <div className="border-t border-slate-100 bg-white">
+            <button
+              type="button"
+              onClick={() => {
+                setIsNotificationOpen(false);
+                navigate(ROUTES.NOTIFICATIONS);
+              }}
+              className="w-full px-4 py-3 text-center text-sm font-semibold text-orange-600 transition hover:bg-orange-50"
+            >
+              See All Notifications
+            </button>
+          </div>
+        </div>
+      )}
     </AntHeader>
   );
 };

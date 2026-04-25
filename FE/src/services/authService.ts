@@ -9,21 +9,45 @@ import {
   LoginResponse,
   ForgotPasswordRequest,
   VerifyOtpRequest,
+  ResendOtpRequest,
   ChangePasswordRequest,
   BasicMessageResponse,
 } from "../types/api";
 import { API_ENDPOINTS } from "../constants/endpoints";
-import { ROUTES, STORAGE_KEYS } from "../constants";
+import { AUTH_EVENTS, ROUTES } from "../constants";
+import {
+  clearAccessToken,
+  clearRefreshToken,
+  getAccessToken,
+  getRefreshToken,
+  persistRefreshToken,
+  setAccessToken,
+} from "./authTokenStorage";
+
+const emitAuthTokenChanged = () => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(AUTH_EVENTS.TOKEN_CHANGED));
+};
 
 // Decode JWT để lấy thông tin user (email, fullName...) từ payload
-const decodeJwt = (token: string): any | null => {
+const decodeJwt = (token: string): Record<string, unknown> | null => {
   try {
     const [, payload] = token.split(".");
     const decoded = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(decoded);
+    const parsed: unknown = JSON.parse(decoded);
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
   } catch {
     return null;
   }
+};
+
+const isTokenExpired = (payload: Record<string, unknown>): boolean => {
+  const exp = payload.exp;
+  if (typeof exp !== "number") return true;
+  return exp * 1000 <= Date.now();
 };
 
 // Chuẩn hoá dữ liệu user từ JWT payload (BE: user=fullName, sub=email, roles=authorities)
@@ -38,20 +62,45 @@ const parseRoles = (roles: unknown): string[] => {
     .filter(Boolean);
 };
 
+const extractBackendMessage = (
+  payload: BackendResponse<unknown> | undefined,
+  fallback: string,
+): string => {
+  if (!payload) return fallback;
+
+  if (
+    typeof payload.meta?.message === "string" &&
+    payload.meta.message.trim()
+  ) {
+    return payload.meta.message;
+  }
+
+  const data = payload.data as { message?: unknown } | undefined;
+  if (typeof data?.message === "string" && data.message.trim()) {
+    return data.message;
+  }
+
+  return fallback;
+};
+
 const extractUserFromToken = (accessToken: string | undefined): User | null => {
   if (!accessToken) return null;
   const payload = decodeJwt(accessToken);
   if (!payload) return null;
+  if (isTokenExpired(payload)) return null;
 
   const roles = parseRoles(payload.roles);
   const role = roles[0] ?? undefined;
 
   return {
     id: 0,
-    name: payload.user || payload.fullName || payload.sub || "User",
-    email: payload.sub || "",
+    name: String(payload.user || payload.fullName || payload.sub || "User"),
+    email: String(payload.sub || ""),
     role,
     roles: roles.length ? roles : undefined,
+    cancellationCount: 0,
+    // Keep Redux auth state serializable by storing ISO string instead of Date object.
+    bookingLockedUntil: new Date(0).toISOString(),
   };
 };
 /**
@@ -70,20 +119,18 @@ export const loginWithEmail = async (
   const refreshToken = backendData?.data?.refreshToken;
 
   if (accessToken) {
-    // Dọn các key nhạy cảm cũ nếu còn
-    try {
-      localStorage.removeItem("user");
-      localStorage.removeItem("user_data");
-    } catch {}
-    localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    // Đưa refresh token vào cookies
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_data");
+    setAccessToken(accessToken);
     if (refreshToken) {
-      document.cookie = `refresh_token=${refreshToken}; path=/; secure`; // secure nếu dùng https
+      persistRefreshToken(refreshToken);
     }
+    emitAuthTokenChanged();
   }
 
   return {
     ...response,
+    message: extractBackendMessage(backendData, "Login successful"),
     data: {
       user: extractUserFromToken(accessToken),
       accessToken: accessToken || "",
@@ -107,21 +154,20 @@ export const loginWithGoogle = async (
   const refreshToken = backendData?.data?.refreshToken;
 
   if (accessToken) {
-    try {
-      localStorage.removeItem("user");
-      localStorage.removeItem("user_data");
-    } catch {}
-    localStorage.setItem(STORAGE_KEYS.USER_TOKEN, accessToken);
-    // Đưa refresh token vào cookies giống như login bằng email
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_data");
+    setAccessToken(accessToken);
     if (refreshToken) {
-      document.cookie = `refresh_token=${refreshToken}; path=/; secure`;
+      persistRefreshToken(refreshToken);
     }
+    emitAuthTokenChanged();
   }
 
   const user = extractUserFromToken(accessToken);
 
   return {
     ...response,
+    message: extractBackendMessage(backendData, "Login with Google successful"),
     data: {
       user,
       accessToken: accessToken || "",
@@ -137,18 +183,18 @@ export const logout = async (): Promise<void> => {
   try {
     await api.post(API_ENDPOINTS.AUTH.LOGOUT);
   } finally {
-    localStorage.removeItem(STORAGE_KEYS.USER_TOKEN);
-    try {
-      localStorage.removeItem("user");
-      localStorage.removeItem("user_data");
-    } catch {}
+    clearAccessToken();
+    clearRefreshToken();
+    localStorage.removeItem("user");
+    localStorage.removeItem("user_data");
+    emitAuthTokenChanged();
   }
 };
 
 /**
  * Get current user profile
  */
-export const getProfile = async (): Promise<ApiResponse<any>> => {
+export const getProfile = async (): Promise<ApiResponse<unknown>> => {
   return await api.get(API_ENDPOINTS.AUTH.PROFILE);
 };
 
@@ -158,10 +204,81 @@ export const getProfile = async (): Promise<ApiResponse<any>> => {
 export const getDefaultRouteByRole = (user: User | null): string => {
   if (!user?.role && !user?.roles?.length) return ROUTES.ROOM_LIST;
   const roles = user.roles ?? (user.role ? [user.role] : []);
-  if (roles.some((r) => r === "ROLE_ADMIN" || (r && r.includes("ADMIN")))) {
+  if (roles.some((r) => r === "ROLE_ADMIN" || r === "ADMIN")) {
     return ROUTES.ADMIN_DASHBOARD;
   }
   return ROUTES.ROOM_LIST;
+};
+
+export const isAdminUser = (user: User | null): boolean => {
+  if (!user) return false;
+  const roles = user.roles ?? (user.role ? [user.role] : []);
+  return roles.some((role) => role === "ROLE_ADMIN" || role === "ADMIN");
+};
+
+export const getCurrentUser = (): User | null => {
+  const token = getAccessToken();
+  const user = extractUserFromToken(token || undefined);
+  if (!user && token) {
+    clearAccessToken();
+  }
+  return user;
+};
+
+/**
+ * Khôi phục phiên đăng nhập khi reload app:
+ * - Ưu tiên access token trong localStorage
+ * - Nếu không có access token nhưng còn refresh cookie, gọi refresh để lấy token mới
+ */
+export const restoreSession = async (): Promise<User | null> => {
+  const storedAccessToken = getAccessToken();
+  const userFromStoredToken = extractUserFromToken(
+    storedAccessToken || undefined,
+  );
+  if (userFromStoredToken) {
+    return userFromStoredToken;
+  }
+
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    return null;
+  }
+
+  try {
+    const refreshResponse = await api.post<BackendResponse<BackendAuthData>>(
+      `${API_ENDPOINTS.AUTH.REFRESH}?refreshToken=${encodeURIComponent(
+        refreshToken,
+      )}`,
+    );
+
+    const accessToken =
+      refreshResponse.data?.data?.accessToken ||
+      (refreshResponse.data as unknown as { accessToken?: string })
+        ?.accessToken;
+
+    const newRefreshToken =
+      refreshResponse.data?.data?.refreshToken ||
+      (refreshResponse.data as unknown as { refreshToken?: string })
+        ?.refreshToken;
+
+    if (!accessToken) {
+      return null;
+    }
+
+    setAccessToken(accessToken);
+    if (newRefreshToken) {
+      persistRefreshToken(newRefreshToken);
+    }
+
+    emitAuthTokenChanged();
+
+    return extractUserFromToken(accessToken);
+  } catch {
+    clearAccessToken();
+    clearRefreshToken();
+    emitAuthTokenChanged();
+    return null;
+  }
 };
 
 const extractMessage = (
@@ -213,6 +330,28 @@ export const verifyResetOtp = async (
       message: extractMessage(
         response.data,
         "OTP verified. Please check your email for the temporary password.",
+      ),
+    },
+  };
+};
+
+/**
+ * Resend OTP when previous OTP expired
+ */
+export const resendResetOtp = async (
+  payload: ResendOtpRequest,
+): Promise<ApiResponse<BasicMessageResponse>> => {
+  const response = await api.post<BackendResponse<BasicMessageResponse>>(
+    API_ENDPOINTS.USERS.RESEND_OTP,
+    payload,
+  );
+
+  return {
+    ...response,
+    data: {
+      message: extractMessage(
+        response.data,
+        "OTP has been resent to your email",
       ),
     },
   };
