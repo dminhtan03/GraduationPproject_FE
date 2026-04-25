@@ -17,6 +17,8 @@ const ForgotPasswordPage = React.lazy(() => import("../pages/ForgotPassword"));
 const DashboardPage = React.lazy(() => import("../pages/RoomList"));
 const RoomDetailPage = React.lazy(() => import("../pages/RoomDetail"));
 const BookRoomPage = React.lazy(() => import("../pages/BookRoom"));
+const BookRoomRecurringPage = React.lazy(() => import("../pages/BookRoomRecurring"));
+const BookRoomEventPage = React.lazy(() => import("../pages/BookRoomEvent"));
 const RoomMapPage = React.lazy(() => import("../pages/RoomMap"));
 const AboutPage = React.lazy(() => import("../pages/About"));
 const MyBookingsPage = React.lazy(() => import("../pages/MyBookings"));
@@ -30,6 +32,11 @@ const ChangePasswordPage = React.lazy(
 );
 const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
 const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
+const QrCheckInPage = React.lazy(() => import("../pages/QrCheckIn"));
+const MyRecurringSeriesPage = React.lazy(() => import("../pages/MyRecurringSeries"));
+// const EventDemoPage = React.lazy(() => import("../pages/EventDemo"));
+const EventSetupPage = React.lazy(() => import("../pages/EventSetup"));
+const EventLivePage = React.lazy(() => import("../pages/EventLive"));
 const AdminDashboardPage = React.lazy(() => import("../pages/AdminDashboard"));
 const AdminUserManagementPage = React.lazy(
   () => import("../pages/AdminUserManagement"),
@@ -52,11 +59,20 @@ const AdminRoomManagementPage = React.lazy(
 const AdminAmenityManagementPage = React.lazy(
   () => import("../pages/AdminAmenityManagement"),
 );
+const AdminServiceItemManagementPage = React.lazy(
+  () => import("../pages/AdminServiceItemManagement"),
+);
 const AdminFloorLayoutPage = React.lazy(
   () => import("../pages/AdminFloorLayout"),
 );
 const AdminAcademicSchedulePage = React.lazy(
   () => import("../pages/AdminAcademicSchedule"),
+);
+const AdminEventBookingListPage = React.lazy(
+  () => import("../pages/AdminEventBookingList"),
+);
+const AdminEventBookingDetailPage = React.lazy(
+  () => import("../pages/AdminEventBookingDetail"),
 );
 const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
 const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
@@ -285,6 +301,19 @@ export const router = createBrowserRouter([
     errorElement: <ErrorBoundary />,
   },
   {
+    // start+ chức năng CRUD dịch vụ đi kèm (route admin)
+    path: ROUTES.ADMIN_SERVICE_ITEMS,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminServiceItemManagementPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    // end+ chức năng CRUD dịch vụ đi kèm (route admin)
+    errorElement: <ErrorBoundary />,
+  },
+  {
     path: ROUTES.ADMIN_FLOOR_LAYOUT,
     element: (
       <ProtectedRoute mode="admin-only">
@@ -301,6 +330,28 @@ export const router = createBrowserRouter([
       <ProtectedRoute mode="admin-only">
         <SuspenseWrapper>
           <AdminAcademicSchedulePage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_EVENT_BOOKINGS,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminEventBookingListPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: ROUTES.ADMIN_EVENT_BOOKING_DETAIL,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminEventBookingDetailPage />
         </SuspenseWrapper>
       </ProtectedRoute>
     ),
@@ -363,6 +414,26 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        // start+ chức năng 3 màn hình đặt phòng (đặt phòng định kì)
+        path: ROUTES.BOOK_ROOM_RECURRING,
+        element: (
+          <SuspenseWrapper>
+            <BookRoomRecurringPage />
+          </SuspenseWrapper>
+        ),
+        // end+ chức năng 3 màn hình đặt phòng (đặt phòng định kì)
+      },
+      {
+        // start+ chức năng 3 màn hình đặt phòng (đặt phòng sự kiện)
+        path: ROUTES.BOOK_ROOM_EVENT,
+        element: (
+          <SuspenseWrapper>
+            <BookRoomEventPage />
+          </SuspenseWrapper>
+        ),
+        // end+ chức năng 3 màn hình đặt phòng (đặt phòng sự kiện)
+      },
+      {
         path: ROUTES.ROOM_DETAIL,
         element: (
           <SuspenseWrapper>
@@ -417,6 +488,56 @@ export const router = createBrowserRouter([
             <NotificationsPage />
           </SuspenseWrapper>
         ),
+      },
+      {
+        // start+ chức năng check-in bằng QR (route demo)
+        path: ROUTES.CHECKIN_QR,
+        element: (
+          <SuspenseWrapper>
+            <QrCheckInPage />
+          </SuspenseWrapper>
+        ),
+        // end+ chức năng check-in bằng QR (route demo)
+      },
+      {
+        // start+ chức năng đặt phòng lặp lại (route demo)
+        path: ROUTES.MY_RECURRING_SERIES,
+        element: (
+          <SuspenseWrapper>
+            <MyRecurringSeriesPage />
+          </SuspenseWrapper>
+        ),
+        // end+ chức năng đặt phòng lặp lại (route demo)
+      },
+      // {
+      //   // start+ chức năng đặt phòng theo sự kiện (route demo)
+      //   path: ROUTES.EVENT_DEMO,
+      //   element: (
+      //     <SuspenseWrapper>
+      //       <EventDemoPage />
+      //     </SuspenseWrapper>
+      //   ),
+      //   // end+ chức năng đặt phòng theo sự kiện (route demo)
+      // },
+      {
+        // start+ chức năng đặt phòng theo sự kiện (route setup)
+        path: ROUTES.EVENT_SETUP,
+        element: (
+          <SuspenseWrapper>
+            <EventSetupPage />
+          </SuspenseWrapper>
+        ),
+        // end+ chức năng đặt phòng theo sự kiện (route setup)
+      },
+      {
+        // start+ chức năng sự kiện đang diễn ra (route live)
+        path: ROUTES.EVENT_LIVE,
+        element: (
+          <SuspenseWrapper>
+            <EventLivePage />
+          </SuspenseWrapper>
+        ),
+        // end+ chức năng sự kiện đang diễn ra (route live)
       },
     ],
   },

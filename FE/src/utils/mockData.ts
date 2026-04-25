@@ -9,18 +9,24 @@ export const mockUsers: User[] = [
     name: "Nguyễn Văn A",
     email: "nguyenvana@example.com",
     avatar: "https://i.pravatar.cc/150?img=1",
+    cancellationCount: 0,
+    bookingLockedUntil: "",
   },
   {
     id: 2,
     name: "Trần Thị B",
     email: "tranthib@example.com",
     avatar: "https://i.pravatar.cc/150?img=2",
+    cancellationCount: 0,
+    bookingLockedUntil: "",
   },
   {
     id: 3,
     name: "Lê Văn C",
     email: "levanc@example.com",
     avatar: "https://i.pravatar.cc/150?img=3",
+    cancellationCount: 0,
+    bookingLockedUntil: "",
   },
 ];
 
@@ -97,7 +103,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "North Wing",
     slot: 12,
     status: "AVAILABLE",
-    category: "Tech Labs",
   },
   {
     roomName: "Seminar Hall C",
@@ -105,7 +110,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "West Block",
     slot: 150,
     status: "OCCUPIED",
-    category: "Auditoriums",
   },
   {
     roomName: "Study Pod 04",
@@ -113,7 +117,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "Main Library",
     slot: 4,
     status: "AVAILABLE",
-    category: "Study Pods",
   },
   {
     roomName: "Boardroom 02",
@@ -121,7 +124,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "Admin Bldg",
     slot: 20,
     status: "AVAILABLE",
-    category: "Tech Labs",
   },
   {
     roomName: "Lecture Hall 7",
@@ -129,7 +131,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "Science Wing",
     slot: 80,
     status: "OCCUPIED",
-    category: "Auditoriums",
   },
   {
     roomName: "Lab B3",
@@ -137,7 +138,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "North Wing",
     slot: 24,
     status: "AVAILABLE",
-    category: "Tech Labs",
   },
   {
     roomName: "Study Pod 12",
@@ -145,7 +145,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "Main Library",
     slot: 6,
     status: "OCCUPIED",
-    category: "Study Pods",
   },
   {
     roomName: "Auditorium East",
@@ -153,7 +152,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "West Block",
     slot: 200,
     status: "AVAILABLE",
-    category: "Auditoriums",
   },
   {
     roomName: "Meeting Room 5",
@@ -161,7 +159,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "Admin Bldg",
     slot: 10,
     status: "AVAILABLE",
-    category: "Tech Labs",
   },
   {
     roomName: "Innovation B2",
@@ -169,7 +166,6 @@ const roomTemplates: Omit<Room, "id">[] = [
     building: "Science Wing",
     slot: 16,
     status: "OCCUPIED",
-    category: "Tech Labs",
   },
 ];
 
@@ -214,44 +210,15 @@ export const fetchMockRoomList = async (
 // TODO: Replace with BE API – e.g. api.get(API_ENDPOINTS.USER.PROFILE) or api.get('/api/v1/user/profile')
 export const mockUserProfile: UserProfile = {
   id: "1",
-  name: "Alex Johnson",
-  role: "STUDENT",
+  firstName: "Alex",
+  lastName: "Johnson",
+  phoneNumber: "+1 234 567 890",
+  address: "Campus Dorm A",
   department: "School of Engineering",
-  memberSince: "Sep 2023",
-  avatar: undefined,
-  stats: {
-    totalBookings: 24,
-    hoursSpent: 48,
-    topFacility: "Library Study Room",
-  },
-  personalInfo: {
-    email: "alex.j@university.edu",
-    studentId: "U-2023-9941",
-    academicYear: "Year 2 (Undergraduate)",
-    phoneNumber: "+1 234 567 890",
-    department: "School of Engineering",
-    emergencyContact: "Sarah Johnson (+1 987 654 321)",
-  },
-  recentActivities: [
-    {
-      id: "1",
-      facilityName: "Study Room 402",
-      dateTime: "Tomorrow, 10:00 AM - 12:00 PM",
-      status: "Confirmed",
-    },
-    {
-      id: "2",
-      facilityName: "Main Gymnasium",
-      dateTime: "Oct 14, 2023 • 5:00 PM - 7:00 PM",
-      status: "Completed",
-    },
-    {
-      id: "3",
-      facilityName: "Computer Lab B",
-      dateTime: "Oct 12, 2023 • 2:00 PM - 4:00 PM",
-      status: "Completed",
-    },
-  ],
+  email: "alex.j@university.edu",
+  gender: "OTHER",
+  cancellationCount: 0,
+  bookingLockedUntil: new Date(0),
 };
 
 /** For Edit Profile: same user with editable fields (firstName, lastName, phone, campusAddress). */

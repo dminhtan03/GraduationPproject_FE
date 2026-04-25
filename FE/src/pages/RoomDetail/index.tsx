@@ -223,37 +223,60 @@ const RoomDetailPage: React.FC = () => {
     [detail],
   );
 
-  const handleBook = () => {
+  // start+ chức năng 3 màn hình đặt phòng (thường / định kì / sự kiện)
+  const ensureCanBook = () => {
     if (!normalizedRoomId) {
       message.error("Missing room id");
-      return;
+      return false;
     }
 
     if (!canBookRoom) {
       message.warning("This room is currently not available for booking.");
-      return;
+      return false;
     }
 
     if (isBookingLocked) {
       message.warning(
         "Booking is temporarily locked. Please wait for countdown.",
       );
-      return;
+      return false;
     }
 
+    return true;
+  };
+
+  const buildRoomState = () => ({
+    room: {
+      id: normalizedRoomId,
+      roomName,
+      building,
+      floorInfo: floor,
+      slot: typeof slot === "number" ? slot : 0,
+      status: status === "AVAILABLE" ? "AVAILABLE" : "OCCUPIED",
+    } as Room,
+  });
+
+  const handleBookNormal = () => {
+    if (!ensureCanBook()) return;
     navigate(ROUTES.BOOK_ROOM.replace(":roomId", normalizedRoomId), {
-      state: {
-        room: {
-          id: normalizedRoomId,
-          roomName,
-          building,
-          floorInfo: floor,
-          slot: typeof slot === "number" ? slot : 0,
-          status: status === "AVAILABLE" ? "AVAILABLE" : "OCCUPIED",
-        },
-      },
+      state: buildRoomState(),
     });
   };
+
+  const handleBookRecurring = () => {
+    if (!ensureCanBook()) return;
+    navigate(ROUTES.BOOK_ROOM_RECURRING.replace(":roomId", normalizedRoomId), {
+      state: buildRoomState(),
+    });
+  };
+
+  const handleBookEvent = () => {
+    if (!ensureCanBook()) return;
+    navigate(ROUTES.BOOK_ROOM_EVENT.replace(":roomId", normalizedRoomId), {
+      state: buildRoomState(),
+    });
+  };
+  // end+ chức năng 3 màn hình đặt phòng (thường / định kì / sự kiện)
 
   const openImageViewer = (index: number) => {
     if (validImages.length === 0) return;
@@ -627,13 +650,29 @@ const RoomDetailPage: React.FC = () => {
                   cancellationCount={userProfile?.cancellationCount}
                   className="mb-3"
                 />
-                <button
-                  type="button"
-                  onClick={handleBook}
-                  className="w-full rounded-full bg-orange-400 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-500"
-                >
-                  Book this room
-                </button>
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBookNormal}
+                    className="w-full rounded-full bg-orange-400 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-500"
+                  >
+                    Book this room
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBookRecurring}
+                    className="w-full rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  >
+                    Book recurring
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBookEvent}
+                    className="w-full rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                  >
+                    Book event
+                  </button>
+                </div>
               </div>
             </div>
           </div>

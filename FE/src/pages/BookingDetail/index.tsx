@@ -678,6 +678,21 @@ const BookingDetailPage: React.FC = () => {
               >
                 Book Another Room
               </button>
+
+              {/* // start+ chức năng đặt phòng theo sự kiện (nút vào setup/live từ booking detail) */}
+              {normalizedBookingId ? (
+                <>
+    
+                  <button
+                    type="button"
+                     onClick={() => navigate(`/events/setup/${normalizedBookingId}`)}
+                    className="w-full rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                      Event setup
+                  </button>
+                </>
+              ) : null}
+              {/* // end+ chức năng đặt phòng theo sự kiện (nút vào setup/live từ booking detail) */}
             </div>
           </div>
 

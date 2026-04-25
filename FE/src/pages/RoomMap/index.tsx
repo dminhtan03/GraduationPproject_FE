@@ -837,7 +837,7 @@ const RoomMapPage: React.FC = () => {
     }
 
     // Pass roomId in URL and full room data in state
-    navigate(ROUTES.BOOK_ROOM.replace(":roomId", normalizedRoomId), {
+    navigate(ROUTES.ROOM_DETAIL.replace(":roomId", normalizedRoomId), {
       state: {
         room: {
           id: normalizedRoomId,

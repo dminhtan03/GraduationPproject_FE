@@ -23,6 +23,10 @@ export const ROUTES = {
   ROOM_MAP: "/room-map",
   ROOM_DETAIL: "/rooms/:roomId",
   BOOK_ROOM: "/book-room/:roomId",
+  // start+ chức năng 3 màn hình đặt phòng (thường / định kì / sự kiện)
+  BOOK_ROOM_RECURRING: "/book-room-recurring/:roomId",
+  BOOK_ROOM_EVENT: "/book-room-event/:roomId",
+  // end+ chức năng 3 màn hình đặt phòng (thường / định kì / sự kiện)
   MY_BOOKINGS: "/my-bookings",
   BOOKING_DETAIL: "/my-bookings/:bookingId",
   AI_ASSISTANT: "/ai-assistant",
@@ -38,6 +42,18 @@ export const ROUTES = {
   ADMIN_AMENITY_MANAGEMENT: "/admin/amenities",
   ADMIN_FLOOR_LAYOUT: "/admin/buildings/:buildingId/floors/:floorId/layout",
   ADMIN_ACADEMIC_SCHEDULE: "/admin/academic-schedules",
+  ADMIN_EVENT_BOOKINGS: "/admin/event-bookings",
+  ADMIN_EVENT_BOOKING_DETAIL: "/admin/event-bookings/:reservationId",
+  // start+ chức năng CRUD dịch vụ đi kèm + check-in QR + đặt phòng lặp lại
+  ADMIN_SERVICE_ITEMS: "/admin/service-items",
+  CHECKIN_QR: "/checkin-qr",
+  MY_RECURRING_SERIES: "/my-recurring-series",
+  EVENT_DEMO: "/event-demo",
+  // start+ chức năng đặt phòng theo sự kiện (setup + màn hình sự kiện đang diễn ra)
+  EVENT_SETUP: "/events/setup/:reservationId",
+  EVENT_LIVE: "/events/live/:reservationId",
+  // end+ chức năng đặt phòng theo sự kiện (setup + màn hình sự kiện đang diễn ra)
+  // end+ chức năng CRUD dịch vụ đi kèm + check-in QR + đặt phòng lặp lại
   // end add admin building routes
 } as const;
 

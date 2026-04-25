@@ -446,15 +446,18 @@ export const adminService = {
     });
   },
 
-  async importAcademicSchedules(file: File): Promise<void> {
+  // start+ chức năng import lịch học cố định từ Excel (nhận response có errors)
+  async importAcademicSchedules(file: File): Promise<any> {
     const formData = new FormData();
     formData.append("file", file);
-    await api.post(API_ENDPOINTS.ACADEMIC_SCHEDULES.IMPORT, formData, {
+    const res = await api.post(API_ENDPOINTS.ACADEMIC_SCHEDULES.IMPORT, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
     });
+    return res.data;
   },
+  // end+ chức năng import lịch học cố định từ Excel (nhận response có errors)
 
   async getAcademicSchedulesByRoom(roomId: string): Promise<any> {
     const res = await api.get(
@@ -563,6 +566,42 @@ export const adminService = {
   async deleteAmenity(id: string): Promise<void> {
     await api.delete(buildUrl(API_ENDPOINTS.AMENITIES.DELETE, { id }));
   },
+
+  // start+ chức năng CRUD dịch vụ đi kèm (ServiceItem)
+  async listServiceItems(activeOnly: boolean = false): Promise<any[]> {
+    const res = await api.get(API_ENDPOINTS.SERVICE_ITEMS.LIST, {
+      params: { activeOnly },
+    });
+    return (res.data as any)?.data || res.data || [];
+  },
+
+  async createServiceItem(payload: {
+    name: string;
+    description?: string;
+    unit?: string;
+    price?: number | null;
+    active?: boolean;
+  }): Promise<void> {
+    await api.post(API_ENDPOINTS.SERVICE_ITEMS.CREATE, payload);
+  },
+
+  async updateServiceItem(
+    id: string,
+    payload: {
+      name: string;
+      description?: string;
+      unit?: string;
+      price?: number | null;
+      active?: boolean;
+    },
+  ): Promise<void> {
+    await api.put(buildUrl(API_ENDPOINTS.SERVICE_ITEMS.UPDATE, { id }), payload);
+  },
+
+  async deleteServiceItem(id: string): Promise<void> {
+    await api.delete(buildUrl(API_ENDPOINTS.SERVICE_ITEMS.DELETE, { id }));
+  },
+  // end+ chức năng CRUD dịch vụ đi kèm (ServiceItem)
 
   async getAllAmenities(): Promise<any> {
     const res = await api.get(API_ENDPOINTS.ROOMS.GET_AMENITIES);
@@ -722,6 +761,13 @@ export const adminService = {
       response.data,
       "Force cancel success. User will receive an email notification.",
     );
+  },
+
+  async getAdminEvents(page = 0, size = 10): Promise<any> {
+    const res = await api.get(API_ENDPOINTS.EVENTS.ADMIN_ALL, {
+      params: { page, size },
+    });
+    return res.data;
   },
   // end add admin booking list api
 };
