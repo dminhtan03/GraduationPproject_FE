@@ -9,6 +9,7 @@ import {
   WrenchScrewdriverIcon,
   CalendarDaysIcon,
   ClipboardDocumentListIcon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 import { Link, useLocation } from "react-router-dom";
 import { ROUTES } from "../../constants";
@@ -71,6 +72,13 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
       icon: CalendarDaysIcon,
       path: ROUTES.ADMIN_ACADEMIC_SCHEDULE,
     },
+    // start+ chức năng admin quản lý recurring series
+    {
+      label: "Recurring Bookings",
+      icon: ArrowPathIcon,
+      path: ROUTES.ADMIN_RECURRING_SERIES,
+    },
+    // end+ chức năng admin quản lý recurring series
   ];
 
   const initials = adminName

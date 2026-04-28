@@ -84,6 +84,19 @@ const EventSetupPage: React.FC = () => {
   const [serviceDraft, setServiceDraft] = useState<Record<string, { quantity: string; note: string }>>(
     {},
   );
+  // start+ chức năng lịch sử dịch vụ: chỉ load ACTIVE vào draft, DONE/CANCELLED vào history
+  type ServiceHistoryLine = {
+    id: string;
+    serviceItemId: string;
+    name: string;
+    quantity: number;
+    note?: string | null;
+    status: string;
+    priceSnapshot?: number | null;
+    unit?: string | null;
+  };
+  const [serviceHistory, setServiceHistory] = useState<ServiceHistoryLine[]>([]);
+  // end+ chức năng lịch sử dịch vụ
 
   const [title, setTitle] = useState("Meeting Event");
   const [description, setDescription] = useState("");
@@ -169,20 +182,42 @@ const EventSetupPage: React.FC = () => {
         buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEMS, { id: normalizedReservationId }),
       );
       const lines = extractData(res);
+      // start+ chức năng lịch sử dịch vụ: tách ACTIVE vs DONE/CANCELLED
+      const ACTIVE_STATUSES = ["PENDING", "CONFIRMED", "IN_PROGRESS"];
       const next: Record<string, { quantity: string; note: string }> = {};
+      const history: ServiceHistoryLine[] = [];
       if (Array.isArray(lines)) {
         for (const line of lines as any[]) {
           const serviceItemId = String(line?.serviceItemId ?? "");
           if (!serviceItemId) continue;
-          next[serviceItemId] = {
-            quantity: String(line?.quantity ?? "1"),
-            note: typeof line?.note === "string" ? line.note : "",
-          };
+          const lineStatus = String(line?.status ?? "PENDING").toUpperCase();
+          if (ACTIVE_STATUSES.includes(lineStatus)) {
+            // Chỉ load active items vào draft (tránh duplicate khi save lại)
+            next[serviceItemId] = {
+              quantity: String(line?.quantity ?? "1"),
+              note: typeof line?.note === "string" ? line.note : "",
+            };
+          } else {
+            // DONE / CANCELLED → lưu vào history để hiển thị read-only
+            history.push({
+              id: String(line?.id ?? ""),
+              serviceItemId,
+              name: String(line?.name ?? serviceItemId),
+              quantity: Number(line?.quantity ?? 0),
+              note: typeof line?.note === "string" ? line.note : null,
+              status: lineStatus,
+              priceSnapshot: line?.priceSnapshot ?? null,
+              unit: line?.unit ?? null,
+            });
+          }
         }
       }
       setServiceDraft(next);
+      setServiceHistory(history);
+      // end+ chức năng lịch sử dịch vụ
     } catch {
       setServiceDraft({});
+      setServiceHistory([]);
     }
   };
 
@@ -461,6 +496,9 @@ const EventSetupPage: React.FC = () => {
   const roomAddressText = [buildingAddress || buildingName, floorName, roomCode].filter(Boolean).join(" • ");
   const reservationStatus =
     String((detail?.status as any) || (detail?.reservation as any)?.status || "").toUpperCase();
+  // start+ chức năng lock form sau khi check-in
+  const isEventInfoLocked = reservationStatus === "IN_USE" || reservationStatus === "COMPLETED";
+  // end+ chức năng lock form sau khi check-in
   const participants = eventData?.participants || [];
   const hasAnyCheckIn = participants.some((p) => String(p.checkInStatus || "").toUpperCase() === "CHECKED_IN");
   const canInvite = !hasAnyCheckIn && reservationStatus !== "IN_USE" && reservationStatus !== "CHECKED_IN";
@@ -532,41 +570,72 @@ const EventSetupPage: React.FC = () => {
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-900">Event info</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-900">Event info</h2>
+            {/* start+ chức năng lock form sau khi check-in */}
+            {isEventInfoLocked && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                Chỉ xem (đã check-in)
+              </span>
+            )}
+            {/* end+ chức năng lock form sau khi check-in */}
+          </div>
           <p className="mt-1 text-sm text-slate-500">
             Thông tin sự kiện gắn với reservation.
           </p>
 
-          <div className="mt-4 space-y-3">
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-              placeholder="Event title"
-            />
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-              placeholder="Description (optional)"
-            />
-            <select
-              value={visibility}
-              onChange={(e) => setVisibility(e.target.value as any)}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-            >
-              <option value="INVITE_ONLY">INVITE_ONLY</option>
-              <option value="PUBLIC">PUBLIC</option>
-            </select>
+          {/* start+ chức năng lock form sau khi check-in */}
+          {isEventInfoLocked ? (
+            /* Chế độ read-only sau khi check-in */
+            <div className="mt-4 space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="flex gap-2">
+                <span className="w-28 shrink-0 font-semibold text-slate-500">Tiêu đề</span>
+                <span>{eventData?.title || title || "-"}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="w-28 shrink-0 font-semibold text-slate-500">Mô tả</span>
+                <span>{eventData?.description || description || "-"}</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="w-28 shrink-0 font-semibold text-slate-500">Visibility</span>
+                <span>{eventData?.visibility || visibility}</span>
+              </div>
+            </div>
+          ) : (
+            /* Chế độ edit trước khi check-in */
+            <div className="mt-4 space-y-3">
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                placeholder="Event title"
+              />
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                placeholder="Description (optional)"
+              />
+              <select
+                value={visibility}
+                onChange={(e) => setVisibility(e.target.value as any)}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+              >
+                <option value="INVITE_ONLY">INVITE_ONLY</option>
+                <option value="PUBLIC">PUBLIC</option>
+              </select>
+              <button
+                disabled={loading}
+                onClick={createOrUpdateEvent}
+                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60"
+              >
+                {eventData?.id ? "Update event" : "Create event"}
+              </button>
+            </div>
+          )}
+          {/* end+ chức năng lock form sau khi check-in */}
 
-            <button
-              disabled={loading}
-              onClick={createOrUpdateEvent}
-              className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60"
-            >
-              {eventData?.id ? "Update event" : "Create event"}
-            </button>
-
+          <div className="mt-4">
             {canManageEvent && reservationStatus === "IN_USE" && (
               <div className="mt-4 rounded-xl bg-orange-50 p-4 border border-orange-200">
                 <div className="text-xs font-bold text-orange-600 uppercase tracking-wider">Live Check-in Code</div>
@@ -652,6 +721,54 @@ const EventSetupPage: React.FC = () => {
               Save services
             </button>
           </div>
+
+          {/* start+ chức năng lịch sử dịch vụ: hiển thị DONE/CANCELLED read-only */}
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-700">Lịch sử dịch vụ đã xử lý</p>
+              {serviceHistory.length > 0 && (
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
+                  {serviceHistory.length} đơn
+                </span>
+              )}
+            </div>
+            {serviceHistory.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">Chưa có đơn dịch vụ nào được hoàn thành.</p>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2 font-bold uppercase text-slate-500">Dịch vụ</th>
+                      <th className="px-3 py-2 font-bold uppercase text-slate-500">SL</th>
+                      <th className="px-3 py-2 font-bold uppercase text-slate-500">Ghi chú</th>
+                      <th className="px-3 py-2 font-bold uppercase text-slate-500">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {serviceHistory.map((h) => (
+                      <tr key={h.id} className="bg-slate-50/50">
+                        <td className="px-3 py-2 font-medium text-slate-700">
+                          {h.name}
+                          {h.unit && <span className="ml-1 text-slate-400">/{h.unit}</span>}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">{h.quantity}</td>
+                        <td className="px-3 py-2 text-slate-500">{h.note || "-"}</td>
+                        <td className="px-3 py-2">
+                          {h.status === "DONE" ? (
+                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">Hoàn thành</span>
+                          ) : (
+                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">Đã huỷ</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          {/* end+ chức năng lịch sử dịch vụ */}
         </div>
       </div>
 
