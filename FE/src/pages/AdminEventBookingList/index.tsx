@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Table, Tag, Space, Input, Button } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { EyeIcon } from "@heroicons/react/24/outline";
+import { ClockIcon } from "@heroicons/react/24/solid";
 import { adminService } from "../../services/adminService";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
@@ -28,11 +29,12 @@ interface EventRow {
 
 const getStatusColor = (status: string) => {
   const normalized = status?.trim().toUpperCase() || "";
-  if (normalized === "RESERVED") return "green";
-  if (normalized === "IN_USE") return "blue";
-  if (normalized === "COMPLETED") return "cyan";
-  if (normalized === "CANCELLED") return "red";
-  if (normalized === "FORCE_CANCELLED") return "volcano";
+  if (normalized === "RESERVED") return "success";
+  if (normalized === "NO_SHOW") return "warning";
+  if (normalized === "IN_USE") return "processing";
+  if (normalized === "COMPLETED") return "success";
+  if (normalized === "CANCELLED") return "error";
+  if (normalized === "FORCE_CANCELLED") return "error";
   return "default";
 };
 
@@ -49,7 +51,7 @@ const AdminEventBookingListPage: React.FC = () => {
 
   const loadAdminProfile = async () => {
     try {
-      const res = await api.get(API_ENDPOINTS.AUTH.PROFILE);
+      const res = await api.get<any>(API_ENDPOINTS.AUTH.PROFILE);
       const data = res.data?.data || res.data;
       const fullName = [data.firstName, data.lastName].filter(Boolean).join(" ");
       setAdminName(fullName || "Admin User");
@@ -94,10 +96,9 @@ const AdminEventBookingListPage: React.FC = () => {
       title: "Title",
       dataIndex: "title",
       key: "title",
-      render: (text, record) => (
-        <div>
-          <div className="font-semibold text-slate-900">{text}</div>
-          <div className="text-xs text-slate-500">{record.reservationId}</div>
+      render: (text) => (
+        <div className="inline-block rounded-lg bg-orange-50 px-3 py-1.5">
+          <span className="font-semibold text-orange-700">{text}</span>
         </div>
       ),
     },
@@ -106,7 +107,7 @@ const AdminEventBookingListPage: React.FC = () => {
       key: "user",
       render: (_, record) => (
         <div>
-          <div className="text-sm text-slate-900">{record.userName}</div>
+          <div className="text-sm font-semibold text-slate-900">{record.userName}</div>
           <div className="text-xs text-slate-500">{record.userEmail}</div>
         </div>
       ),
@@ -115,28 +116,55 @@ const AdminEventBookingListPage: React.FC = () => {
       title: "Room",
       key: "room",
       render: (_, record) => (
-        <span className="text-sm font-medium text-slate-900">
-          {record.roomCode || record.roomName || "N/A"}
-        </span>
+        <div className="inline-block rounded-lg bg-slate-100 px-3 py-1.5">
+          <span className="text-sm font-semibold text-slate-900">
+            {record.roomCode || record.roomName || "N/A"}
+          </span>
+        </div>
       ),
     },
     {
       title: "Time",
       key: "time",
-      render: (_, record) => (
-        <div className="text-xs text-slate-600">
-          <div>{new Date(record.startTime).toLocaleString()}</div>
-          <div>{new Date(record.endTime).toLocaleString()}</div>
-        </div>
-      ),
+      render: (_, record) => {
+        try {
+          const start = new Date(record.startTime);
+          const end = new Date(record.endTime);
+          
+          const startDate = start.toLocaleDateString("vi-VN");
+          const startTime = start.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
+          const endTime = end.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false });
+          
+          return (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-slate-700">{startDate}</div>
+              <div className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-2.5 py-1.5">
+                <ClockIcon className="h-4 w-4 text-blue-600" />
+                <span className="text-xs font-semibold text-blue-700">
+                  {startTime} - {endTime}
+                </span>
+              </div>
+            </div>
+          );
+        } catch {
+          return <span className="text-sm text-slate-500">Invalid time</span>;
+        }
+      },
     },
     {
       title: "Status",
       dataIndex: "status",
       key: "status",
-      render: (status: string) => (
-        <Tag color={getStatusColor(status)}>{status.replace("_", " ")}</Tag>
-      ),
+      render: (status: string) => {
+        const displayText = status
+          .replace(/_/g, " ")
+          .split(" ")
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(" ");
+        return (
+          <Tag color={getStatusColor(status)}>{displayText}</Tag>
+        );
+      },
     },
     {
       title: "Actions",
@@ -144,11 +172,12 @@ const AdminEventBookingListPage: React.FC = () => {
       width: 80,
       render: (_, record) => (
         <Space size="middle">
-          <Button
-            type="text"
-            icon={<EyeIcon className="h-5 w-5 text-slate-400 hover:text-orange-500" />}
+          <button
             onClick={() => navigate(`/admin/event-bookings/${record.reservationId}`)}
-          />
+            className="rounded-lg p-1.5 hover:bg-orange-50 transition-colors"
+          >
+            <EyeIcon className="h-5 w-5 text-slate-400 hover:text-orange-500" />
+          </button>
         </Space>
       ),
     },
@@ -173,7 +202,7 @@ const AdminEventBookingListPage: React.FC = () => {
         <div className="px-4 py-8 sm:px-6 lg:px-8">
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Manage Event booking</h1>
+              <h1 className="text-2xl font-bold text-slate-900">Manage Event Booking</h1>
               <p className="mt-1 text-sm text-slate-500">
                 View and manage all event-related room bookings.
               </p>

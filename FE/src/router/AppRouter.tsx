@@ -74,6 +74,11 @@ const AdminEventBookingListPage = React.lazy(
 const AdminEventBookingDetailPage = React.lazy(
   () => import("../pages/AdminEventBookingDetail"),
 );
+// start+ chức năng admin quản lý recurring series
+const AdminRecurringSeriesPage = React.lazy(
+  () => import("../pages/AdminRecurringSeriesManagement"),
+);
+// end+ chức năng admin quản lý recurring series
 const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
 const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 
@@ -357,6 +362,19 @@ export const router = createBrowserRouter([
     ),
     errorElement: <ErrorBoundary />,
   },
+  // start+ chức năng admin quản lý recurring series
+  {
+    path: ROUTES.ADMIN_RECURRING_SERIES,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminRecurringSeriesPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
+  // end+ chức năng admin quản lý recurring series
   {
     path: "/",
     element: (

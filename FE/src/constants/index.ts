@@ -46,6 +46,9 @@ export const ROUTES = {
   ADMIN_EVENT_BOOKING_DETAIL: "/admin/event-bookings/:reservationId",
   // start+ chức năng CRUD dịch vụ đi kèm + check-in QR + đặt phòng lặp lại
   ADMIN_SERVICE_ITEMS: "/admin/service-items",
+  // start+ chức năng admin quản lý recurring series
+  ADMIN_RECURRING_SERIES: "/admin/recurring-series",
+  // end+ chức năng admin quản lý recurring series
   CHECKIN_QR: "/checkin-qr",
   MY_RECURRING_SERIES: "/my-recurring-series",
   EVENT_DEMO: "/event-demo",

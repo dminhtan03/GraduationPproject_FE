@@ -94,6 +94,19 @@ const EventSetupPage: React.FC = () => {
   const [serviceDraft, setServiceDraft] = useState<Record<string, { quantity: string; note: string }>>(
     {},
   );
+  // start+ chức năng lịch sử dịch vụ: chỉ load ACTIVE vào draft, DONE/CANCELLED vào history
+  type ServiceHistoryLine = {
+    id: string;
+    serviceItemId: string;
+    name: string;
+    quantity: number;
+    note?: string | null;
+    status: string;
+    priceSnapshot?: number | null;
+    unit?: string | null;
+  };
+  const [serviceHistory, setServiceHistory] = useState<ServiceHistoryLine[]>([]);
+  // end+ chức năng lịch sử dịch vụ
 
   const [title, setTitle] = useState("Meeting Event");
   const [description, setDescription] = useState("");
@@ -179,20 +192,42 @@ const EventSetupPage: React.FC = () => {
         buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEMS, { id: normalizedReservationId }),
       );
       const lines = extractData(res);
+      // start+ chức năng lịch sử dịch vụ: tách ACTIVE vs DONE/CANCELLED
+      const ACTIVE_STATUSES = ["PENDING", "CONFIRMED", "IN_PROGRESS"];
       const next: Record<string, { quantity: string; note: string }> = {};
+      const history: ServiceHistoryLine[] = [];
       if (Array.isArray(lines)) {
         for (const line of lines as any[]) {
           const serviceItemId = String(line?.serviceItemId ?? "");
           if (!serviceItemId) continue;
-          next[serviceItemId] = {
-            quantity: String(line?.quantity ?? "1"),
-            note: typeof line?.note === "string" ? line.note : "",
-          };
+          const lineStatus = String(line?.status ?? "PENDING").toUpperCase();
+          if (ACTIVE_STATUSES.includes(lineStatus)) {
+            // Chỉ load active items vào draft (tránh duplicate khi save lại)
+            next[serviceItemId] = {
+              quantity: String(line?.quantity ?? "1"),
+              note: typeof line?.note === "string" ? line.note : "",
+            };
+          } else {
+            // DONE / CANCELLED → lưu vào history để hiển thị read-only
+            history.push({
+              id: String(line?.id ?? ""),
+              serviceItemId,
+              name: String(line?.name ?? serviceItemId),
+              quantity: Number(line?.quantity ?? 0),
+              note: typeof line?.note === "string" ? line.note : null,
+              status: lineStatus,
+              priceSnapshot: line?.priceSnapshot ?? null,
+              unit: line?.unit ?? null,
+            });
+          }
         }
       }
       setServiceDraft(next);
+      setServiceHistory(history);
+      // end+ chức năng lịch sử dịch vụ
     } catch {
       setServiceDraft({});
+      setServiceHistory([]);
     }
   };
 
@@ -471,6 +506,9 @@ const EventSetupPage: React.FC = () => {
   const roomAddressText = [buildingAddress || buildingName, floorName, roomCode].filter(Boolean).join(" • ");
   const reservationStatus =
     String((detail?.status as any) || (detail?.reservation as any)?.status || "").toUpperCase();
+  // start+ chức năng lock form sau khi check-in
+  const isEventInfoLocked = reservationStatus === "IN_USE" || reservationStatus === "COMPLETED";
+  // end+ chức năng lock form sau khi check-in
   const participants = eventData?.participants || [];
   const hasAnyCheckIn = participants.some((p) => String(p.checkInStatus || "").toUpperCase() === "CHECKED_IN");
   const canInvite = !hasAnyCheckIn && reservationStatus !== "IN_USE" && reservationStatus !== "CHECKED_IN";

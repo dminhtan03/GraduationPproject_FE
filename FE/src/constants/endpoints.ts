@@ -29,6 +29,9 @@ export const API_ENDPOINTS = {
     FORCE_CANCEL_BOOKING: "/api/v1/reservations/force-cancel/:id",
     // start+ chức năng sự kiện (gọi thêm dịch vụ/tiện ích trong lúc diễn ra)
     RESERVATION_SERVICE_ITEMS: "/api/v1/reservations/:id/service-items",
+    // start+ chức năng service item status
+    RESERVATION_SERVICE_ITEM_STATUS: "/api/v1/reservations/:reservationId/service-items/:itemId/status",
+    // end+ chức năng service item status
     // end+ chức năng sự kiện (gọi thêm dịch vụ/tiện ích trong lúc diễn ra)
     ROOM_IMAGES_BY_ROOM: "/api/v1/room-images/room/:roomId",
     // start add layout endpoint
@@ -144,6 +147,10 @@ export const API_ENDPOINTS = {
     MY: "/api/v1/reservation-series/my",
     SYNC: "/api/v1/reservation-series/:seriesId/sync",
     CANCEL: "/api/v1/reservation-series/:seriesId",
+    PREVIEW: "/api/v1/reservation-series/preview",
+    // start+ chức năng admin quản lý recurring series
+    ADMIN_ALL: "/api/v1/reservation-series/admin/all",
+    // end+ chức năng admin quản lý recurring series
   },
   // end+ chức năng CRUD dịch vụ đi kèm + đặt phòng theo sự kiện + QR + đặt phòng lặp lại
 

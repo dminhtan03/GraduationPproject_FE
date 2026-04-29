@@ -1,5 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import {
+  Table,
+  Tag,
+  Button,
+  Space,
+  Card,
+  Divider,
+  Input,
+  InputNumber,
+  Empty,
+  Alert,
+} from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { useAppSelector, selectAuthUser } from "../../store";
 import { isAdminUser } from "../../services/authService";
 import { api } from "../../services/api";
@@ -271,292 +284,360 @@ const EventLivePage: React.FC = () => {
   const endTime = reservationNode?.endTime ?? reservationNode?.end_time ?? "";
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Event Live</h1>
           <p className="mt-1 text-sm text-slate-500">
             Room: <span className="font-semibold">{roomCode || "-"}</span>
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <Space>
           {isOwnerOrAdmin && (
-            <button
+            <Button
+              type="default"
               disabled={loading}
               onClick={() => navigate(`/events/setup/${normalizedReservationId}`)}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
             >
               Setup
-            </button>
+            </Button>
           )}
-          <button
+          <Button
+            type="primary"
             disabled={loading}
             onClick={() => navigate(-1)}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
           >
             Back
-          </button>
-        </div>
+          </Button>
+        </Space>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-bold text-slate-900">Event information</h2>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card
+          title="Event Information"
+          bordered={false}
+          className="shadow-sm"
+        >
           {eventData ? (
-            <div className="mt-3 space-y-2 text-sm text-slate-700">
+            <div className="space-y-3 text-sm">
               <div>
-                <span className="font-semibold">Title:</span> {eventData.title}
+                <span className="font-semibold">Title:</span>
+                <div className="text-slate-700 mt-1">{eventData.title}</div>
               </div>
+              <Divider style={{ margin: "8px 0" }} />
               <div>
-                <span className="font-semibold">Visibility:</span> {eventData.visibility}
+                <span className="font-semibold">Visibility:</span>
+                <div className="text-slate-700 mt-1">{eventData.visibility}</div>
               </div>
-              {eventData.description ? (
-                <div>
-                  <span className="font-semibold">Description:</span> {eventData.description}
+              {eventData.description && (
+                <>
+                  <Divider style={{ margin: "8px 0" }} />
+                  <div>
+                    <span className="font-semibold">Description:</span>
+                    <div className="text-slate-700 mt-1">{eventData.description}</div>
+                  </div>
+                </>
+              )}
+              <Divider style={{ margin: "8px 0" }} />
+              <div>
+                <span className="font-semibold">Time:</span>
+                <div className="text-slate-700 mt-1">
+                  {formatDateTime24(startTime)} → {formatDateTime24(endTime)}
                 </div>
-              ) : null}
-              <div>
-                <span className="font-semibold">Time:</span> {formatDateTime24(startTime)} → {formatDateTime24(endTime)}
               </div>
+              <Divider style={{ margin: "8px 0" }} />
               <div>
-                <span className="font-semibold">Room:</span> {roomCode || "-"}
+                <span className="font-semibold">Room:</span>
+                <div className="text-slate-700 mt-1">{roomCode || "-"}</div>
               </div>
               {address && (
-                <div>
-                  <span className="font-semibold">Address:</span> {address}
-                </div>
+                <>
+                  <Divider style={{ margin: "8px 0" }} />
+                  <div>
+                    <span className="font-semibold">Address:</span>
+                    <div className="text-slate-700 mt-1">{address}</div>
+                  </div>
+                </>
               )}
               {isOwnerOrAdmin && isOwnerCheckedIn && (
-                <div className="mt-4 rounded-xl bg-orange-50 p-4 border border-orange-200">
-                  <div className="text-xs font-bold text-orange-600 uppercase tracking-wider">Live Check-in Code</div>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-3xl font-mono font-bold text-orange-700 tracking-widest">{liveCode || "------"}</span>
-                    <span className="text-xs text-orange-500 font-medium">({codeCountdown}s)</span>
-                  </div>
-                  <p className="mt-2 text-xs text-orange-600">Give this 6-digit code to participants for check-in. It refreshes every minute.</p>
-                </div>
+                <>
+                  <Divider style={{ margin: "8px 0" }} />
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="Live Check-in Code"
+                    description={
+                      <div className="mt-2">
+                        <div className="text-2xl font-mono font-bold text-orange-600 tracking-widest">
+                          {liveCode || "------"}
+                        </div>
+                        <div className="text-xs text-slate-600 mt-2">
+                          ({codeCountdown}s) Give this 6-digit code to participants for check-in. It refreshes every minute.
+                        </div>
+                      </div>
+                    }
+                  />
+                </>
               )}
               {isOwnerOrAdmin && !isOwnerCheckedIn && (
-                <div className="mt-4 rounded-xl bg-slate-50 p-4 border border-slate-200">
-                  <p className="text-sm text-slate-600 italic">Please check-in to this booking first to see the event code.</p>
-                  <button
-                    disabled={loading}
-                    onClick={handleOwnerCheckIn}
-                    className="mt-3 w-full rounded-xl bg-orange-500 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50"
-                  >
-                    Check-in now
-                  </button>
-                </div>
+                <>
+                  <Divider style={{ margin: "8px 0" }} />
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message="Please check-in to this booking first to see the event code."
+                    action={
+                      <Button
+                        size="small"
+                        type="primary"
+                        loading={loading}
+                        onClick={handleOwnerCheckIn}
+                      >
+                        Check-in now
+                      </Button>
+                    }
+                  />
+                </>
               )}
             </div>
           ) : (
-            <div className="mt-3 text-sm text-slate-500">Event not found for this reservation.</div>
+            <Empty description="Event not found for this reservation." />
           )}
-        </div>
+        </Card>
 
         {isOwnerOrAdmin && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h2 className="text-lg font-bold text-slate-900">Room amenities</h2>
-            <div className="mt-4 flex flex-wrap gap-2">
+          <Card
+            title="Room Amenities"
+            bordered={false}
+            className="shadow-sm"
+          >
+            <div className="flex flex-wrap gap-2">
               {amenities.length ? (
                 amenities.map((a) => (
-                  <span
-                    key={a.id}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700"
-                  >
+                  <Tag key={a.id} color="blue">
                     {a.name}
-                  </span>
+                  </Tag>
                 ))
               ) : (
                 <span className="text-sm text-slate-500">No amenities.</span>
               )}
             </div>
-          </div>
+          </Card>
         )}
       </div>
 
       {isOwnerOrAdmin && (
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h2 className="text-lg font-bold text-slate-900">Services (current)</h2>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mt-6">
+          <Card
+            title="Current Services"
+            bordered={false}
+            className="shadow-sm"
+          >
+            <Table<ServiceLine>
+              rowKey={(record) => record.id}
+              dataSource={currentServiceLines}
+              pagination={false}
+              columns={[
+                {
+                  title: "SERVICE",
+                  dataIndex: "name",
+                  key: "name",
+                },
+                {
+                  title: "QTY",
+                  dataIndex: "quantity",
+                  key: "quantity",
+                  width: 80,
+                },
+                {
+                  title: "NOTE",
+                  dataIndex: "note",
+                  key: "note",
+                  render: (value: string | undefined) => value || "-",
+                },
+              ]}
+              locale={{
+                emptyText: "No services selected.",
+              }}
+            />
+          </Card>
 
-            <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">Service</th>
-                    <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">Qty</th>
-                    <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">Note</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {currentServiceLines.length ? (
-                    currentServiceLines.map((l) => (
-                      <tr key={l.id} className="hover:bg-slate-50/50">
-                        <td className="px-3 py-2">{l.name}</td>
-                        <td className="px-3 py-2">{l.quantity}</td>
-                        <td className="px-3 py-2">{l.note || "-"}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={3} className="px-3 py-6 text-center text-sm text-slate-500">
-                        No services selected.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+          <Card
+            title="Call Additional Services"
+            bordered={false}
+            className="shadow-sm"
+          >
+            <div className="text-sm text-slate-600 mb-4">
+              Add services during the event (quantities will be accumulated).
             </div>
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h2 className="text-lg font-bold text-slate-900">Call additional services</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Thêm dịch vụ trong lúc sự kiện đang diễn ra (sẽ cộng dồn số lượng).
-            </p>
-
-            <div className="mt-4 space-y-3">
-              {serviceItems.length ? (
-                serviceItems.map((s) => {
+            {serviceItems.length ? (
+              <div className="space-y-3">
+                {serviceItems.map((s) => {
                   const draft = addDraft[s.id] || { quantity: "", note: "" };
                   return (
-                    <div key={s.id} className="rounded-xl border border-slate-200 p-3">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900">{s.name}</div>
-                          <div className="text-xs text-slate-500">
-                            {s.price != null ? formatPriceVN(s.price) : "-"} {s.unit ? `/${s.unit}` : ""}
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <input
-                            value={draft.quantity}
-                            onChange={(e) =>
-                              setAddDraft((prev) => ({
-                                ...prev,
-                                [s.id]: { ...draft, quantity: e.target.value },
-                              }))
-                            }
-                            placeholder="Qty"
-                            inputMode="numeric"
-                            className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-                          />
-                          <input
-                            value={draft.note}
-                            onChange={(e) =>
-                              setAddDraft((prev) => ({
-                                ...prev,
-                                [s.id]: { ...draft, note: e.target.value },
-                              }))
-                            }
-                            placeholder="Note"
-                            className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-                          />
+                    <div key={s.id} className="flex items-center gap-2 pb-3 border-b border-gray-100 last:border-b-0">
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">{s.name}</div>
+                        <div className="text-xs text-slate-500">
+                          {s.price != null ? formatPriceVN(s.price) : "-"} {s.unit ? `/${s.unit}` : ""}
                         </div>
                       </div>
+                      <InputNumber
+                        size="small"
+                        min={0}
+                        value={draft.quantity ? Number(draft.quantity) : undefined}
+                        onChange={(value) =>
+                          setAddDraft((prev) => ({
+                            ...prev,
+                            [s.id]: { ...draft, quantity: value ? String(value) : "" },
+                          }))
+                        }
+                        placeholder="Qty"
+                        style={{ width: 60 }}
+                      />
+                      <Input
+                        size="small"
+                        value={draft.note}
+                        onChange={(e) =>
+                          setAddDraft((prev) => ({
+                            ...prev,
+                            [s.id]: { ...draft, note: e.target.value },
+                          }))
+                        }
+                        placeholder="Note"
+                        style={{ width: 100 }}
+                      />
                     </div>
                   );
-                })
-              ) : (
-                <div className="text-sm text-slate-500">No active service items.</div>
-              )}
-
-              <button
-                disabled={loading}
-                onClick={saveMergedServices}
-                className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60"
-              >
-                Save additional services
-              </button>
-            </div>
-          </div>
+                })}
+                <Button
+                  type="primary"
+                  block
+                  loading={loading}
+                  onClick={saveMergedServices}
+                  className="mt-4"
+                >
+                  Save Additional Services
+                </Button>
+              </div>
+            ) : (
+              <Empty description="No active service items." />
+            )}
+          </Card>
         </div>
       )}
 
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="text-lg font-bold text-slate-900">
-          {isOwnerOrAdmin ? "Participants (check-in list)" : "My Check-in Status"}
-        </h2>
-        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">Email</th>
-                <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">Name</th>
-                <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">Check-in</th>
-                {isOwnerOrAdmin && (
-                  <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500 text-right">Action</th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {eventData?.participants?.length ? (
-                eventData.participants
-                  .filter((p: any) => isOwnerOrAdmin || (user?.email && p.email === user.email))
-                  .map((p: any) => {
-                    const isSelf = user?.email && p.email === user.email;
-                    const canCheckIn = isSelf && p.checkInStatus !== "CHECKED_IN";
+      <Card
+        title={
+          isOwnerOrAdmin ? "Participants (Check-in List)" : "My Check-in Status"
+        }
+        bordered={false}
+        className="shadow-sm mt-6"
+      >
+        <Table<Participant>
+          rowKey={(record) => record.id}
+          dataSource={eventData?.participants?.filter((p: any) =>
+            isOwnerOrAdmin || (user?.email && p.email === user.email)
+          ) || []}
+          pagination={false}
+          columns={[
+            {
+              title: "EMAIL",
+              dataIndex: "email",
+              key: "email",
+              render: (value: string | undefined) => value || "-",
+            },
+            {
+              title: "NAME",
+              dataIndex: "fullName",
+              key: "fullName",
+              render: (value: string | undefined) => value || "-",
+            },
+            {
+              title: "CHECK-IN",
+              dataIndex: "checkInStatus",
+              key: "checkInStatus",
+              render: (value: string | undefined, record: Participant) => (
+                <div>
+                  <Tag
+                    color={
+                      value === "CHECKED_IN"
+                        ? "green"
+                        : "orange"
+                    }
+                  >
+                    {value || "NOT_CHECKED_IN"}
+                  </Tag>
+                  {record.checkInTime && (
+                    <div className="text-xs text-slate-400 mt-1">
+                      {new Date(record.checkInTime).toLocaleTimeString()}
+                    </div>
+                  )}
+                </div>
+              ),
+            },
+            ...(isOwnerOrAdmin
+              ? [
+                  {
+                    title: "ACTION",
+                    key: "action",
+                    render: () => (
+                      <span className="text-xs text-slate-400">Owner View</span>
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+          locale={{
+            emptyText: "No participants.",
+          }}
+        />
 
-                    return (
-                      <tr key={p.id} className="hover:bg-slate-50/50">
-                        <td className="px-3 py-2">{p.email || "-"}</td>
-                        <td className="px-3 py-2">{p.fullName || "-"}</td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-                            p.checkInStatus === "CHECKED_IN" 
-                              ? "bg-green-50 text-green-700 ring-green-600/20" 
-                              : "bg-yellow-50 text-yellow-700 ring-yellow-600/20"
-                          }`}>
-                            {p.checkInStatus || "NOT_CHECKED_IN"}
-                          </span>
-                          {p.checkInTime && <div className="mt-0.5 text-[10px] text-slate-400">{new Date(p.checkInTime).toLocaleTimeString()}</div>}
-                        </td>
-                        {isOwnerOrAdmin ? (
-                          <td className="px-3 py-2 text-right">
-                            <span className="text-xs text-slate-400">Owner View</span>
-                          </td>
-                        ) : (
-                          canCheckIn && (
-                            <td className="px-3 py-2 text-right">
-                              {isOwnerCheckedIn ? (
-                                <div className="flex justify-end gap-2">
-                                  <input
-                                    value={checkInInput}
-                                    onChange={(e) => setCheckInInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                                    placeholder="6-digit code"
-                                    className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-orange-200"
-                                  />
-                                  <button
-                                    disabled={loading || checkInInput.length !== 6}
-                                    onClick={handleCodeCheckIn}
-                                    className="rounded-lg bg-orange-500 px-3 py-1 text-xs font-bold text-white hover:bg-orange-600 disabled:opacity-50"
-                                  >
-                                    Check-in
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-xs text-slate-400 italic">Wait for owner check-in</span>
-                              )}
-                            </td>
-                          )
-                        )}
-                      </tr>
-                    );
-                  })
-              ) : (
-                <tr>
-                  <td colSpan={isOwnerOrAdmin ? 4 : 3} className="px-3 py-6 text-center text-sm text-slate-500">
-                    No participants.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {!isOwnerOrAdmin &&
+          eventData?.participants?.some(
+            (p: any) =>
+              user?.email && p.email === user.email && p.checkInStatus !== "CHECKED_IN"
+          ) &&
+          isOwnerCheckedIn && (
+            <Alert
+              type="info"
+              showIcon
+              message="Enter the 6-digit code provided by the host to check in"
+              action={
+                <div className="flex gap-2">
+                  <Input
+                    size="small"
+                    value={checkInInput}
+                    onChange={(e) =>
+                      setCheckInInput(e.target.value.replace(/\D/g, "").slice(0, 6))
+                    }
+                    placeholder="6-digit code"
+                    style={{ width: 120 }}
+                  />
+                  <Button
+                    size="small"
+                    type="primary"
+                    loading={loading}
+                    disabled={checkInInput.length !== 6}
+                    onClick={handleCodeCheckIn}
+                  >
+                    Check-in
+                  </Button>
+                </div>
+              }
+              className="mt-4"
+            />
+          )}
+      </Card>
 
-      {toast ? <CustomMessage type={toast.type} message={toast.message} onClose={() => setToast(null)} /> : null}
+      {toast ? (
+        <CustomMessage
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      ) : null}
     </div>
   );
 };
