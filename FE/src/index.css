@@ -102,3 +102,81 @@ body {
     padding-right: 2rem;
   }
 }
+
+/* ===== ANT DESIGN PICKER CUSTOMIZATIONS (DatePicker & TimePicker) ===== */
+.ant-picker {
+  width: 100% !important;
+  border-radius: 0.75rem !important;
+  border-color: #e2e8f0 !important;
+  font-size: 0.875rem !important;
+  height: 2.375rem !important;
+}
+
+.ant-picker:hover {
+  border-color: #f97316 !important;
+}
+
+.ant-picker-focused {
+  border-color: #f97316 !important;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1) !important;
+}
+
+.ant-picker-input {
+  font-size: 0.875rem !important;
+  color: #1f2937 !important;
+}
+
+.ant-picker-input::placeholder {
+  color: #9ca3af !important;
+}
+
+/* Picker panel styling */
+.ant-picker-panel {
+  border-radius: 0.75rem !important;
+}
+
+.ant-picker-header {
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.ant-picker-cell {
+  border-radius: 0.5rem !important;
+}
+
+.ant-picker-cell-selected .ant-picker-cell-inner {
+  background: #f97316 !important;
+  color: white !important;
+}
+
+.ant-picker-cell:hover .ant-picker-cell-inner:not(.ant-picker-cell-selected .ant-picker-cell-inner) {
+  background: #fed7aa !important;
+  color: #92400e !important;
+}
+
+.ant-picker-cell-today .ant-picker-cell-inner::before {
+  border: 1px solid #f97316 !important;
+}
+
+.ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner {
+  background: #f97316 !important;
+  color: white !important;
+}
+
+.ant-picker-time-panel-column > li:hover .ant-picker-time-panel-cell-inner {
+  background: #fed7aa !important;
+  color: #92400e !important;
+}
+
+/* Error state */
+.ant-picker.ant-input-status-error {
+  border-color: #ef4444 !important;
+}
+
+.ant-picker.ant-input-status-error:hover {
+  border-color: #ef4444 !important;
+}
+
+.ant-picker.ant-input-status-error.ant-picker-focused {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}

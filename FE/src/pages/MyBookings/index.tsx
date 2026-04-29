@@ -31,11 +31,13 @@ import {
 } from "@heroicons/react/24/outline";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
+import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
 // start add authService import
 import { getProfile } from "../../services/authService";
 import { adminService } from "../../services/adminService";
 import type { UserProfile } from "../../types";
 // end add authService import
+import { api } from "../../services/api";
 import { reservationService } from "../../services/reservationService";
 import { feedbackService } from "../../services/feedbackService";
 import { extractApiMessage } from "../../utils/errorHandlers";
@@ -49,7 +51,7 @@ import { HOUR_OPTIONS, MINUTE_OPTIONS, buildDateTime } from "../../utils";
 
 const { Title, Paragraph } = Typography;
 
-type BookingTabKey = "history" | "ongoing";
+type BookingTabKey = "history" | "ongoing" | "invitations";
 type BookingActionType = "check-in" | "return-room" | "extend" | "cancel";
 
 interface BookingActionModalState {
@@ -76,6 +78,22 @@ interface FloorFilterOption {
   value: string;
   label: string;
 }
+
+type EventInvitation = {
+  id: string;
+  email?: string | null;
+  fullName?: string | null;
+  inviteStatus?: string | null;
+  checkInStatus?: string | null;
+  checkInTime?: string | null;
+  eventId?: string | null;
+  reservationId?: string | null;
+  eventTitle?: string | null;
+  reservationStartTime?: string | null;
+  reservationEndTime?: string | null;
+  roomLocationCode?: string | null;
+  roomAddress?: string | null;
+};
 
 const normalizeBuildingOptions = (payload: unknown): BuildingFilterOption[] => {
   const list = Array.isArray(payload)
@@ -174,6 +192,7 @@ const normalizeFloorOptions = (payload: unknown): FloorFilterOption[] => {
 const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
   ongoing: ["RESERVED", "IN_USE"],
   history: ["NO_SHOW", "CANCELLED", "COMPLETED", "FORCE_CANCELLED", "FAILED"],
+  invitations: [],
 };
 
 const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey) => {
@@ -557,6 +576,9 @@ const MyBookingsPage: React.FC = () => {
   const [bookings, setBookings] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [invitations, setInvitations] = useState<EventInvitation[]>([]);
+  const [invitationsLoading, setInvitationsLoading] = useState(false);
+  const [invitationsError, setInvitationsError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const [total, setTotal] = useState(0);
@@ -815,6 +837,7 @@ const MyBookingsPage: React.FC = () => {
   );
 
   useEffect(() => {
+    if (activeTab === "invitations") return;
     loadBookings(
       1,
       pageSize,
@@ -838,11 +861,47 @@ const MyBookingsPage: React.FC = () => {
     appliedEndTimeFilter,
   ]);
 
+  const loadInvitations = useCallback(async () => {
+    setInvitationsLoading(true);
+    setInvitationsError(null);
+    try {
+      const res = await api.get(API_ENDPOINTS.EVENTS.MY_INVITATIONS);
+      const payload = (res as any)?.data?.data ?? (res as any)?.data ?? [];
+      setInvitations(Array.isArray(payload) ? (payload as EventInvitation[]) : []);
+    } catch (err) {
+      setInvitationsError(extractApiMessage(err, "Unable to load invitations"));
+      setInvitations([]);
+    } finally {
+      setInvitationsLoading(false);
+    }
+  }, []);
+
+  const respondInvitation = useCallback(
+    async (participantId: string, response: "ACCEPT" | "DECLINE") => {
+      if (!participantId) return;
+      setInvitationsLoading(true);
+      try {
+        await api.put(
+          buildUrl(API_ENDPOINTS.EVENTS.RESPOND_INVITATION, { participantId }),
+          { response },
+        );
+        message.success(response === "ACCEPT" ? "Đã chấp nhận tham gia" : "Đã từ chối tham gia");
+        await loadInvitations();
+      } catch (err) {
+        message.error(extractApiMessage(err, "Unable to respond invitation"));
+      } finally {
+        setInvitationsLoading(false);
+      }
+    },
+    [loadInvitations],
+  );
+
   useEffect(() => {
     const realtimePayload = getReservationRealtimePayload(lastMessage);
     if (!realtimePayload) {
       return;
     }
+    if (activeTab === "invitations") return;
 
     const normalizedStatus = realtimePayload.newStatus.toUpperCase();
 
@@ -1133,6 +1192,10 @@ const MyBookingsPage: React.FC = () => {
     handleClearStartTimeSearch();
     // Load data immediately with new tab to avoid showing old data
     window.setTimeout(() => {
+      if (nextTab === "invitations") {
+        void loadInvitations();
+        return;
+      }
       loadBookings(
         1,
         pageSize,
@@ -1153,6 +1216,7 @@ const MyBookingsPage: React.FC = () => {
     _sorter: unknown,
     extra: { action?: string },
   ) => {
+    if (activeTab === "invitations") return;
     // Keep filter/sort on current page data in FE; only reload from API when paginating.
     if (extra?.action && extra.action !== "paginate") {
       return;
@@ -1297,6 +1361,7 @@ const MyBookingsPage: React.FC = () => {
     () => [
       { key: "ongoing", label: "On-going / In-coming Meeting" },
       { key: "history", label: "Booking History" },
+      { key: "invitations", label: "Event Invitations" },
     ],
     [],
   );
@@ -1485,6 +1550,19 @@ const MyBookingsPage: React.FC = () => {
 
         return (
           <Space wrap>
+            {/* [MODIFIED] Check if it's an event booking to show "Manage Event" */}
+            {record.purpose?.toLowerCase().includes("event") || record.note?.toLowerCase().includes("event") ? (
+              <span>
+                <button
+                  type="button"
+                  onClick={() => navigate(ROUTES.EVENT_SETUP.replace(":reservationId", String(record.id)))}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-orange-700"
+                >
+                  Manage Event
+                </button>
+              </span>
+            ) : null}
+
             {canRender.checkIn && (
               <span>
                 <button
@@ -1572,7 +1650,8 @@ const MyBookingsPage: React.FC = () => {
         className="mb-2"
       />
 
-      <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
+      {activeTab !== "invitations" ? (
+        <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-semibold text-slate-700">Search Filters</p>
@@ -1775,63 +1854,171 @@ const MyBookingsPage: React.FC = () => {
           </button>
         </div>
       </div>
+      ) : null}
 
-      {error && (
-        <Alert
-          className="mb-4"
-          type="error"
-          showIcon
-          message="Unable to load bookings"
-          description={error}
-        />
-      )}
+      {activeTab !== "invitations" ? (
+        <>
+          {error && (
+            <Alert
+              className="mb-4"
+              type="error"
+              showIcon
+              message="Unable to load bookings"
+              description={error}
+            />
+          )}
 
-      {bookings.length === 0 && !loading && !error ? (
-        <Empty
-          image={
-            <CalendarOutlined style={{ fontSize: 64, color: "#d9d9d9" }} />
-          }
-          description={
-            activeTab === "history"
-              ? "No booking history yet."
-              : "No on-going/in-coming meetings."
-          }
-        />
-      ) : (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <Table<Reservation>
-            rowKey={(record, index) =>
-              record.id ||
-              `${record.locationCode || "no-code"}-${record.startTime || "no-time"}-${index}`
-            }
-            loading={loading}
-            columns={columns}
-            dataSource={bookings}
-            pagination={{
-              current: page,
-              pageSize,
-              total,
-              showSizeChanger: true,
-              pageSizeOptions: ["5", "10", "20"],
-            }}
-            onChange={handleTableChange}
-            onRow={(record) => ({
-              onClick: (event) => {
-                const target = event.target as HTMLElement;
-                if (target.closest("button") || target.closest(".ant-btn")) {
-                  return;
+          {bookings.length === 0 && !loading && !error ? (
+            <Empty
+              image={
+                <CalendarOutlined style={{ fontSize: 64, color: "#d9d9d9" }} />
+              }
+              description={
+                activeTab === "history"
+                  ? "No booking history yet."
+                  : "No on-going/in-coming meetings."
+              }
+            />
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <Table<Reservation>
+                rowKey={(record, index) =>
+                  record.id ||
+                  `${record.locationCode || "no-code"}-${record.startTime || "no-time"}-${index}`
                 }
+                loading={loading}
+                columns={columns}
+                dataSource={bookings}
+                pagination={{
+                  current: page,
+                  pageSize,
+                  total,
+                  showSizeChanger: true,
+                  pageSizeOptions: ["5", "10", "20"],
+                }}
+                onChange={handleTableChange}
+                onRow={(record) => ({
+                  onClick: (event) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("button") || target.closest(".ant-btn")) {
+                      return;
+                    }
 
-                if (!record.id) return;
-                navigate(ROUTES.BOOKING_DETAIL.replace(":bookingId", record.id), {
-                  state: { booking: record },
-                });
-              },
-            })}
-            rowClassName={(record) => (record.id ? "cursor-pointer" : "")}
-            scroll={{ x: 980 }}
-          />
-        </div>
+                    if (!record.id) return;
+                    navigate(ROUTES.BOOKING_DETAIL.replace(":bookingId", record.id), {
+                      state: { booking: record },
+                    });
+                  },
+                })}
+                rowClassName={(record) => (record.id ? "cursor-pointer" : "")}
+                scroll={{ x: 980 }}
+              />
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {invitationsError ? (
+            <Alert
+              className="mb-4"
+              type="error"
+              showIcon
+              message="Unable to load invitations"
+              description={invitationsError}
+            />
+          ) : null}
+
+          {invitations.length === 0 && !invitationsLoading && !invitationsError ? (
+            <Empty
+              image={<CalendarOutlined style={{ fontSize: 64, color: "#d9d9d9" }} />}
+              description="No event invitations."
+            />
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <Table<EventInvitation>
+                rowKey={(record) => record.id}
+                loading={invitationsLoading}
+                dataSource={invitations}
+                pagination={false}
+                columns={[
+                  {
+                    title: "EVENT",
+                    dataIndex: "eventTitle",
+                    key: "eventTitle",
+                    render: (value: string | undefined) => value || "-",
+                  },
+                  {
+                    title: "ROOM",
+                    dataIndex: "roomLocationCode",
+                    key: "roomLocationCode",
+                    render: (value: string | undefined) => value || "-",
+                  },
+                  {
+                    title: "TIME",
+                    key: "time",
+                    render: (_: unknown, record: EventInvitation) =>
+                      `${formatDateTime(String(record.reservationStartTime || ""))} → ${formatDateTime(
+                        String(record.reservationEndTime || ""),
+                      )}`,
+                  },
+                  {
+                    title: "STATUS",
+                    dataIndex: "inviteStatus",
+                    key: "inviteStatus",
+                    render: (value: string | undefined) => (
+                      <Tag color={String(value || "").toUpperCase() === "ACCEPTED" ? "green" : String(value || "").toUpperCase() === "DECLINED" ? "red" : "gold"}>
+                        {value || "-"}
+                      </Tag>
+                    ),
+                  },
+                  {
+                    title: "CHECK-IN",
+                    dataIndex: "checkInStatus",
+                    key: "checkInStatus",
+                    render: (value: string | undefined) => value || "-",
+                  },
+                  {
+                    title: "ACTION",
+                    key: "action",
+                    render: (_: unknown, record: EventInvitation) => (
+                      <Space size="small">
+                        <Button
+                          onClick={() => {
+                            if (!record.reservationId) return;
+                            navigate(
+                              ROUTES.EVENT_LIVE.replace(
+                                ":reservationId",
+                                String(record.reservationId),
+                              ),
+                            );
+                          }}
+                        >
+                          View
+                        </Button>
+                        {String(record.inviteStatus || "").toUpperCase() === "INVITED" ? (
+                          <>
+                            <Button
+                              type="primary"
+                              onClick={() => respondInvitation(record.id, "ACCEPT")}
+                            >
+                              Accept
+                            </Button>
+                            <Button
+                              danger
+                              onClick={() => respondInvitation(record.id, "DECLINE")}
+                            >
+                              Decline
+                            </Button>
+                          </>
+                        ) : null}
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          )}
+        </>
       )}
 
       <Modal

@@ -29,10 +29,14 @@ export interface User {
   avatar?: string;
   /** Role chính (từ JWT claim roles), e.g. "ROLE_ADMIN", "ROLE_USER" */
   role?: string;
+<<<<<<< HEAD
+  roles?: string[];
+=======
   /** Tất cả authorities từ BE */
   roles?: string[];
   cancellationCount: number;
   bookingLockedUntil: string;
+>>>>>>> main
 }
 
 // Interface cho data demo
@@ -123,6 +127,13 @@ export interface CreateReservationRequest {
   endTime: string;
   attendeeCount?: number;
   note?: string;
+  // start+ chức năng đặt thêm dịch vụ đi kèm khi đặt phòng (FE request)
+  serviceItems?: Array<{
+    serviceItemId: string;
+    quantity: number;
+    note?: string;
+  }>;
+  // end+ chức năng đặt thêm dịch vụ đi kèm khi đặt phòng (FE request)
 }
 
 export type ReservationStatus =

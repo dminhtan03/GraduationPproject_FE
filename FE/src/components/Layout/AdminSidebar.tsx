@@ -8,6 +8,8 @@ import {
   BuildingOfficeIcon,
   WrenchScrewdriverIcon,
   CalendarDaysIcon,
+  ClipboardDocumentListIcon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 import { Link, useLocation } from "react-router-dom";
 import { ROUTES } from "../../constants";
@@ -28,6 +30,57 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onCloseMobile,
 }) => {
   const location = useLocation();
+
+  const menuItems = [
+    {
+      label: "Dashboard",
+      icon: ChartBarSquareIcon,
+      path: ROUTES.ADMIN_DASHBOARD,
+    },
+    {
+      label: "User Management",
+      icon: UsersIcon,
+      path: ROUTES.ADMIN_USER_MANAGEMENT,
+    },
+    {
+      label: "All Booking List",
+      icon: BookOpenIcon,
+      path: ROUTES.ADMIN_ALL_BOOKINGS,
+    },
+    {
+      label: "Manage Event Booking",
+      icon: CalendarDaysIcon,
+      path: ROUTES.ADMIN_EVENT_BOOKINGS,
+    },
+    {
+      label: "Building Management",
+      icon: BuildingOfficeIcon,
+      path: ROUTES.ADMIN_BUILDING_MANAGEMENT,
+    },
+    {
+      label: "Amenity Management",
+      icon: WrenchScrewdriverIcon,
+      path: ROUTES.ADMIN_AMENITY_MANAGEMENT,
+    },
+    {
+      label: "Service Items",
+      icon: ClipboardDocumentListIcon,
+      path: ROUTES.ADMIN_SERVICE_ITEMS,
+    },
+    {
+      label: "Academic Schedule",
+      icon: CalendarDaysIcon,
+      path: ROUTES.ADMIN_ACADEMIC_SCHEDULE,
+    },
+    // start+ chức năng admin quản lý recurring series
+    {
+      label: "Recurring Bookings",
+      icon: ArrowPathIcon,
+      path: ROUTES.ADMIN_RECURRING_SERIES,
+    },
+    // end+ chức năng admin quản lý recurring series
+  ];
+
   const initials = adminName
     ? adminName
         .split(" ")
@@ -71,84 +124,22 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </div>
         </div>
 
-        <nav className="flex-1 space-y-2 px-4 py-5">
-          <Link
-            to={ROUTES.ADMIN_DASHBOARD}
-            className={[
-              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
-              location.pathname === ROUTES.ADMIN_DASHBOARD
-                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
-                : "text-slate-600 hover:bg-slate-50",
-            ].join(" ")}
-          >
-            <ChartBarSquareIcon className="h-5 w-5" />
-            Dashboard
-          </Link>
-
-          <Link
-            to={ROUTES.ADMIN_USER_MANAGEMENT}
-            className={[
-              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
-              location.pathname.includes(ROUTES.ADMIN_USER_MANAGEMENT)
-                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
-                : "text-slate-600 hover:bg-slate-50",
-            ].join(" ")}
-          >
-            <UsersIcon className="h-5 w-5" />
-            User Management
-          </Link>
-
-          <Link
-            to={ROUTES.ADMIN_ALL_BOOKINGS}
-            className={[
-              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
-              location.pathname.includes(ROUTES.ADMIN_ALL_BOOKINGS)
-                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
-                : "text-slate-600 hover:bg-slate-50",
-            ].join(" ")}
-          >
-            <BookOpenIcon className="h-5 w-5" />
-            All Booking List
-          </Link>
-
-          <Link
-            to={ROUTES.ADMIN_BUILDING_MANAGEMENT}
-            className={[
-              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
-              location.pathname.includes("/admin/buildings")
-                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
-                : "text-slate-600 hover:bg-slate-50",
-            ].join(" ")}
-          >
-            <BuildingOfficeIcon className="h-5 w-5" />
-            Building Management
-          </Link>
-
-          <Link
-            to={ROUTES.ADMIN_AMENITY_MANAGEMENT}
-            className={[
-              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
-              location.pathname === ROUTES.ADMIN_AMENITY_MANAGEMENT
-                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
-                : "text-slate-600 hover:bg-slate-50",
-            ].join(" ")}
-          >
-            <WrenchScrewdriverIcon className="h-5 w-5" />
-            Amenity Management
-          </Link>
-
-          <Link
-            to={ROUTES.ADMIN_ACADEMIC_SCHEDULE}
-            className={[
-              "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
-              location.pathname === ROUTES.ADMIN_ACADEMIC_SCHEDULE
-                ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
-                : "text-slate-600 hover:bg-slate-50",
-            ].join(" ")}
-          >
-            <CalendarDaysIcon className="h-5 w-5" />
-            Academic Schedule
-          </Link>
+        <nav className="flex-1 space-y-2 px-4 py-5 overflow-y-auto">
+          {menuItems.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={[
+                "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors",
+                location.pathname.startsWith(item.path)
+                  ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200"
+                  : "text-slate-600 hover:bg-slate-50",
+              ].join(" ")}
+            >
+              <item.icon className="h-5 w-5" />
+              {item.label}
+            </Link>
+          ))}
         </nav>
 
         <div className="border-t border-slate-200 p-4">

@@ -550,7 +550,7 @@ export const AiChatWidget: React.FC = () => {
     const resolved = await resolveSuggestionForNavigation(suggestion);
     if (!resolved) return;
 
-    navigate(ROUTES.BOOK_ROOM.replace(":roomId", resolved.roomId), {
+    navigate(ROUTES.ROOM_DETAIL.replace(":roomId", resolved.roomId), {
       state: { room: resolved.roomState },
     });
   };

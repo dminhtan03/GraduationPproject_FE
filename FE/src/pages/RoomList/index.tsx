@@ -860,9 +860,7 @@ const DashboardPage: React.FC = () => {
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
                 onClick={() => {
-                  const targetRoute = isAvailable
-                    ? ROUTES.BOOK_ROOM
-                    : ROUTES.ROOM_DETAIL;
+                  const targetRoute = ROUTES.ROOM_DETAIL;
                   if (isAvailable && timeFilterActive) {
                     navigate(targetRoute.replace(":roomId", room.id), {
                       state: {
@@ -884,7 +882,7 @@ const DashboardPage: React.FC = () => {
                   }
                 }}
               >
-                {isAvailable ? "Book" : "View"}
+                View
               </button>
             </article>
           );

@@ -103,7 +103,6 @@ const extractUserFromToken = (accessToken: string | undefined): User | null => {
     bookingLockedUntil: new Date(0).toISOString(),
   };
 };
-
 /**
  * Login with email and password
  */

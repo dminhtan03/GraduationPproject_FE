@@ -6,6 +6,7 @@ import {
   AppstoreOutlined,
   BankOutlined,
   CalendarOutlined,
+  RetweetOutlined,
 } from "@ant-design/icons";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -63,6 +64,13 @@ const Sidebar: React.FC = () => {
       icon: <CalendarOutlined />,
       label: "My Bookings",
     },
+    // start+ chức năng đặt phòng lặp lại (sidebar tab)
+    {
+      key: ROUTES.MY_RECURRING_SERIES,
+      icon: <RetweetOutlined />,
+      label: "Recurring Bookings",
+    },
+    // end+ chức năng đặt phòng lặp lại (sidebar tab)
   ];
 
   const handleMenuClick = ({ key }: { key: string }) => {

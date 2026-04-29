@@ -490,14 +490,29 @@ const AdminAcademicSchedulePage: React.FC = () => {
     setImportError(null);
     setLoading(true);
     try {
-      await adminService.importAcademicSchedules(importFile);
-      setToastPopup({
-        type: "success",
-        message: "Schedules imported successfully",
-      });
-      setShowImportModal(false);
-      setImportFile(null);
-      loadSchedules();
+      // start+ chức năng import lịch học cố định từ Excel (hiển thị tất cả lỗi + vẫn import dòng hợp lệ)
+      const res = await adminService.importAcademicSchedules(importFile);
+      const payload = (res as any)?.data ?? res;
+      const importedCount =
+        typeof payload?.importedCount === "number" ? payload.importedCount : 0;
+      const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+      if (errors.length > 0) {
+        setImportError(errors.join("\n"));
+        setToastPopup({
+          type: "error",
+          message: `Imported ${importedCount} schedules with errors. See details below.`,
+        });
+        loadSchedules();
+      } else {
+        setToastPopup({
+          type: "success",
+          message: `Schedules imported successfully (${importedCount})`,
+        });
+        setShowImportModal(false);
+        setImportFile(null);
+        loadSchedules();
+      }
+      // end+ chức năng import lịch học cố định từ Excel (hiển thị tất cả lỗi + vẫn import dòng hợp lệ)
     } catch (err: any) {
       // Backend now returns all errors joined by \n
       const errorMessage = err.message || "Failed to import schedules";
