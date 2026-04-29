@@ -25,6 +25,7 @@ interface ChatBubbleMessage {
   suggestions?: AiRoomSuggestion[];
   reservation?: Reservation | null;
   reservationCreated?: boolean;
+  roomDetail?: Record<string, unknown> | null;
 }
 
 const createId = () => Math.random().toString(36).slice(2);
@@ -339,6 +340,7 @@ export const AiChatWidget: React.FC = () => {
           suggestions: response.suggestions,
           reservation: response.reservation,
           reservationCreated: response.reservationCreated,
+          roomDetail: response.roomDetail as Record<string, unknown> | null | undefined,
         };
         setMessages((prev) => [...prev, botMessage]);
       } catch {
@@ -633,6 +635,99 @@ export const AiChatWidget: React.FC = () => {
                       >
                         {m.text}
 
+                        {/* Room Detail Card */}
+                        {!isUser && m.roomDetail && (() => {
+                          const rd = m.roomDetail as Record<string, unknown>;
+                          const rdImages = Array.isArray(rd.images) ? rd.images as string[] : [];
+                          const rdAmenities = Array.isArray(rd.amenities) ? rd.amenities as string[] : [];
+                          const rdCode = toText(rd.locationCode) || toText(rd.id) || "-";
+                          const rdCapacity = toNumberOrNull(rd.capacity);
+                          const rdScore = toNumberOrNull(rd.score);
+                          const rdCurrentUser = toText(rd.currentUserName);
+                          const rdCheckIn = toText(rd.checkInTime);
+                          const rdFeedbacks = Array.isArray(rd.feedbacks) ? rd.feedbacks as Record<string, unknown>[] : [];
+                          const rdId = toText(rd.id);
+                          return (
+                            <div className="mt-2 overflow-hidden rounded-xl border border-orange-200 bg-white shadow-md">
+                              <div className="flex items-center justify-between gap-2 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-2.5 py-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-orange-700">Room Detail</span>
+                                {rdScore !== null && (
+                                  <span className="rounded-lg border border-orange-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-orange-700">
+                                    Score {rdScore.toFixed(1)}
+                                  </span>
+                                )}
+                              </div>
+
+                              {rdImages[0] && (
+                                <button type="button" onClick={() => setPreviewImageUrl(rdImages[0])} className="block w-full">
+                                  <img src={rdImages[0]} alt={rdCode} className="h-20 w-full object-cover" loading="lazy" />
+                                </button>
+                              )}
+
+                              <div className="space-y-1.5 px-2.5 py-2 text-[10px] text-slate-700">
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
+                                    <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">Room Code</p>
+                                    <p className="mt-0.5 text-xs font-semibold text-slate-900">{rdCode}</p>
+                                  </div>
+                                  <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
+                                    <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">Capacity</p>
+                                    <p className="mt-0.5 text-xs font-semibold text-slate-900">{rdCapacity ?? "-"}</p>
+                                  </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1.5">
+                                  <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">Current User</p>
+                                  <p className="mt-0.5 text-xs font-semibold text-slate-900">{rdCurrentUser || "No active user"}</p>
+                                </div>
+
+                                {rdCheckIn && (
+                                  <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1.5">
+                                    <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">Check-in</p>
+                                    <p className="mt-0.5 text-xs font-semibold text-slate-900">{formatDateTimeLabel(rdCheckIn)}</p>
+                                  </div>
+                                )}
+
+                                {rdAmenities.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {rdAmenities.slice(0, 5).map((a) => (
+                                      <span key={`${rdId}-${a}`} className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[9px] font-medium text-orange-700">• {a}</span>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {rdFeedbacks.length > 0 && (
+                                  <div className="space-y-1">
+                                    {rdFeedbacks.slice(0, 2).map((fb, i) => {
+                                      const rating = typeof fb.rating === "number" ? Math.max(0, Math.min(5, Math.round(fb.rating))) : 0;
+                                      const desc = toText(fb.description);
+                                      return (
+                                        <div key={toText(fb.id) || `fb-${i}`} className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1">
+                                          <div className="text-[10px] font-semibold text-amber-600">{rating > 0 ? "★".repeat(rating) : "No rating"}</div>
+                                          {desc && <p className="mt-0.5 text-[9px] text-slate-700">{desc}</p>}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {(rdId || rdCode !== "-") && (
+                                  <div className="flex justify-end pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleViewDetails({ roomId: rdId || "", locationCode: rdCode, status: "AVAILABLE", capacity: rdCapacity ?? undefined, amenities: rdAmenities.length > 0 ? rdAmenities : undefined, imageUrl: rdImages[0] || undefined })}
+                                      className="rounded-lg border border-orange-500 bg-orange-500 px-2.5 py-1 text-[9px] font-semibold text-white transition hover:bg-orange-600"
+                                    >
+                                      View Room →
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Booking Details Card */}
                         {!isUser && (booking || m.reservationCreated) && (
                           <div className="mt-2 overflow-hidden rounded-xl border border-orange-200 bg-white shadow-md hover:shadow-lg transition-shadow">
                             <div className="flex items-center justify-between gap-2 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-2.5 py-2">

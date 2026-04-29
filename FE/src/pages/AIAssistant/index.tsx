@@ -52,9 +52,24 @@ const AIAssistantPage: React.FC = () => {
 
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("");
+
+  // Lazy-init from localStorage so rich AI cards survive page reload
   const [messagesBySession, setMessagesBySession] = useState<
     Record<string, ChatMessage[]>
-  >({});
+  >(() => {
+    try {
+      const raw = window.localStorage.getItem("ai_assistant_messages_v2");
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, ChatMessage[]>;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
 
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -166,6 +181,18 @@ const AIAssistantPage: React.FC = () => {
     };
     fetchProfile();
   }, []);
+
+  // Persist rich card data across reloads
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "ai_assistant_messages_v2",
+        JSON.stringify(messagesBySession),
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [messagesBySession]);
 
   const selectedSession = useMemo(() => {
     return sessions.find((s) => s.id === selectedSessionId) ?? null;

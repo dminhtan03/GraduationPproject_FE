@@ -1359,9 +1359,22 @@ const MyBookingsPage: React.FC = () => {
 
   const tabItems = useMemo(
     () => [
-      { key: "ongoing", label: "On-going / In-coming Meeting" },
-      { key: "history", label: "Booking History" },
-      { key: "invitations", label: "Event Invitations" },
+      {
+        key: "ongoing",
+        label: (
+          <span className="font-medium tracking-wide">
+            On-going / In-coming Meeting
+          </span>
+        ),
+      },
+      {
+        key: "history",
+        label: <span className="font-medium tracking-wide">Booking History</span>,
+      },
+      {
+        key: "invitations",
+        label: <span className="font-medium tracking-wide">Event Invitations</span>,
+      },
     ],
     [],
   );
@@ -1415,7 +1428,11 @@ const MyBookingsPage: React.FC = () => {
         String(record.locationCode || "")
           .toLowerCase()
           .includes(String(value).toLowerCase()),
-      render: (value: string | undefined) => value || "-",
+      render: (value: string | undefined) => (
+        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-700">
+          {value || "—"}
+        </span>
+      ),
     },
     {
       title: "FLOOR",
@@ -1428,7 +1445,11 @@ const MyBookingsPage: React.FC = () => {
         String(record.floor || "")
           .toLowerCase()
           .includes(String(value).toLowerCase()),
-      render: (value: string | undefined) => value || "-",
+      render: (value: string | undefined) => (
+        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600">
+          {value || "—"}
+        </span>
+      ),
     },
     {
       title: "BUILDING",
@@ -1444,22 +1465,25 @@ const MyBookingsPage: React.FC = () => {
         String(record.buildingName || record.address || "")
           .toLowerCase()
           .includes(String(value).toLowerCase()),
-      render: (_: string | undefined, record: Reservation) =>
-        record.buildingName || record.address || "-",
+      render: (_: string | undefined, record: Reservation) => (
+        <span className="text-sm font-medium text-slate-700">
+          {record.buildingName || record.address || "—"}
+        </span>
+      ),
     },
     {
       title: "DETAILS",
       key: "details",
       width: "20%",
       render: (_: unknown, record: Reservation) => (
-        <div className="text-xs space-y-1">
-          <div>
-            <span className="text-gray-500">Purpose:</span>{" "}
-            <span className="text-gray-700">{record.purpose || "-"}</span>
+        <div className="flex flex-col gap-1.5 text-xs">
+          <div className="flex items-start gap-1">
+            <span className="mt-0.5 shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Purpose</span>
+            <span className="text-slate-700">{record.purpose || "—"}</span>
           </div>
-          <div className="truncate" title={record.note || ""}>
-            <span className="text-gray-500">Note:</span>{" "}
-            <span className="text-gray-700">{record.note || "-"}</span>
+          <div className="flex items-start gap-1">
+            <span className="mt-0.5 shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Note</span>
+            <span className="max-w-[160px] truncate text-slate-600" title={record.note || ""}>{record.note || "—"}</span>
           </div>
         </div>
       ),
@@ -1474,22 +1498,22 @@ const MyBookingsPage: React.FC = () => {
         return left - right;
       },
       render: (_: unknown, record: Reservation) => (
-        <div className="text-xs space-y-1.5">
-          <div className="flex items-center gap-2">
-            <ClockCircleOutlined className="text-blue-500" />
-            <span className="text-gray-500 min-w-[40px]">Start</span>
-            <span className="font-medium text-gray-700">
-              {formatDatePart(record.startTime)}
+        <div className="flex flex-col gap-2 text-xs">
+          <div className="flex items-center gap-1.5">
+            <ClockIcon className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+            <span className="w-8 text-slate-400">Start</span>
+            <span className="font-medium text-slate-700">{formatDatePart(record.startTime)}</span>
+            <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
+              {formatTimePart(record.startTime)}
             </span>
-            <Tag color="blue">{formatTimePart(record.startTime)}</Tag>
           </div>
-          <div className="flex items-center gap-2">
-            <ClockCircleOutlined className="text-orange-500" />
-            <span className="text-gray-500 min-w-[40px]">End</span>
-            <span className="font-medium text-gray-700">
-              {formatDatePart(record.endTime)}
+          <div className="flex items-center gap-1.5">
+            <ClockIcon className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+            <span className="w-8 text-slate-400">End</span>
+            <span className="font-medium text-slate-700">{formatDatePart(record.endTime)}</span>
+            <span className="whitespace-nowrap rounded-full bg-orange-50 px-2 py-0.5 font-semibold text-orange-600">
+              {formatTimePart(record.endTime)}
             </span>
-            <Tag color="orange">{formatTimePart(record.endTime)}</Tag>
           </div>
         </div>
       ),
@@ -1505,9 +1529,29 @@ const MyBookingsPage: React.FC = () => {
         String(record.status || "")
           .toLowerCase()
           .includes(String(value).toLowerCase()),
-      render: (status: string | undefined) => (
-        <Tag color={getStatusColor(status || "")}>{status || "-"}</Tag>
-      ),
+      render: (status: string | undefined) => {
+        const s = String(status || "").toUpperCase();
+        const label =
+          s === "RESERVED" ? "Reserved"
+          : s === "IN_USE" || s === "CHECKED_IN" ? "In Use"
+          : s === "COMPLETED" ? "Completed"
+          : s === "CANCELLED" ? "Cancelled"
+          : s === "NO_SHOW" ? "No Show"
+          : s === "FORCE_CANCELLED" ? "Force Cancelled"
+          : status || "—";
+        const cls =
+          s === "RESERVED" ? "bg-emerald-50 text-emerald-700"
+          : s === "IN_USE" || s === "CHECKED_IN" ? "bg-blue-50 text-blue-700"
+          : s === "COMPLETED" ? "bg-cyan-50 text-cyan-700"
+          : s === "CANCELLED" || s === "FORCE_CANCELLED" ? "bg-red-50 text-red-600"
+          : s === "NO_SHOW" ? "bg-amber-50 text-amber-700"
+          : "bg-slate-100 text-slate-500";
+        return (
+          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>
+            {label}
+          </span>
+        );
+      },
     },
     {
       title: "ACTIONS",
@@ -1549,88 +1593,76 @@ const MyBookingsPage: React.FC = () => {
         }
 
         return (
-          <Space wrap>
-            {/* [MODIFIED] Check if it's an event booking to show "Manage Event" */}
+          <div className="flex flex-wrap gap-1.5">
+            {/* Manage Event button */}
             {record.purpose?.toLowerCase().includes("event") || record.note?.toLowerCase().includes("event") ? (
-              <span>
-                <button
-                  type="button"
-                  onClick={() => navigate(ROUTES.EVENT_SETUP.replace(":reservationId", String(record.id)))}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-orange-700"
-                >
-                  Manage Event
-                </button>
-              </span>
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.EVENT_SETUP.replace(":reservationId", String(record.id)))}
+                className="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600"
+              >
+                Manage Event
+              </button>
             ) : null}
 
             {canRender.checkIn && (
-              <span>
-                <button
-                  type="button"
-                  disabled={isLoading && checkInEnabled}
-                  onClick={() => openActionModal("check-in", record)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isLoading && checkInEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-white" />}
-                  Check-in
-                </button>
-              </span>
+              <button
+                type="button"
+                disabled={isLoading && checkInEnabled}
+                onClick={() => openActionModal("check-in", record)}
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+              >
+                {isLoading && checkInEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+                Check-in
+              </button>
             )}
 
             {canRender.returnRoom && (
-              <span>
-                <button
-                  type="button"
-                  disabled={isLoading && returnRoomEnabled}
-                  onClick={() => openActionModal("return-room", record)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-blue-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isLoading && returnRoomEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-white" />}
-                  Check Out
-                </button>
-              </span>
+              <button
+                type="button"
+                disabled={isLoading && returnRoomEnabled}
+                onClick={() => openActionModal("return-room", record)}
+                className="inline-flex items-center gap-1 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60"
+              >
+                {isLoading && returnRoomEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+                Check Out
+              </button>
             )}
 
             {canRender.extend && (
-              <span>
-                <button
-                  type="button"
-                  disabled={isLoading && extendEnabled}
-                  onClick={() => openActionModal("extend", record)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isLoading && extendEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-white" />}
-                  Extend
-                </button>
-              </span>
+              <button
+                type="button"
+                disabled={isLoading && extendEnabled}
+                onClick={() => openActionModal("extend", record)}
+                className="inline-flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:opacity-60"
+              >
+                {isLoading && extendEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />}
+                Extend
+              </button>
             )}
 
             {canRender.cancel && (
-              <span>
-                <button
-                  type="button"
-                  disabled={isLoading && cancelEnabled}
-                  onClick={() => openActionModal("cancel", record)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-red-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isLoading && cancelEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-white" />}
-                  Cancel
-                </button>
-              </span>
+              <button
+                type="button"
+                disabled={isLoading && cancelEnabled}
+                onClick={() => openActionModal("cancel", record)}
+                className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+              >
+                {isLoading && cancelEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-200 border-t-red-500" />}
+                Cancel
+              </button>
             )}
 
             {canRender.feedback && (
-              <span>
-                <button
-                  type="button"
-                  onClick={() => openFeedbackModal(record)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-amber-600"
-                >
-                  Feedback
-                </button>
-              </span>
+              <button
+                type="button"
+                onClick={() => openFeedbackModal(record)}
+                className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-600"
+              >
+                Feedback
+              </button>
             )}
-          </Space>
+          </div>
         );
       },
     },
@@ -1975,14 +2007,34 @@ const MyBookingsPage: React.FC = () => {
                     title: "CHECK-IN",
                     dataIndex: "checkInStatus",
                     key: "checkInStatus",
-                    render: (value: string | undefined) => value || "-",
+                    render: (value: string | undefined) => {
+                      const normalized = String(value || "").toUpperCase();
+                      const isCheckedIn = normalized === "CHECKED_IN";
+                      const label = isCheckedIn
+                        ? "Checked In"
+                        : normalized === "NOT_CHECKED_IN"
+                          ? "Not Checked In"
+                          : value || "—";
+                      return (
+                        <span
+                          className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            isCheckedIn
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {label}
+                        </span>
+                      );
+                    },
                   },
                   {
                     title: "ACTION",
                     key: "action",
                     render: (_: unknown, record: EventInvitation) => (
-                      <Space size="small">
-                        <Button
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
                           onClick={() => {
                             if (!record.reservationId) return;
                             navigate(
@@ -1992,26 +2044,29 @@ const MyBookingsPage: React.FC = () => {
                               ),
                             );
                           }}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                         >
                           View
-                        </Button>
+                        </button>
                         {String(record.inviteStatus || "").toUpperCase() === "INVITED" ? (
                           <>
-                            <Button
-                              type="primary"
+                            <button
+                              type="button"
                               onClick={() => respondInvitation(record.id, "ACCEPT")}
+                              className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600"
                             >
                               Accept
-                            </Button>
-                            <Button
-                              danger
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => respondInvitation(record.id, "DECLINE")}
+                              className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100"
                             >
                               Decline
-                            </Button>
+                            </button>
                           </>
                         ) : null}
-                      </Space>
+                      </div>
                     ),
                   },
                 ]}

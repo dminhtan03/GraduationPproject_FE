@@ -3,16 +3,25 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   Table,
   Tag,
-  Button,
   Space,
   Card,
-  Divider,
   Input,
   InputNumber,
   Empty,
-  Alert,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import {
+  ArrowLeftIcon,
+  Cog6ToothIcon,
+  ClockIcon,
+  MapPinIcon,
+  UserGroupIcon,
+  SparklesIcon,
+  PlusCircleIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  KeyIcon,
+} from "@heroicons/react/24/outline";
 import { useAppSelector, selectAuthUser } from "../../store";
 import { isAdminUser } from "../../services/authService";
 import { api } from "../../services/api";
@@ -88,8 +97,6 @@ const EventLivePage: React.FC = () => {
     if (!user) return false;
     if (isAdminUser(user)) return true;
     const reservationUserId = (detail as any)?.reservation?.userId || (detail as any)?.userId;
-    // user.id in store is usually string from sub or numeric id 0. 
-    // Let's use string comparison for safety.
     return String(reservationUserId) === String(user.id) || (user.email && (detail as any)?.reservation?.userEmail === user.email);
   }, [user, detail]);
 
@@ -122,7 +129,6 @@ const EventLivePage: React.FC = () => {
       const res = await api.get(buildUrl(API_ENDPOINTS.CHECKIN_QR.GET_LIVE_CODE, { reservationId: normalizedReservationId }));
       const data = extractData(res);
       setLiveCode(data.token);
-      
       const expiresAt = new Date(data.expiresAt).getTime();
       const now = new Date().getTime();
       const diff = Math.max(0, Math.floor((expiresAt - now) / 1000));
@@ -135,7 +141,7 @@ const EventLivePage: React.FC = () => {
   useEffect(() => {
     if (isOwnerOrAdmin && normalizedReservationId) {
       loadLiveCode();
-      const timer = setInterval(loadLiveCode, 30000); // Refresh every 30s for safety
+      const timer = setInterval(loadLiveCode, 30000);
       return () => clearInterval(timer);
     }
   }, [isOwnerOrAdmin, normalizedReservationId]);
@@ -223,22 +229,6 @@ const EventLivePage: React.FC = () => {
     }
   };
 
-  const generateParticipantQr = async (participantId: string) => {
-    setLoading(true);
-    try {
-      const res = await api.post(
-        buildUrl(API_ENDPOINTS.CHECKIN_QR.GENERATE_PARTICIPANT, { participantId }),
-      );
-      const data = extractData(res) as { token: string; expiresAt: string };
-      setToast({ type: "success", message: `Token: ${data.token} (expires: ${data.expiresAt})` });
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Generate QR failed";
-      setToast({ type: "error", message: String(msg) });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCodeCheckIn = async () => {
     if (!normalizedReservationId || !checkInInput) return;
     setLoading(true);
@@ -275,8 +265,8 @@ const EventLivePage: React.FC = () => {
     }
   };
 
-  const { code: roomCode, amenities, room } = getRoomInfo(detail);
-  const building = (detail as any)?.building ?? (detail as any)?.reservation?.building ?? room?.floor?.building ?? null;
+  const { code: roomCode, amenities } = getRoomInfo(detail);
+  const building = (detail as any)?.building ?? (detail as any)?.reservation?.building ?? null;
   const address = building?.address || building?.name || "";
 
   const reservationNode: any = (detail as any)?.reservation ?? detail;
@@ -284,352 +274,380 @@ const EventLivePage: React.FC = () => {
   const endTime = reservationNode?.endTime ?? reservationNode?.end_time ?? "";
 
   return (
-    <div className="p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+      {/* ── Header ── */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Event Live</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Room: <span className="font-semibold">{roomCode || "-"}</span>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Event Live</h1>
+          <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
+            <MapPinIcon className="h-4 w-4 text-orange-400" />
+            Room: <span className="font-semibold text-slate-700">{roomCode || "—"}</span>
           </p>
         </div>
+
         <Space>
           {isOwnerOrAdmin && (
-            <Button
-              type="default"
+            <button
+              type="button"
               disabled={loading}
               onClick={() => navigate(`/events/setup/${normalizedReservationId}`)}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
             >
+              <Cog6ToothIcon className="h-4 w-4" />
               Setup
-            </Button>
+            </button>
           )}
-          <Button
-            type="primary"
+          <button
+            type="button"
             disabled={loading}
             onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-50"
           >
+            <ArrowLeftIcon className="h-4 w-4" />
             Back
-          </Button>
+          </button>
         </Space>
       </div>
 
+      {/* ── Row 1: Event Info + Room Amenities ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card
-          title="Event Information"
-          bordered={false}
-          className="shadow-sm"
-        >
-          {eventData ? (
-            <div className="space-y-3 text-sm">
-              <div>
-                <span className="font-semibold">Title:</span>
-                <div className="text-slate-700 mt-1">{eventData.title}</div>
-              </div>
-              <Divider style={{ margin: "8px 0" }} />
-              <div>
-                <span className="font-semibold">Visibility:</span>
-                <div className="text-slate-700 mt-1">{eventData.visibility}</div>
-              </div>
-              {eventData.description && (
-                <>
-                  <Divider style={{ margin: "8px 0" }} />
-                  <div>
-                    <span className="font-semibold">Description:</span>
-                    <div className="text-slate-700 mt-1">{eventData.description}</div>
-                  </div>
-                </>
-              )}
-              <Divider style={{ margin: "8px 0" }} />
-              <div>
-                <span className="font-semibold">Time:</span>
-                <div className="text-slate-700 mt-1">
-                  {formatDateTime24(startTime)} → {formatDateTime24(endTime)}
-                </div>
-              </div>
-              <Divider style={{ margin: "8px 0" }} />
-              <div>
-                <span className="font-semibold">Room:</span>
-                <div className="text-slate-700 mt-1">{roomCode || "-"}</div>
-              </div>
-              {address && (
-                <>
-                  <Divider style={{ margin: "8px 0" }} />
-                  <div>
-                    <span className="font-semibold">Address:</span>
-                    <div className="text-slate-700 mt-1">{address}</div>
-                  </div>
-                </>
-              )}
-              {isOwnerOrAdmin && isOwnerCheckedIn && (
-                <>
-                  <Divider style={{ margin: "8px 0" }} />
-                  <Alert
-                    type="info"
-                    showIcon
-                    message="Live Check-in Code"
-                    description={
-                      <div className="mt-2">
-                        <div className="text-2xl font-mono font-bold text-orange-600 tracking-widest">
-                          {liveCode || "------"}
-                        </div>
-                        <div className="text-xs text-slate-600 mt-2">
-                          ({codeCountdown}s) Give this 6-digit code to participants for check-in. It refreshes every minute.
-                        </div>
-                      </div>
-                    }
-                  />
-                </>
-              )}
-              {isOwnerOrAdmin && !isOwnerCheckedIn && (
-                <>
-                  <Divider style={{ margin: "8px 0" }} />
-                  <Alert
-                    type="warning"
-                    showIcon
-                    message="Please check-in to this booking first to see the event code."
-                    action={
-                      <Button
-                        size="small"
-                        type="primary"
-                        loading={loading}
-                        onClick={handleOwnerCheckIn}
-                      >
-                        Check-in now
-                      </Button>
-                    }
-                  />
-                </>
-              )}
-            </div>
-          ) : (
-            <Empty description="Event not found for this reservation." />
-          )}
-        </Card>
+        {/* Event Information */}
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+            <SparklesIcon className="h-5 w-5 text-orange-500" />
+            <p className="text-base font-semibold text-slate-900">Event Information</p>
+          </div>
 
+          <div className="p-5">
+            {eventData ? (
+              <div className="space-y-4 text-sm">
+                {/* Title */}
+                <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Title</p>
+                  <p className="mt-1 font-semibold text-slate-800">{eventData.title}</p>
+                </div>
+
+                {/* Visibility */}
+                <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Visibility</p>
+                  <p className="mt-1 font-semibold text-slate-800">{eventData.visibility}</p>
+                </div>
+
+                {/* Description */}
+                {eventData.description && (
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Description</p>
+                    <p className="mt-1 text-slate-700 leading-relaxed">{eventData.description}</p>
+                  </div>
+                )}
+
+                {/* Time */}
+                <div className="rounded-xl border border-orange-100 bg-orange-50 px-4 py-3">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-orange-500">
+                    <ClockIcon className="h-3.5 w-3.5" />
+                    Time Slot
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-800">
+                    {formatDateTime24(startTime)} → {formatDateTime24(endTime)}
+                  </p>
+                </div>
+
+                {/* Room */}
+                <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    <MapPinIcon className="h-3.5 w-3.5" />
+                    Room
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-800">{roomCode || "—"}</p>
+                </div>
+
+                {/* Address */}
+                {address && (
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Address</p>
+                    <p className="mt-1 font-semibold text-slate-800">{address}</p>
+                  </div>
+                )}
+
+                {/* Live Code (checked-in) */}
+                {isOwnerOrAdmin && isOwnerCheckedIn && (
+                  <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 px-4 py-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <KeyIcon className="h-4 w-4 text-green-600" />
+                      <p className="text-xs font-semibold uppercase tracking-wide text-green-700">Live Check-in Code</p>
+                    </div>
+                    <div className="text-3xl font-mono font-bold text-orange-600 tracking-[0.3em] text-center py-2">
+                      {liveCode || "------"}
+                    </div>
+                    <p className="text-center text-xs text-slate-500 mt-2">
+                      Refreshes in <span className="font-bold text-orange-500">{codeCountdown}s</span> · Share this code with participants
+                    </p>
+                  </div>
+                )}
+
+                {/* Check-in prompt (not yet checked-in) */}
+                {isOwnerOrAdmin && !isOwnerCheckedIn && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+                    <div className="flex items-start gap-3">
+                      <ExclamationCircleIcon className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-amber-800">Check-in Required</p>
+                        <p className="text-xs text-amber-600 mt-0.5">Please check-in to this booking first to see the event code.</p>
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={handleOwnerCheckIn}
+                          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+                        >
+                          <CheckCircleIcon className="h-4 w-4" />
+                          Check-in Now
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Empty description="Event not found for this reservation." />
+            )}
+          </div>
+        </div>
+
+        {/* Room Amenities */}
         {isOwnerOrAdmin && (
-          <Card
-            title="Room Amenities"
-            bordered={false}
-            className="shadow-sm"
-          >
-            <div className="flex flex-wrap gap-2">
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+              <SparklesIcon className="h-5 w-5 text-orange-500" />
+              <p className="text-base font-semibold text-slate-900">Room Amenities</p>
+            </div>
+            <div className="p-5">
               {amenities.length ? (
-                amenities.map((a) => (
-                  <Tag key={a.id} color="blue">
-                    {a.name}
-                  </Tag>
-                ))
+                <div className="flex flex-wrap gap-2">
+                  {amenities.map((a) => (
+                    <span
+                      key={a.id}
+                      className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 border border-orange-100"
+                    >
+                      {a.name}
+                    </span>
+                  ))}
+                </div>
               ) : (
-                <span className="text-sm text-slate-500">No amenities.</span>
+                <span className="text-sm text-slate-400">No amenities listed for this room.</span>
               )}
             </div>
-          </Card>
+          </div>
         )}
       </div>
 
+      {/* ── Row 2: Services (owner/admin only) ── */}
       {isOwnerOrAdmin && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mt-6">
-          <Card
-            title="Current Services"
-            bordered={false}
-            className="shadow-sm"
-          >
-            <Table<ServiceLine>
-              rowKey={(record) => record.id}
-              dataSource={currentServiceLines}
-              pagination={false}
-              columns={[
-                {
-                  title: "SERVICE",
-                  dataIndex: "name",
-                  key: "name",
-                },
-                {
-                  title: "QTY",
-                  dataIndex: "quantity",
-                  key: "quantity",
-                  width: 80,
-                },
-                {
-                  title: "NOTE",
-                  dataIndex: "note",
-                  key: "note",
-                  render: (value: string | undefined) => value || "-",
-                },
-              ]}
-              locale={{
-                emptyText: "No services selected.",
-              }}
-            />
-          </Card>
-
-          <Card
-            title="Call Additional Services"
-            bordered={false}
-            className="shadow-sm"
-          >
-            <div className="text-sm text-slate-600 mb-4">
-              Add services during the event (quantities will be accumulated).
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Current Services */}
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+              <CheckCircleIcon className="h-5 w-5 text-orange-500" />
+              <p className="text-base font-semibold text-slate-900">Current Services</p>
             </div>
+            <div className="p-4">
+              <Table<ServiceLine>
+                rowKey={(record) => record.id}
+                dataSource={currentServiceLines}
+                pagination={false}
+                columns={[
+                  {
+                    title: "SERVICE",
+                    dataIndex: "name",
+                    key: "name",
+                  },
+                  {
+                    title: "QTY",
+                    dataIndex: "quantity",
+                    key: "quantity",
+                    width: 80,
+                  },
+                  {
+                    title: "NOTE",
+                    dataIndex: "note",
+                    key: "note",
+                    render: (value: string | undefined) => value || "—",
+                  },
+                ]}
+                locale={{ emptyText: "No services selected." }}
+              />
+            </div>
+          </div>
 
-            {serviceItems.length ? (
-              <div className="space-y-3">
-                {serviceItems.map((s) => {
-                  const draft = addDraft[s.id] || { quantity: "", note: "" };
-                  return (
-                    <div key={s.id} className="flex items-center gap-2 pb-3 border-b border-gray-100 last:border-b-0">
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">{s.name}</div>
-                        <div className="text-xs text-slate-500">
-                          {s.price != null ? formatPriceVN(s.price) : "-"} {s.unit ? `/${s.unit}` : ""}
+          {/* Call Additional Services */}
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+              <PlusCircleIcon className="h-5 w-5 text-orange-500" />
+              <p className="text-base font-semibold text-slate-900">Call Additional Services</p>
+            </div>
+            <div className="p-5">
+              <p className="mb-4 text-sm text-slate-500">
+                Add services during the event. Quantities will be accumulated.
+              </p>
+
+              {serviceItems.length ? (
+                <div className="space-y-3">
+                  {serviceItems.map((s) => {
+                    const draft = addDraft[s.id] || { quantity: "", note: "" };
+                    return (
+                      <div key={s.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm text-slate-800 truncate">{s.name}</div>
+                          <div className="text-xs text-slate-400">
+                            {s.price != null ? formatPriceVN(s.price) : "—"}{s.unit ? ` / ${s.unit}` : ""}
+                          </div>
                         </div>
+                        <InputNumber
+                          size="small"
+                          min={0}
+                          value={draft.quantity ? Number(draft.quantity) : undefined}
+                          onChange={(value) =>
+                            setAddDraft((prev) => ({
+                              ...prev,
+                              [s.id]: { ...draft, quantity: value ? String(value) : "" },
+                            }))
+                          }
+                          placeholder="Qty"
+                          style={{ width: 64 }}
+                        />
+                        <Input
+                          size="small"
+                          value={draft.note}
+                          onChange={(e) =>
+                            setAddDraft((prev) => ({
+                              ...prev,
+                              [s.id]: { ...draft, note: e.target.value },
+                            }))
+                          }
+                          placeholder="Note"
+                          style={{ width: 100 }}
+                        />
                       </div>
-                      <InputNumber
-                        size="small"
-                        min={0}
-                        value={draft.quantity ? Number(draft.quantity) : undefined}
-                        onChange={(value) =>
-                          setAddDraft((prev) => ({
-                            ...prev,
-                            [s.id]: { ...draft, quantity: value ? String(value) : "" },
-                          }))
-                        }
-                        placeholder="Qty"
-                        style={{ width: 60 }}
-                      />
-                      <Input
-                        size="small"
-                        value={draft.note}
-                        onChange={(e) =>
-                          setAddDraft((prev) => ({
-                            ...prev,
-                            [s.id]: { ...draft, note: e.target.value },
-                          }))
-                        }
-                        placeholder="Note"
-                        style={{ width: 100 }}
-                      />
-                    </div>
-                  );
-                })}
-                <Button
-                  type="primary"
-                  block
-                  loading={loading}
-                  onClick={saveMergedServices}
-                  className="mt-4"
-                >
-                  Save Additional Services
-                </Button>
-              </div>
-            ) : (
-              <Empty description="No active service items." />
-            )}
-          </Card>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={saveMergedServices}
+                    className="mt-2 w-full rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-50"
+                  >
+                    {loading ? "Saving…" : "Save Additional Services"}
+                  </button>
+                </div>
+              ) : (
+                <Empty description="No active service items." />
+              )}
+            </div>
+          </div>
         </div>
       )}
 
-      <Card
-        title={
-          isOwnerOrAdmin ? "Participants (Check-in List)" : "My Check-in Status"
-        }
-        bordered={false}
-        className="shadow-sm mt-6"
-      >
-        <Table<Participant>
-          rowKey={(record) => record.id}
-          dataSource={eventData?.participants?.filter((p: any) =>
-            isOwnerOrAdmin || (user?.email && p.email === user.email)
-          ) || []}
-          pagination={false}
-          columns={[
-            {
-              title: "EMAIL",
-              dataIndex: "email",
-              key: "email",
-              render: (value: string | undefined) => value || "-",
-            },
-            {
-              title: "NAME",
-              dataIndex: "fullName",
-              key: "fullName",
-              render: (value: string | undefined) => value || "-",
-            },
-            {
-              title: "CHECK-IN",
-              dataIndex: "checkInStatus",
-              key: "checkInStatus",
-              render: (value: string | undefined, record: Participant) => (
-                <div>
-                  <Tag
-                    color={
-                      value === "CHECKED_IN"
-                        ? "green"
-                        : "orange"
-                    }
-                  >
-                    {value || "NOT_CHECKED_IN"}
-                  </Tag>
-                  {record.checkInTime && (
-                    <div className="text-xs text-slate-400 mt-1">
-                      {new Date(record.checkInTime).toLocaleTimeString()}
-                    </div>
-                  )}
-                </div>
-              ),
-            },
-            ...(isOwnerOrAdmin
-              ? [
-                  {
-                    title: "ACTION",
-                    key: "action",
-                    render: () => (
-                      <span className="text-xs text-slate-400">Owner View</span>
-                    ),
-                  },
-                ]
-              : []),
-          ]}
-          locale={{
-            emptyText: "No participants.",
-          }}
-        />
+      {/* ── Row 3: Participants ── */}
+      <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+          <UserGroupIcon className="h-5 w-5 text-orange-500" />
+          <p className="text-base font-semibold text-slate-900">
+            {isOwnerOrAdmin ? "Participants (Check-in List)" : "My Check-in Status"}
+          </p>
+        </div>
 
-        {!isOwnerOrAdmin &&
-          eventData?.participants?.some(
-            (p: any) =>
-              user?.email && p.email === user.email && p.checkInStatus !== "CHECKED_IN"
-          ) &&
-          isOwnerCheckedIn && (
-            <Alert
-              type="info"
-              showIcon
-              message="Enter the 6-digit code provided by the host to check in"
-              action={
-                <div className="flex gap-2">
-                  <Input
-                    size="small"
-                    value={checkInInput}
-                    onChange={(e) =>
-                      setCheckInInput(e.target.value.replace(/\D/g, "").slice(0, 6))
-                    }
-                    placeholder="6-digit code"
-                    style={{ width: 120 }}
-                  />
-                  <Button
-                    size="small"
-                    type="primary"
-                    loading={loading}
-                    disabled={checkInInput.length !== 6}
-                    onClick={handleCodeCheckIn}
-                  >
-                    Check-in
-                  </Button>
+        <div className="p-4">
+          <Table<Participant>
+            rowKey={(record) => record.id}
+            dataSource={
+              eventData?.participants?.filter((p: any) =>
+                isOwnerOrAdmin || (user?.email && p.email === user.email)
+              ) || []
+            }
+            pagination={false}
+            columns={[
+              {
+                title: "EMAIL",
+                dataIndex: "email",
+                key: "email",
+                render: (value: string | undefined) => value || "—",
+              },
+              {
+                title: "NAME",
+                dataIndex: "fullName",
+                key: "fullName",
+                render: (value: string | undefined) => value || "—",
+              },
+              {
+                title: "CHECK-IN",
+                dataIndex: "checkInStatus",
+                key: "checkInStatus",
+                render: (value: string | undefined, record: Participant) => (
+                  <div>
+                    <Tag color={value === "CHECKED_IN" ? "green" : "orange"}>
+                      {value || "NOT_CHECKED_IN"}
+                    </Tag>
+                    {record.checkInTime && (
+                      <div className="text-xs text-slate-400 mt-1">
+                        {new Date(record.checkInTime).toLocaleTimeString()}
+                      </div>
+                    )}
+                  </div>
+                ),
+              },
+              ...(isOwnerOrAdmin
+                ? [
+                    {
+                      title: "ACTION",
+                      key: "action",
+                      render: () => (
+                        <span className="text-xs text-slate-400">Owner View</span>
+                      ),
+                    },
+                  ]
+                : []),
+            ] as ColumnsType<Participant>}
+            locale={{ emptyText: "No participants." }}
+          />
+
+          {/* Participant self check-in via code */}
+          {!isOwnerOrAdmin &&
+            eventData?.participants?.some(
+              (p: any) =>
+                user?.email && p.email === user.email && p.checkInStatus !== "CHECKED_IN"
+            ) &&
+            isOwnerCheckedIn && (
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <KeyIcon className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-blue-800">Enter Check-in Code</p>
+                    <p className="text-xs text-blue-600 mt-0.5">Enter the 6-digit code provided by the host.</p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <Input
+                        size="small"
+                        value={checkInInput}
+                        onChange={(e) =>
+                          setCheckInInput(e.target.value.replace(/\D/g, "").slice(0, 6))
+                        }
+                        placeholder="6-digit code"
+                        style={{ width: 130 }}
+                      />
+                      <button
+                        type="button"
+                        disabled={loading || checkInInput.length !== 6}
+                        onClick={handleCodeCheckIn}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+                      >
+                        <CheckCircleIcon className="h-4 w-4" />
+                        Check-in
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              }
-              className="mt-4"
-            />
-          )}
-      </Card>
+              </div>
+            )}
+        </div>
+      </div>
 
       {toast ? (
         <CustomMessage
