@@ -304,7 +304,7 @@ const MyRecurringSeriesPage: React.FC = () => {
         book rooms on a regular schedule.
       </Paragraph>
 
-      <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
+      {/* <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-semibold text-slate-700">
@@ -318,16 +318,8 @@ const MyRecurringSeriesPage: React.FC = () => {
             Create series
           </button>
         </div>
-<<<<<<< HEAD
-=======
-        {/* <button
-          onClick={() => setIsModalOpen(true)}
-          className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
-        >
-          Create series
-        </button> */}
->>>>>>> son
-      </div>
+
+      </div> */}
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <table className="w-full text-left border-collapse">
@@ -420,12 +412,12 @@ const MyRecurringSeriesPage: React.FC = () => {
 
                   <td className="px-4 py-3 text-right">
                     <div className="inline-flex items-center gap-2">
-                      <button
+                      {/* <button
                         onClick={() => syncNow(s.id)}
                         className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                       >
                         Sync now
-                      </button>
+                      </button> */}
                       <button
                         onClick={() => cancel(s.id)}
                         className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-100"
