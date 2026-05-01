@@ -10,6 +10,7 @@ import {
   CalendarDaysIcon,
   ClipboardDocumentListIcon,
   ArrowPathIcon,
+  ChatBubbleLeftRightIcon,
 } from "@heroicons/react/24/outline";
 import { Link, useLocation } from "react-router-dom";
 import { ROUTES } from "../../constants";
@@ -79,6 +80,11 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
       path: ROUTES.ADMIN_RECURRING_SERIES,
     },
     // end+ chức năng admin quản lý recurring series
+    {
+      label: "Feedback Management",
+      icon: ChatBubbleLeftRightIcon,
+      path: ROUTES.ADMIN_FEEDBACK_MANAGEMENT,
+    },
   ];
 
   const initials = adminName
