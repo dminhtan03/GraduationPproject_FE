@@ -770,4 +770,23 @@ export const adminService = {
     return res.data;
   },
   // end add admin booking list api
+
+  async getAllFeedbacks(
+    page = 0,
+    size = 10,
+    filters?: { rating?: number; email?: string }
+  ): Promise<any> {
+    const params: Record<string, string | number> = { page, size };
+    if (filters?.rating) params.rating = filters.rating;
+    if (filters?.email) params.email = filters.email;
+    const res = await api.get(API_ENDPOINTS.FEEDBACK.ADMIN_LIST, { params });
+    return (res.data as any)?.data || res.data;
+  },
+
+  async getFeedbackDetail(id: string): Promise<any> {
+    const res = await api.get(
+      buildUrl(API_ENDPOINTS.FEEDBACK.ADMIN_DETAIL, { id })
+    );
+    return (res.data as any)?.data || res.data;
+  },
 };

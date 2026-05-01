@@ -49,6 +49,7 @@ export const ROUTES = {
   // start+ chức năng admin quản lý recurring series
   ADMIN_RECURRING_SERIES: "/admin/recurring-series",
   // end+ chức năng admin quản lý recurring series
+  ADMIN_FEEDBACK_MANAGEMENT: "/admin/feedback",
   CHECKIN_QR: "/checkin-qr",
   MY_RECURRING_SERIES: "/my-recurring-series",
   EVENT_DEMO: "/event-demo",

@@ -79,6 +79,9 @@ const AdminRecurringSeriesPage = React.lazy(
   () => import("../pages/AdminRecurringSeriesManagement"),
 );
 // end+ chức năng admin quản lý recurring series
+const AdminFeedbackManagementPage = React.lazy(
+  () => import("../pages/AdminFeedbackManagement"),
+);
 const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
 const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 
@@ -375,6 +378,17 @@ export const router = createBrowserRouter([
     errorElement: <ErrorBoundary />,
   },
   // end+ chức năng admin quản lý recurring series
+  {
+    path: ROUTES.ADMIN_FEEDBACK_MANAGEMENT,
+    element: (
+      <ProtectedRoute mode="admin-only">
+        <SuspenseWrapper>
+          <AdminFeedbackManagementPage />
+        </SuspenseWrapper>
+      </ProtectedRoute>
+    ),
+    errorElement: <ErrorBoundary />,
+  },
   {
     path: "/",
     element: (

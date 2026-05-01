@@ -100,6 +100,8 @@ export const API_ENDPOINTS = {
   FEEDBACK: {
     CREATE: "/api/v1/feedback/add",
     LIST: "/api/v1/feedback",
+    ADMIN_LIST: "/api/v1/feedback/admin",
+    ADMIN_DETAIL: "/api/v1/feedback/admin/:id",
   },
 
   NOTIFICATIONS: {
