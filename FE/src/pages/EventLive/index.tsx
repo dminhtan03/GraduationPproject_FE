@@ -413,31 +413,148 @@ const EventLivePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Room Amenities */}
-        {isOwnerOrAdmin && (
+        {/* Right Column: Room Amenities & Participants */}
+        <div className="flex flex-col gap-6">
+          {/* Room Amenities */}
+          {isOwnerOrAdmin && (
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+                <SparklesIcon className="h-5 w-5 text-orange-500" />
+                <p className="text-base font-semibold text-slate-900">Room Amenities</p>
+              </div>
+              <div className="p-5">
+                {amenities.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {amenities.map((a) => (
+                      <span
+                        key={a.id}
+                        className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 border border-orange-100"
+                      >
+                        {a.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-sm text-slate-400">No amenities listed for this room.</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Participants ── */}
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
-              <SparklesIcon className="h-5 w-5 text-orange-500" />
-              <p className="text-base font-semibold text-slate-900">Room Amenities</p>
+              <UserGroupIcon className="h-5 w-5 text-orange-500" />
+              <p className="text-base font-semibold text-slate-900">
+                {isOwnerOrAdmin ? "Participants (Check-in List)" : "My Check-in Status"}
+              </p>
             </div>
-            <div className="p-5">
-              {amenities.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {amenities.map((a) => (
-                    <span
-                      key={a.id}
-                      className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 border border-orange-100"
-                    >
-                      {a.name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-sm text-slate-400">No amenities listed for this room.</span>
-              )}
+
+            <div className="p-4">
+              <Table<Participant>
+                rowKey={(record) => record.id}
+                dataSource={
+                  eventData?.participants?.filter((p: any) =>
+                    isOwnerOrAdmin || (user?.email && p.email === user.email)
+                  ) || []
+                }
+                pagination={false}
+                columns={[
+                  {
+                    title: "EMAIL",
+                    dataIndex: "email",
+                    key: "email",
+                    render: (value: string | undefined) => value || "—",
+                  },
+                  {
+                    title: "NAME",
+                    dataIndex: "fullName",
+                    key: "fullName",
+                    render: (value: string | undefined) => value || "—",
+                  },
+                  {
+                    title: "CHECK-IN",
+                    dataIndex: "checkInStatus",
+                    key: "checkInStatus",
+                    render: (value: string | undefined, record: Participant) => {
+                      const normalized = String(value || "NOT_CHECKED_IN").toUpperCase();
+                      const isCheckedIn = normalized === "CHECKED_IN";
+                      const label = isCheckedIn ? "Checked In" : "Not Checked In";
+                      return (
+                        <div>
+                          <span
+                            className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              isCheckedIn
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {label}
+                          </span>
+                          {record.checkInTime && (
+                            <div className="text-xs text-slate-400 mt-1">
+                              {new Date(record.checkInTime).toLocaleTimeString()}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    },
+                  },
+                  ...(isOwnerOrAdmin
+                    ? [
+                        {
+                          title: "ACTION",
+                          key: "action",
+                          render: () => (
+                            <span className="text-xs text-slate-400">Owner View</span>
+                          ),
+                        },
+                      ]
+                    : []),
+                ] as ColumnsType<Participant>}
+                locale={{ emptyText: "No participants." }}
+              />
+
+              {/* Participant self check-in via code */}
+              {!isOwnerOrAdmin &&
+                eventData?.participants?.some(
+                  (p: any) =>
+                    user?.email && p.email === user.email && p.checkInStatus !== "CHECKED_IN"
+                ) &&
+                isOwnerCheckedIn && (
+                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
+                    <div className="flex items-start gap-3">
+                      <KeyIcon className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-blue-800">Enter Check-in Code</p>
+                        <p className="text-xs text-blue-600 mt-0.5">Enter the 6-digit code provided by the host.</p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <Input
+                            size="small"
+                            value={checkInInput}
+                            onChange={(e) =>
+                              setCheckInInput(e.target.value.replace(/\D/g, "").slice(0, 6))
+                            }
+                            placeholder="6-digit code"
+                            style={{ width: 130 }}
+                          />
+                          <button
+                            type="button"
+                            disabled={loading || checkInInput.length !== 6}
+                            onClick={handleCodeCheckIn}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+                          >
+                            <CheckCircleIcon className="h-4 w-4" />
+                            Check-in
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* ── Row 2: Services (owner/admin only) ── */}
@@ -546,108 +663,7 @@ const EventLivePage: React.FC = () => {
         </div>
       )}
 
-      {/* ── Row 3: Participants ── */}
-      <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
-          <UserGroupIcon className="h-5 w-5 text-orange-500" />
-          <p className="text-base font-semibold text-slate-900">
-            {isOwnerOrAdmin ? "Participants (Check-in List)" : "My Check-in Status"}
-          </p>
-        </div>
 
-        <div className="p-4">
-          <Table<Participant>
-            rowKey={(record) => record.id}
-            dataSource={
-              eventData?.participants?.filter((p: any) =>
-                isOwnerOrAdmin || (user?.email && p.email === user.email)
-              ) || []
-            }
-            pagination={false}
-            columns={[
-              {
-                title: "EMAIL",
-                dataIndex: "email",
-                key: "email",
-                render: (value: string | undefined) => value || "—",
-              },
-              {
-                title: "NAME",
-                dataIndex: "fullName",
-                key: "fullName",
-                render: (value: string | undefined) => value || "—",
-              },
-              {
-                title: "CHECK-IN",
-                dataIndex: "checkInStatus",
-                key: "checkInStatus",
-                render: (value: string | undefined, record: Participant) => (
-                  <div>
-                    <Tag color={value === "CHECKED_IN" ? "green" : "orange"}>
-                      {value || "NOT_CHECKED_IN"}
-                    </Tag>
-                    {record.checkInTime && (
-                      <div className="text-xs text-slate-400 mt-1">
-                        {new Date(record.checkInTime).toLocaleTimeString()}
-                      </div>
-                    )}
-                  </div>
-                ),
-              },
-              ...(isOwnerOrAdmin
-                ? [
-                    {
-                      title: "ACTION",
-                      key: "action",
-                      render: () => (
-                        <span className="text-xs text-slate-400">Owner View</span>
-                      ),
-                    },
-                  ]
-                : []),
-            ] as ColumnsType<Participant>}
-            locale={{ emptyText: "No participants." }}
-          />
-
-          {/* Participant self check-in via code */}
-          {!isOwnerOrAdmin &&
-            eventData?.participants?.some(
-              (p: any) =>
-                user?.email && p.email === user.email && p.checkInStatus !== "CHECKED_IN"
-            ) &&
-            isOwnerCheckedIn && (
-              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
-                <div className="flex items-start gap-3">
-                  <KeyIcon className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-blue-800">Enter Check-in Code</p>
-                    <p className="text-xs text-blue-600 mt-0.5">Enter the 6-digit code provided by the host.</p>
-                    <div className="mt-3 flex items-center gap-2">
-                      <Input
-                        size="small"
-                        value={checkInInput}
-                        onChange={(e) =>
-                          setCheckInInput(e.target.value.replace(/\D/g, "").slice(0, 6))
-                        }
-                        placeholder="6-digit code"
-                        style={{ width: 130 }}
-                      />
-                      <button
-                        type="button"
-                        disabled={loading || checkInInput.length !== 6}
-                        onClick={handleCodeCheckIn}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
-                      >
-                        <CheckCircleIcon className="h-4 w-4" />
-                        Check-in
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-        </div>
-      </div>
 
       {toast ? (
         <CustomMessage

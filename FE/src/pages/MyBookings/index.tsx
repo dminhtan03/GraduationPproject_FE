@@ -4,22 +4,17 @@ import {
   Empty,
   Table,
   Tag,
-  Alert,
-  Button,
-  Space,
-  Tooltip,
   Tabs,
   Modal,
-  Descriptions,
   Select,
   Input,
   InputNumber,
   Rate,
-  message,
+  Alert,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type { TablePaginationConfig } from "antd/es/table";
-import { CalendarOutlined, ClockCircleOutlined } from "@ant-design/icons";
+import { CalendarOutlined } from "@ant-design/icons";
 import {
   ChatBubbleLeftRightIcon,
   CheckBadgeIcon,
@@ -45,9 +40,11 @@ import type { Reservation, WebSocketMessage } from "../../types";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
+import { CustomPagination } from "../../components/common";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import DatePickerField from "../../components/common/DatePickerField";
-import { HOUR_OPTIONS, MINUTE_OPTIONS, buildDateTime } from "../../utils";
+import TimeSelectField from "../../components/common/TimeSelectField";
+import { buildDateTime } from "../../utils";
 
 const { Title, Paragraph } = Typography;
 
@@ -171,7 +168,9 @@ const normalizeFloorOptions = (payload: unknown): FloorFilterOption[] => {
   const unique = Array.from(
     new Map(
       mapped.map((item) => [
-        item.floorNumber != null ? `num-${item.floorNumber}` : `value-${item.value}`,
+        item.floorNumber != null
+          ? `num-${item.floorNumber}`
+          : `value-${item.value}`,
         item,
       ]),
     ).values(),
@@ -210,7 +209,10 @@ const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey) => {
 
   return items.filter((item) => {
     const status = (item.status || "").toUpperCase();
-    return TAB_STATUS_FILTERS.ongoing.includes(status) || !allowedStatuses.includes(status);
+    return (
+      TAB_STATUS_FILTERS.ongoing.includes(status) ||
+      !allowedStatuses.includes(status)
+    );
   });
 };
 
@@ -237,17 +239,23 @@ const formatDatePart = (value?: string) => {
 const formatTimePart = (value?: string) => {
   const date = parseBookingDateTime(value);
   if (!date) return "-";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 };
 
-const isInvalidDateFormatError = (error: unknown) => {
-  const message = extractApiMessage(error, "").toLowerCase();
-  return (
-    message.includes("invalid date format") ||
-    message.includes("date format") ||
-    message.includes("invalid date") ||
-    message.includes("định dạng ngày")
-  );
+const splitTimeValue = (
+  value: string,
+  fallbackHour: string,
+  fallbackMinute: string,
+) => {
+  const [hour, minute] = value.split(":");
+  return {
+    hour: hour || fallbackHour,
+    minute: minute || fallbackMinute,
+  };
 };
 
 const extractBackendSuccessMessage = (
@@ -391,12 +399,22 @@ const isValidDate = (value?: string) => {
 };
 
 // start update helper functions to accept now parameter
-const canCheckIn = (status: string, startTime?: string, endTime?: string, now: Date = new Date()) => {
+const canCheckIn = (
+  status: string,
+  startTime?: string,
+  endTime?: string,
+  now: Date = new Date(),
+) => {
   const normalized = status.toUpperCase();
   if (
-    ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED", "NO_SHOW"].includes(
-      normalized,
-    )
+    [
+      "IN_USE",
+      "CHECKED_IN",
+      "CANCELLED",
+      "COMPLETED",
+      "REJECTED",
+      "NO_SHOW",
+    ].includes(normalized)
   ) {
     return false;
   }
@@ -409,7 +427,12 @@ const canCheckIn = (status: string, startTime?: string, endTime?: string, now: D
   return now >= start && now <= end;
 };
 
-const canCheckOut = (status: string, startTime?: string, endTime?: string, now: Date = new Date()) => {
+const canCheckOut = (
+  status: string,
+  startTime?: string,
+  endTime?: string,
+  now: Date = new Date(),
+) => {
   const normalized = status.toUpperCase();
   if (!["IN_USE", "CHECKED_IN"].includes(normalized)) return false;
   if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
@@ -421,7 +444,12 @@ const canCheckOut = (status: string, startTime?: string, endTime?: string, now: 
   return now >= start && now <= end;
 };
 
-const canExtend = (status: string, startTime?: string, endTime?: string, now: Date = new Date()) => {
+const canExtend = (
+  status: string,
+  startTime?: string,
+  endTime?: string,
+  now: Date = new Date(),
+) => {
   const normalized = status.toUpperCase();
   if (!["RESERVED", "IN_USE", "CHECKED_IN"].includes(normalized)) return false;
   if (!isValidDate(startTime) || !isValidDate(endTime)) return false;
@@ -438,7 +466,11 @@ const canExtend = (status: string, startTime?: string, endTime?: string, now: Da
   return now >= start && now <= end;
 };
 
-const canCancel = (status: string, startTime?: string, now: Date = new Date()) => {
+const canCancel = (
+  status: string,
+  startTime?: string,
+  now: Date = new Date(),
+) => {
   const normalized = status.toUpperCase();
   if (["CANCELLED", "COMPLETED", "REJECTED"].includes(normalized)) return false;
 
@@ -446,103 +478,6 @@ const canCancel = (status: string, startTime?: string, now: Date = new Date()) =
   if (!start) return false;
 
   return now < start;
-};
-
-const getCheckInDisabledReason = (record: Reservation, now: Date = new Date()) => {
-  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
-
-  const status = (record.status || "").toUpperCase();
-  if (
-    ["IN_USE", "CHECKED_IN", "CANCELLED", "COMPLETED", "REJECTED", "NO_SHOW"].includes(
-      status,
-    )
-  ) {
-    return `Booking đang ở trạng thái ${status || "N/A"} nên không thể check-in.`;
-  }
-
-  const start = parseBookingDateTime(record.startTime);
-  const end = parseBookingDateTime(record.endTime);
-  if (!start || !end) {
-    return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể check-in.";
-  }
-
-  if (now < start) {
-    return `Chưa đến thời gian check-in. Bắt đầu lúc ${formatDateTime(record.startTime || "")}.`;
-  }
-  if (now > end) {
-    return "Đã quá thời gian booking nên không thể check-in.";
-  }
-  return undefined;
-};
-
-const getCancelDisabledReason = (record: Reservation, now: Date = new Date()) => {
-  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
-
-  const status = (record.status || "").toUpperCase();
-  if (["CANCELLED", "COMPLETED", "REJECTED"].includes(status)) {
-    return `Booking đang ở trạng thái ${status || "N/A"} nên không thể hủy.`;
-  }
-
-  const start = parseBookingDateTime(record.startTime);
-  if (!start) {
-    return "Thiếu thời gian bắt đầu từ API nên không thể xác định quyền hủy.";
-  }
-
-  if (now >= start) {
-    return "Chỉ có thể hủy booking trước khi cuộc họp bắt đầu.";
-  }
-  return undefined;
-};
-
-const getCheckOutDisabledReason = (record: Reservation, now: Date = new Date()) => {
-  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
-
-  const status = (record.status || "").toUpperCase();
-  if (!["IN_USE", "CHECKED_IN"].includes(status)) {
-    return `Booking đang ở trạng thái ${status || "N/A"} nên chưa thể trả phòng.`;
-  }
-
-  const start = parseBookingDateTime(record.startTime);
-  const end = parseBookingDateTime(record.endTime);
-  if (!start || !end) {
-    return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể trả phòng.";
-  }
-
-  if (now < start || now > end) {
-    return "Chỉ có thể trả phòng khi cuộc họp đang diễn ra.";
-  }
-
-  return undefined;
-};
-
-const getExtendDisabledReason = (record: Reservation, now: Date = new Date()) => {
-  if (!record.id) return "Không thể thao tác vì thiếu mã booking từ API.";
-
-  const status = (record.status || "").toUpperCase();
-  if (!["RESERVED", "IN_USE", "CHECKED_IN"].includes(status)) {
-    return `Booking đang ở trạng thái ${status || "N/A"} nên chưa thể gia hạn.`;
-  }
-
-  const start = parseBookingDateTime(record.startTime);
-  const end = parseBookingDateTime(record.endTime);
-  if (!start || !end) {
-    return "Thiếu thời gian bắt đầu/kết thúc từ API nên không thể gia hạn.";
-  }
-
-  // For RESERVED: allow extend before booking ends
-  if (status === "RESERVED") {
-    if (now >= end) {
-      return "Booking đã kết thúc nên không thể gia hạn.";
-    }
-    return undefined;
-  }
-
-  // For IN_USE/CHECKED_IN: allow extend during booking
-  if (now < start || now > end) {
-    return "Chỉ có thể gia hạn khi cuộc họp đang diễn ra.";
-  }
-
-  return undefined;
 };
 // end update helper functions
 
@@ -597,7 +532,9 @@ const MyBookingsPage: React.FC = () => {
     type: MessageType;
     message: string;
   } | null>(null);
-  const [buildingOptions, setBuildingOptions] = useState<BuildingFilterOption[]>([]);
+  const [buildingOptions, setBuildingOptions] = useState<
+    BuildingFilterOption[]
+  >([]);
   const [floorOptions, setFloorOptions] = useState<FloorFilterOption[]>([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>("all");
   const [selectedFloorId, setSelectedFloorId] = useState<string>("all");
@@ -613,7 +550,8 @@ const MyBookingsPage: React.FC = () => {
   const [appliedFloorId, setAppliedFloorId] = useState<string>("all");
   const [appliedLocationCode, setAppliedLocationCode] = useState<string>("");
   const [appliedStatusFilter, setAppliedStatusFilter] = useState<string>("all");
-  const [appliedStartTimeFilter, setAppliedStartTimeFilter] = useState<string>("");
+  const [appliedStartTimeFilter, setAppliedStartTimeFilter] =
+    useState<string>("");
   const [appliedEndTimeFilter, setAppliedEndTimeFilter] = useState<string>("");
   const [cancelReason, setCancelReason] = useState<string>("");
 
@@ -634,8 +572,18 @@ const MyBookingsPage: React.FC = () => {
   const fetchUserProfile = useCallback(async () => {
     try {
       const response = await getProfile();
-      const userData = (response.data as any)?.data || response.data;
-      setUserProfile(userData as UserProfile);
+      const responseData = response.data as unknown;
+      let userData: unknown = responseData;
+
+      if (
+        responseData &&
+        typeof responseData === "object" &&
+        "data" in responseData
+      ) {
+        userData = (responseData as { data?: unknown }).data;
+      }
+
+      setUserProfile((userData as UserProfile) || null);
     } catch (err) {
       console.error("Failed to fetch user profile:", err);
     }
@@ -669,7 +617,8 @@ const MyBookingsPage: React.FC = () => {
       }
 
       try {
-        const response = await adminService.getFloorsByBuilding(selectedBuildingId);
+        const response =
+          await adminService.getFloorsByBuilding(selectedBuildingId);
         const options = normalizeFloorOptions(response);
         setFloorOptions(options);
         setSelectedFloorId("all");
@@ -690,6 +639,14 @@ const MyBookingsPage: React.FC = () => {
       );
     }, 3000);
   };
+
+  useEffect(() => {
+    if (error) showToast("error", error);
+  }, [error]);
+
+  useEffect(() => {
+    if (invitationsError) showToast("error", invitationsError);
+  }, [invitationsError]);
 
   const loadBookings = useCallback(
     async (
@@ -749,15 +706,22 @@ const MyBookingsPage: React.FC = () => {
             allItems =
               normalizedStatus && normalizedStatus !== "ALL"
                 ? fallbackResult.items.filter(
-                    (item) => (item.status || "").toUpperCase() === normalizedStatus,
+                    (item) =>
+                      (item.status || "").toUpperCase() === normalizedStatus,
                   )
                 : filterItemsByTab(fallbackResult.items, tabKey);
           }
 
           if (selectedBuilding?.label) {
             allItems = allItems.filter((item) => {
-              const buildingName = (item.buildingName || item.address || "").toLowerCase();
-              return buildingName.includes(selectedBuilding.label.toLowerCase());
+              const buildingName = (
+                item.buildingName ||
+                item.address ||
+                ""
+              ).toLowerCase();
+              return buildingName.includes(
+                selectedBuilding.label.toLowerCase(),
+              );
             });
           }
 
@@ -809,13 +773,20 @@ const MyBookingsPage: React.FC = () => {
             let filteredItems =
               normalizedStatus && normalizedStatus !== "ALL"
                 ? fallbackResult.items.filter(
-                    (item) => (item.status || "").toUpperCase() === normalizedStatus,
+                    (item) =>
+                      (item.status || "").toUpperCase() === normalizedStatus,
                   )
                 : filterItemsByTab(fallbackResult.items, tabKey);
             if (selectedBuilding?.label) {
               filteredItems = filteredItems.filter((item) => {
-                const buildingName = (item.buildingName || item.address || "").toLowerCase();
-                return buildingName.includes(selectedBuilding.label.toLowerCase());
+                const buildingName = (
+                  item.buildingName ||
+                  item.address ||
+                  ""
+                ).toLowerCase();
+                return buildingName.includes(
+                  selectedBuilding.label.toLowerCase(),
+                );
               });
             }
             setBookings(filteredItems);
@@ -866,8 +837,20 @@ const MyBookingsPage: React.FC = () => {
     setInvitationsError(null);
     try {
       const res = await api.get(API_ENDPOINTS.EVENTS.MY_INVITATIONS);
-      const payload = (res as any)?.data?.data ?? (res as any)?.data ?? [];
-      setInvitations(Array.isArray(payload) ? (payload as EventInvitation[]) : []);
+      const responseData = res.data as unknown;
+      let payload: unknown = responseData;
+
+      if (
+        responseData &&
+        typeof responseData === "object" &&
+        "data" in responseData
+      ) {
+        payload = (responseData as { data?: unknown }).data;
+      }
+
+      setInvitations(
+        Array.isArray(payload) ? (payload as EventInvitation[]) : [],
+      );
     } catch (err) {
       setInvitationsError(extractApiMessage(err, "Unable to load invitations"));
       setInvitations([]);
@@ -885,10 +868,18 @@ const MyBookingsPage: React.FC = () => {
           buildUrl(API_ENDPOINTS.EVENTS.RESPOND_INVITATION, { participantId }),
           { response },
         );
-        message.success(response === "ACCEPT" ? "Đã chấp nhận tham gia" : "Đã từ chối tham gia");
+        showToast(
+          "success",
+          response === "ACCEPT"
+            ? "Đã chấp nhận tham gia"
+            : "Đã từ chối tham gia",
+        );
         await loadInvitations();
       } catch (err) {
-        message.error(extractApiMessage(err, "Unable to respond invitation"));
+        showToast(
+          "error",
+          extractApiMessage(err, "Unable to respond invitation"),
+        );
       } finally {
         setInvitationsLoading(false);
       }
@@ -1005,7 +996,10 @@ const MyBookingsPage: React.FC = () => {
   const handleSubmitFeedback = async () => {
     if (!feedbackModal?.reservationId) return;
     if (feedbackDescription.trim().length === 0) {
-      message.warning("Please enter your feedback (at least 1 character).");
+      showToast(
+        "warning",
+        "Please enter your feedback (at least 1 character).",
+      );
       return;
     }
 
@@ -1035,7 +1029,7 @@ const MyBookingsPage: React.FC = () => {
         appliedEndTimeFilter,
       );
     } catch (err) {
-      message.error(extractApiMessage(err, "Unable to submit feedback"));
+      showToast("error", extractApiMessage(err, "Unable to submit feedback"));
     } finally {
       setSubmittingFeedback(false);
     }
@@ -1062,7 +1056,7 @@ const MyBookingsPage: React.FC = () => {
         now,
       )
     ) {
-      message.warning("Chỉ được check-in trong khoảng thời gian đã đặt phòng.");
+      showToast("warning", "You can only check-in during the booked time.");
       return;
     }
 
@@ -1075,7 +1069,10 @@ const MyBookingsPage: React.FC = () => {
         now,
       )
     ) {
-      message.warning("Chỉ có thể trả phòng khi cuộc họp đang diễn ra.");
+      showToast(
+        "warning",
+        "You can only return the room while the meeting is in progress.",
+      );
       return;
     }
 
@@ -1088,7 +1085,10 @@ const MyBookingsPage: React.FC = () => {
         now,
       )
     ) {
-      message.warning("Chỉ có thể gia hạn khi cuộc họp đang diễn ra.");
+      showToast(
+        "warning",
+        "You can only extend the time while the meeting is in progress.",
+      );
       return;
     }
 
@@ -1096,12 +1096,15 @@ const MyBookingsPage: React.FC = () => {
       currentAction.type === "cancel" &&
       !canCancel(status, currentAction.booking.startTime, now)
     ) {
-      message.warning("Chỉ có thể hủy booking trước khi cuộc họp bắt đầu.");
+      showToast(
+        "warning",
+        "You can only cancel the booking before the meeting starts.",
+      );
       return;
     }
 
     if (currentAction.type === "cancel" && !cancelReason.trim()) {
-      message.warning("Please provide a cancellation reason.");
+      showToast("warning", "Please provide a cancellation reason.");
       return;
     }
 
@@ -1141,7 +1144,8 @@ const MyBookingsPage: React.FC = () => {
               ? "Extend room completed successfully"
               : "Cancel booking completed successfully";
 
-      message.success(
+      showToast(
+        "success",
         extractBackendSuccessMessage(actionResponse, actionSuccessFallback),
       );
 
@@ -1170,12 +1174,12 @@ const MyBookingsPage: React.FC = () => {
       const actionErrorMessage = extractApiMessage(
         err,
         currentAction.type === "check-in"
-          ? "Không thể check-in booking"
+          ? "Unable to check-in booking"
           : currentAction.type === "return-room"
-            ? "Không thể trả phòng"
+            ? "Unable to return room"
             : currentAction.type === "extend"
-              ? "Không thể gia hạn phòng"
-              : "Không thể hủy booking",
+              ? "Unable to extend room"
+              : "Unable to cancel booking",
       );
       setActionModalError(actionErrorMessage);
       showToast("error", actionErrorMessage);
@@ -1196,17 +1200,7 @@ const MyBookingsPage: React.FC = () => {
         void loadInvitations();
         return;
       }
-      loadBookings(
-        1,
-        pageSize,
-        nextTab,
-        "all",
-        "all",
-        "",
-        "all",
-        "",
-        ""
-      );
+      loadBookings(1, pageSize, nextTab, "all", "all", "", "all", "", "");
     }, 0);
   };
 
@@ -1256,49 +1250,48 @@ const MyBookingsPage: React.FC = () => {
     [activeTab],
   );
 
-  const timeRangeMessage = useMemo(() => {
-    const startValue = startDateFilter
-      ? buildDateTime(startDateFilter, startHourFilter, startMinuteFilter)
-      : "";
-    const endValue = endDateFilter
-      ? buildDateTime(endDateFilter, endHourFilter, endMinuteFilter)
-      : "";
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(total / pageSize)),
+    [pageSize, total],
+  );
 
-    if (!startValue && !endValue) return null;
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      if (activeTab === "invitations") return;
+      if (nextPage === page || nextPage < 1 || nextPage > totalPages) return;
+      loadBookings(
+        nextPage,
+        pageSize,
+        activeTab,
+        appliedBuildingId,
+        appliedFloorId,
+        appliedLocationCode,
+        appliedStatusFilter,
+        appliedStartTimeFilter,
+        appliedEndTimeFilter,
+      );
+    },
+    [
+      activeTab,
+      appliedBuildingId,
+      appliedFloorId,
+      appliedLocationCode,
+      appliedStatusFilter,
+      appliedStartTimeFilter,
+      appliedEndTimeFilter,
+      loadBookings,
+      page,
+      pageSize,
+      totalPages,
+    ],
+  );
 
-    if (!startValue || !endValue) {
-      return {
-        type: "warning" as const,
-        text: "Vui lòng nhập đầy đủ cả Start time và End time.",
-      };
+  useEffect(() => {
+    if (activeTab === "invitations") return;
+    if (page > totalPages) {
+      handlePageChange(totalPages);
     }
-
-    const start = parseBookingDateTime(startValue);
-    const end = parseBookingDateTime(endValue);
-
-    if (!start || !end) {
-      return {
-        type: "error" as const,
-        text: "Định dạng thời gian không hợp lệ.",
-      };
-    }
-
-    if (end <= start) {
-      return {
-        type: "error" as const,
-        text: "Vui lòng chọn lại End time lớn hơn Start time.",
-      };
-    }
-
-    return null;
-  }, [
-    endDateFilter,
-    endHourFilter,
-    endMinuteFilter,
-    startDateFilter,
-    startHourFilter,
-    startMinuteFilter,
-  ]);
+  }, [activeTab, handlePageChange, page, totalPages]);
 
   const handleApplyFilters = () => {
     const normalizedStart = startDateFilter
@@ -1308,8 +1301,14 @@ const MyBookingsPage: React.FC = () => {
       ? buildDateTime(endDateFilter, endHourFilter, endMinuteFilter)
       : "";
 
-    if ((normalizedStart && !normalizedEnd) || (!normalizedStart && normalizedEnd)) {
-      message.warning("Vui lòng nhập đầy đủ cả Start time và End time để lọc theo thời gian.");
+    if (
+      (normalizedStart && !normalizedEnd) ||
+      (!normalizedStart && normalizedEnd)
+    ) {
+      showToast(
+        "warning",
+        "Please provide both Start time and End time to filter by time.",
+      );
       return;
     }
 
@@ -1318,12 +1317,15 @@ const MyBookingsPage: React.FC = () => {
       const end = parseBookingDateTime(normalizedEnd);
 
       if (!start || !end) {
-        message.warning("Định dạng thời gian không hợp lệ.");
+        showToast("warning", "Invalid time format.");
         return;
       }
 
       if (end <= start) {
-        message.warning("Vui lòng chọn lại End time lớn hơn Start time.");
+        showToast(
+          "warning",
+          "Please select an End time later than the Start time.",
+        );
         return;
       }
     }
@@ -1369,11 +1371,15 @@ const MyBookingsPage: React.FC = () => {
       },
       {
         key: "history",
-        label: <span className="font-medium tracking-wide">Booking History</span>,
+        label: (
+          <span className="font-medium tracking-wide">Booking History</span>
+        ),
       },
       {
         key: "invitations",
-        label: <span className="font-medium tracking-wide">Event Invitations</span>,
+        label: (
+          <span className="font-medium tracking-wide">Event Invitations</span>
+        ),
       },
     ],
     [],
@@ -1382,7 +1388,11 @@ const MyBookingsPage: React.FC = () => {
   const locationCodeColumnFilters = useMemo(
     () =>
       Array.from(
-        new Set(bookings.map((item) => String(item.locationCode || "").trim()).filter(Boolean)),
+        new Set(
+          bookings
+            .map((item) => String(item.locationCode || "").trim())
+            .filter(Boolean),
+        ),
       ).map((value) => ({ text: value, value })),
     [bookings],
   );
@@ -1390,7 +1400,11 @@ const MyBookingsPage: React.FC = () => {
   const floorColumnFilters = useMemo(
     () =>
       Array.from(
-        new Set(bookings.map((item) => String(item.floor || "").trim()).filter(Boolean)),
+        new Set(
+          bookings
+            .map((item) => String(item.floor || "").trim())
+            .filter(Boolean),
+        ),
       ).map((value) => ({ text: value, value })),
     [bookings],
   );
@@ -1400,7 +1414,9 @@ const MyBookingsPage: React.FC = () => {
       Array.from(
         new Set(
           bookings
-            .map((item) => String(item.buildingName || item.address || "").trim())
+            .map((item) =>
+              String(item.buildingName || item.address || "").trim(),
+            )
             .filter(Boolean),
         ),
       ).map((value) => ({ text: value, value })),
@@ -1410,7 +1426,11 @@ const MyBookingsPage: React.FC = () => {
   const statusColumnFilters = useMemo(
     () =>
       Array.from(
-        new Set(bookings.map((item) => String(item.status || "").trim()).filter(Boolean)),
+        new Set(
+          bookings
+            .map((item) => String(item.status || "").trim())
+            .filter(Boolean),
+        ),
       ).map((value) => ({ text: value, value })),
     [bookings],
   );
@@ -1422,7 +1442,9 @@ const MyBookingsPage: React.FC = () => {
       key: "locationCode",
       width: "17%",
       sorter: (a, b) =>
-        String(a.locationCode || "").localeCompare(String(b.locationCode || "")),
+        String(a.locationCode || "").localeCompare(
+          String(b.locationCode || ""),
+        ),
       filters: locationCodeColumnFilters,
       onFilter: (value, record) =>
         String(record.locationCode || "")
@@ -1439,7 +1461,8 @@ const MyBookingsPage: React.FC = () => {
       dataIndex: "floor",
       key: "floor",
       width: "10%",
-      sorter: (a, b) => String(a.floor || "").localeCompare(String(b.floor || "")),
+      sorter: (a, b) =>
+        String(a.floor || "").localeCompare(String(b.floor || "")),
       filters: floorColumnFilters,
       onFilter: (value, record) =>
         String(record.floor || "")
@@ -1478,12 +1501,21 @@ const MyBookingsPage: React.FC = () => {
       render: (_: unknown, record: Reservation) => (
         <div className="flex flex-col gap-1.5 text-xs">
           <div className="flex items-start gap-1">
-            <span className="mt-0.5 shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Purpose</span>
+            <span className="mt-0.5 shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              Purpose
+            </span>
             <span className="text-slate-700">{record.purpose || "—"}</span>
           </div>
           <div className="flex items-start gap-1">
-            <span className="mt-0.5 shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">Note</span>
-            <span className="max-w-[160px] truncate text-slate-600" title={record.note || ""}>{record.note || "—"}</span>
+            <span className="mt-0.5 shrink-0 rounded bg-slate-100 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              Note
+            </span>
+            <span
+              className="max-w-[160px] truncate text-slate-600"
+              title={record.note || ""}
+            >
+              {record.note || "—"}
+            </span>
           </div>
         </div>
       ),
@@ -1502,7 +1534,9 @@ const MyBookingsPage: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <ClockIcon className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
             <span className="w-8 text-slate-400">Start</span>
-            <span className="font-medium text-slate-700">{formatDatePart(record.startTime)}</span>
+            <span className="font-medium text-slate-700">
+              {formatDatePart(record.startTime)}
+            </span>
             <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700">
               {formatTimePart(record.startTime)}
             </span>
@@ -1510,7 +1544,9 @@ const MyBookingsPage: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <ClockIcon className="h-3.5 w-3.5 shrink-0 text-orange-400" />
             <span className="w-8 text-slate-400">End</span>
-            <span className="font-medium text-slate-700">{formatDatePart(record.endTime)}</span>
+            <span className="font-medium text-slate-700">
+              {formatDatePart(record.endTime)}
+            </span>
             <span className="whitespace-nowrap rounded-full bg-orange-50 px-2 py-0.5 font-semibold text-orange-600">
               {formatTimePart(record.endTime)}
             </span>
@@ -1523,7 +1559,8 @@ const MyBookingsPage: React.FC = () => {
       dataIndex: "status",
       key: "status",
       width: "11%",
-      sorter: (a, b) => String(a.status || "").localeCompare(String(b.status || "")),
+      sorter: (a, b) =>
+        String(a.status || "").localeCompare(String(b.status || "")),
       filters: statusColumnFilters,
       onFilter: (value, record) =>
         String(record.status || "")
@@ -1532,22 +1569,35 @@ const MyBookingsPage: React.FC = () => {
       render: (status: string | undefined) => {
         const s = String(status || "").toUpperCase();
         const label =
-          s === "RESERVED" ? "Reserved"
-          : s === "IN_USE" || s === "CHECKED_IN" ? "In Use"
-          : s === "COMPLETED" ? "Completed"
-          : s === "CANCELLED" ? "Cancelled"
-          : s === "NO_SHOW" ? "No Show"
-          : s === "FORCE_CANCELLED" ? "Force Cancelled"
-          : status || "—";
+          s === "RESERVED"
+            ? "Reserved"
+            : s === "IN_USE" || s === "CHECKED_IN"
+              ? "In Use"
+              : s === "COMPLETED"
+                ? "Completed"
+                : s === "CANCELLED"
+                  ? "Cancelled"
+                  : s === "NO_SHOW"
+                    ? "No Show"
+                    : s === "FORCE_CANCELLED"
+                      ? "Force Cancelled"
+                      : status || "—";
         const cls =
-          s === "RESERVED" ? "bg-emerald-50 text-emerald-700"
-          : s === "IN_USE" || s === "CHECKED_IN" ? "bg-blue-50 text-blue-700"
-          : s === "COMPLETED" ? "bg-cyan-50 text-cyan-700"
-          : s === "CANCELLED" || s === "FORCE_CANCELLED" ? "bg-red-50 text-red-600"
-          : s === "NO_SHOW" ? "bg-amber-50 text-amber-700"
-          : "bg-slate-100 text-slate-500";
+          s === "RESERVED"
+            ? "bg-emerald-50 text-emerald-700"
+            : s === "IN_USE" || s === "CHECKED_IN"
+              ? "bg-blue-50 text-blue-700"
+              : s === "COMPLETED"
+                ? "bg-cyan-50 text-cyan-700"
+                : s === "CANCELLED" || s === "FORCE_CANCELLED"
+                  ? "bg-red-50 text-red-600"
+                  : s === "NO_SHOW"
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-slate-100 text-slate-500";
         return (
-          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>
+          <span
+            className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}
+          >
             {label}
           </span>
         );
@@ -1579,7 +1629,11 @@ const MyBookingsPage: React.FC = () => {
           currentTime,
         );
         const cancelEnabled = canCancel(status, record.startTime, currentTime);
-        const canShowFeedback = activeTab === "ongoing" && status?.toUpperCase() === "COMPLETED" && record.id && !record.feedbackSubmitted;
+        const canShowFeedback =
+          activeTab === "ongoing" &&
+          status?.toUpperCase() === "COMPLETED" &&
+          record.id &&
+          !record.feedbackSubmitted;
         const canRender = {
           checkIn: !!record.id && checkInEnabled,
           returnRoom: !!record.id && returnRoomEnabled,
@@ -1588,17 +1642,33 @@ const MyBookingsPage: React.FC = () => {
           feedback: canShowFeedback,
         };
 
-        if (!canRender.checkIn && !canRender.returnRoom && !canRender.extend && !canRender.cancel && !canRender.feedback) {
-          return <span className="text-xs text-gray-400">No available actions</span>;
+        if (
+          !canRender.checkIn &&
+          !canRender.returnRoom &&
+          !canRender.extend &&
+          !canRender.cancel &&
+          !canRender.feedback
+        ) {
+          return (
+            <span className="text-xs text-gray-400">No available actions</span>
+          );
         }
 
         return (
           <div className="flex flex-wrap gap-1.5">
             {/* Manage Event button */}
-            {record.purpose?.toLowerCase().includes("event") || record.note?.toLowerCase().includes("event") ? (
+            {record.purpose?.toLowerCase().includes("event") ||
+            record.note?.toLowerCase().includes("event") ? (
               <button
                 type="button"
-                onClick={() => navigate(ROUTES.EVENT_SETUP.replace(":reservationId", String(record.id)))}
+                onClick={() =>
+                  navigate(
+                    ROUTES.EVENT_SETUP.replace(
+                      ":reservationId",
+                      String(record.id),
+                    ),
+                  )
+                }
                 className="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600"
               >
                 Manage Event
@@ -1612,7 +1682,9 @@ const MyBookingsPage: React.FC = () => {
                 onClick={() => openActionModal("check-in", record)}
                 className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
               >
-                {isLoading && checkInEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+                {isLoading && checkInEnabled && (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                )}
                 Check-in
               </button>
             )}
@@ -1624,7 +1696,9 @@ const MyBookingsPage: React.FC = () => {
                 onClick={() => openActionModal("return-room", record)}
                 className="inline-flex items-center gap-1 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60"
               >
-                {isLoading && returnRoomEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+                {isLoading && returnRoomEnabled && (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                )}
                 Check Out
               </button>
             )}
@@ -1636,7 +1710,9 @@ const MyBookingsPage: React.FC = () => {
                 onClick={() => openActionModal("extend", record)}
                 className="inline-flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:opacity-60"
               >
-                {isLoading && extendEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />}
+                {isLoading && extendEnabled && (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-orange-300 border-t-orange-600" />
+                )}
                 Extend
               </button>
             )}
@@ -1648,7 +1724,9 @@ const MyBookingsPage: React.FC = () => {
                 onClick={() => openActionModal("cancel", record)}
                 className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
               >
-                {isLoading && cancelEnabled && <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-200 border-t-red-500" />}
+                {isLoading && cancelEnabled && (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-200 border-t-red-500" />
+                )}
                 Cancel
               </button>
             )}
@@ -1684,221 +1762,187 @@ const MyBookingsPage: React.FC = () => {
 
       {activeTab !== "invitations" ? (
         <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-slate-700">Search Filters</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">
+                Search Filters
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.ROOM_LIST)}
+              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-orange-600"
+            >
+              Book a room
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.ROOM_LIST)}
-            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-orange-600"
-          >
-            Book a room
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 xl:col-span-6">
-            <div className="mb-2 text-[11px] font-semibold tracking-wide uppercase text-slate-500">
-              Start time
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)]">
-              <div className="min-w-0">
-                <DatePickerField
-                  value={startDateFilter}
-                  onChange={(nextDate) => setStartDateFilter(nextDate)}
-                />
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 xl:col-span-6">
+              <div className="mb-2 text-[11px] font-semibold tracking-wide uppercase text-slate-500">
+                Start time
               </div>
-              <select
-                value={startHourFilter}
-                onChange={(event) => setStartHourFilter(event.target.value)}
-                className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {HOUR_OPTIONS.map((hour) => (
-                  <option key={hour.value} value={hour.value}>
-                    {hour.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={startMinuteFilter}
-                onChange={(event) => setStartMinuteFilter(event.target.value)}
-                className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {MINUTE_OPTIONS.map((minute) => (
-                  <option key={minute} value={minute}>
-                    {minute}m
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 xl:col-span-6">
-            <div className="mb-2 text-[11px] font-semibold tracking-wide uppercase text-slate-500">
-              End time
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1fr)]">
-              <div className="min-w-0">
-                <DatePickerField
-                  value={endDateFilter}
-                  minDate={startDateFilter || undefined}
-                  onChange={(nextDate) => setEndDateFilter(nextDate)}
-                />
-              </div>
-              <select
-                value={endHourFilter}
-                onChange={(event) => setEndHourFilter(event.target.value)}
-                className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {HOUR_OPTIONS.map((hour) => (
-                  <option key={hour.value} value={hour.value}>
-                    {hour.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={endMinuteFilter}
-                onChange={(event) => setEndMinuteFilter(event.target.value)}
-                className="w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm tabular-nums text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {MINUTE_OPTIONS.map((minute) => (
-                  <option key={minute} value={minute}>
-                    {minute}m
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {timeRangeMessage && (
-            <div className="xl:col-span-12">
-              <div
-                className={`rounded-lg border px-3 py-2 text-sm ${
-                  timeRangeMessage.type === "warning"
-                    ? "border-amber-200 bg-amber-50 text-amber-700"
-                    : "border-red-200 bg-red-50 text-red-700"
-                }`}
-              >
-                {timeRangeMessage.text}
+              <div className="flex items-stretch gap-2">
+                <div className="flex-1 min-w-0">
+                  <DatePickerField
+                    value={startDateFilter}
+                    onChange={(nextDate) => setStartDateFilter(nextDate)}
+                  />
+                </div>
+                <div className="shrink-0">
+                  <TimeSelectField
+                    value={`${startHourFilter}:${startMinuteFilter}`}
+                    onChange={(nextValue) => {
+                      const nextParts = splitTimeValue(
+                        nextValue,
+                        startHourFilter,
+                        startMinuteFilter,
+                      );
+                      setStartHourFilter(nextParts.hour);
+                      setStartMinuteFilter(nextParts.minute);
+                    }}
+                    minuteStep={5}
+                  />
+                </div>
               </div>
             </div>
-          )}
 
-          <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
-            <label className="mb-1 block text-xs font-medium text-slate-500">
-              Location code
-            </label>
-            <Input
-              value={locationCodeFilter}
-              onChange={(event) => setLocationCodeFilter(event.target.value)}
-              placeholder="Search location code"
-              allowClear
-            />
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 xl:col-span-6">
+              <div className="mb-2 text-[11px] font-semibold tracking-wide uppercase text-slate-500">
+                End time
+              </div>
+              <div className="flex items-stretch gap-2">
+                <div className="flex-1 min-w-0">
+                  <DatePickerField
+                    value={endDateFilter}
+                    minDate={startDateFilter || undefined}
+                    onChange={(nextDate) => setEndDateFilter(nextDate)}
+                  />
+                </div>
+                <div className="shrink-0">
+                  <TimeSelectField
+                    value={`${endHourFilter}:${endMinuteFilter}`}
+                    onChange={(nextValue) => {
+                      const nextParts = splitTimeValue(
+                        nextValue,
+                        endHourFilter,
+                        endMinuteFilter,
+                      );
+                      setEndHourFilter(nextParts.hour);
+                      setEndMinuteFilter(nextParts.minute);
+                    }}
+                    minuteStep={5}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                Location code
+              </label>
+              <Input
+                value={locationCodeFilter}
+                onChange={(event) => setLocationCodeFilter(event.target.value)}
+                placeholder="Search location code"
+                allowClear
+              />
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                Building
+              </label>
+              <Select
+                value={selectedBuildingId}
+                className="w-full"
+                onChange={handleBuildingFilterChange}
+                options={[
+                  { value: "all", label: "All buildings" },
+                  ...buildingOptions,
+                ]}
+                placeholder="Filter by building"
+              />
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                Floor
+              </label>
+              <Select
+                value={selectedFloorId}
+                className="w-full"
+                onChange={handleFloorFilterChange}
+                disabled={selectedBuildingId === "all"}
+                options={[
+                  { value: "all", label: "All floors" },
+                  ...floorOptions,
+                ]}
+                placeholder="Filter by floor"
+              />
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
+              <label className="mb-1 block text-xs font-medium text-slate-500">
+                Status
+              </label>
+              <Select
+                value={statusFilter}
+                className="w-full"
+                onChange={setStatusFilter}
+                options={statusSearchOptions}
+                placeholder="Filter by status"
+              />
+            </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
-            <label className="mb-1 block text-xs font-medium text-slate-500">
-              Building
-            </label>
-            <Select
-              value={selectedBuildingId}
-              className="w-full"
-              onChange={handleBuildingFilterChange}
-              options={[
-                { value: "all", label: "All buildings" },
-                ...buildingOptions,
-              ]}
-              placeholder="Filter by building"
-            />
-          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
+            <button
+              type="button"
+              onClick={handleApplyFilters}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={loading}
+            >
+              Search
+            </button>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
-            <label className="mb-1 block text-xs font-medium text-slate-500">
-              Floor
-            </label>
-            <Select
-              value={selectedFloorId}
-              className="w-full"
-              onChange={handleFloorFilterChange}
-              disabled={selectedBuildingId === "all"}
-              options={[
-                { value: "all", label: "All floors" },
-                ...floorOptions,
-              ]}
-              placeholder="Filter by floor"
-            />
-          </div>
+            <button
+              type="button"
+              onClick={handleClearStartTimeSearch}
+              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={loading}
+            >
+              Clear search
+            </button>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-3 xl:col-span-3">
-            <label className="mb-1 block text-xs font-medium text-slate-500">
-              Status
-            </label>
-            <Select
-              value={statusFilter}
-              className="w-full"
-              onChange={setStatusFilter}
-              options={statusSearchOptions}
-              placeholder="Filter by status"
-            />
+            <button
+              type="button"
+              onClick={() =>
+                loadBookings(
+                  page,
+                  pageSize,
+                  activeTab,
+                  appliedBuildingId,
+                  appliedFloorId,
+                  appliedLocationCode,
+                  appliedStatusFilter,
+                  appliedStartTimeFilter,
+                  appliedEndTimeFilter,
+                )
+              }
+              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={loading}
+            >
+              Refresh
+            </button>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
-          <button
-            type="button"
-            onClick={handleApplyFilters}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={loading}
-          >
-            Search
-          </button>
-
-          <button
-            type="button"
-            onClick={handleClearStartTimeSearch}
-            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={loading}
-          >
-            Clear search
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              loadBookings(
-                page,
-                pageSize,
-                activeTab,
-                appliedBuildingId,
-                appliedFloorId,
-                appliedLocationCode,
-                appliedStatusFilter,
-                appliedStartTimeFilter,
-                appliedEndTimeFilter,
-              )
-            }
-            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={loading}
-          >
-            Refresh
-          </button>
-        </div>
-      </div>
       ) : null}
 
       {activeTab !== "invitations" ? (
         <>
-          {error && (
-            <Alert
-              className="mb-4"
-              type="error"
-              showIcon
-              message="Unable to load bookings"
-              description={error}
-            />
-          )}
+          {null /* errors are shown via toast */}
 
           {bookings.length === 0 && !loading && !error ? (
             <Empty
@@ -1919,27 +1963,31 @@ const MyBookingsPage: React.FC = () => {
                   `${record.locationCode || "no-code"}-${record.startTime || "no-time"}-${index}`
                 }
                 loading={loading}
-                columns={columns}
+                columns={
+                  activeTab === "history"
+                    ? columns.filter((col) => col.key !== "actions")
+                    : columns
+                }
                 dataSource={bookings}
-                pagination={{
-                  current: page,
-                  pageSize,
-                  total,
-                  showSizeChanger: true,
-                  pageSizeOptions: ["5", "10", "20"],
-                }}
+                pagination={false}
                 onChange={handleTableChange}
                 onRow={(record) => ({
                   onClick: (event) => {
                     const target = event.target as HTMLElement;
-                    if (target.closest("button") || target.closest(".ant-btn")) {
+                    if (
+                      target.closest("button") ||
+                      target.closest(".ant-btn")
+                    ) {
                       return;
                     }
 
                     if (!record.id) return;
-                    navigate(ROUTES.BOOKING_DETAIL.replace(":bookingId", record.id), {
-                      state: { booking: record },
-                    });
+                    navigate(
+                      ROUTES.BOOKING_DETAIL.replace(":bookingId", record.id),
+                      {
+                        state: { booking: record },
+                      },
+                    );
                   },
                 })}
                 rowClassName={(record) => (record.id ? "cursor-pointer" : "")}
@@ -1947,22 +1995,30 @@ const MyBookingsPage: React.FC = () => {
               />
             </div>
           )}
+
+          {(total > 0 || loading) && (
+            <div className="mt-6 rounded-2xl border border-orange-100 bg-white/90 px-3 py-3 shadow-sm sm:px-4">
+              <CustomPagination
+                currentPage={page}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+                totalItems={loading ? 0 : total}
+                pageSize={pageSize}
+              />
+            </div>
+          )}
         </>
       ) : (
         <>
-          {invitationsError ? (
-            <Alert
-              className="mb-4"
-              type="error"
-              showIcon
-              message="Unable to load invitations"
-              description={invitationsError}
-            />
-          ) : null}
+          {null /* errors are shown via toast */}
 
-          {invitations.length === 0 && !invitationsLoading && !invitationsError ? (
+          {invitations.length === 0 &&
+          !invitationsLoading &&
+          !invitationsError ? (
             <Empty
-              image={<CalendarOutlined style={{ fontSize: 64, color: "#d9d9d9" }} />}
+              image={
+                <CalendarOutlined style={{ fontSize: 64, color: "#d9d9d9" }} />
+              }
               description="No event invitations."
             />
           ) : (
@@ -1997,11 +2053,43 @@ const MyBookingsPage: React.FC = () => {
                     title: "STATUS",
                     dataIndex: "inviteStatus",
                     key: "inviteStatus",
-                    render: (value: string | undefined) => (
-                      <Tag color={String(value || "").toUpperCase() === "ACCEPTED" ? "green" : String(value || "").toUpperCase() === "DECLINED" ? "red" : "gold"}>
-                        {value || "-"}
-                      </Tag>
-                    ),
+                    render: (value: string | undefined) => {
+                      const normalized = String(value || "").toUpperCase();
+                      const label =
+                        normalized === "ACCEPTED"
+                          ? "Accepted"
+                          : normalized === "DECLINED"
+                            ? "Declined"
+                            : normalized === "INVITED"
+                              ? "Invited"
+                              : value || "—";
+                      const cls =
+                        normalized === "ACCEPTED"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : normalized === "DECLINED"
+                            ? "bg-red-50 text-red-600"
+                            : normalized === "INVITED"
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-slate-100 text-slate-500";
+                      const dotCls =
+                        normalized === "ACCEPTED"
+                          ? "bg-emerald-500"
+                          : normalized === "INVITED"
+                            ? "bg-amber-500"
+                            : null;
+                      return (
+                        <span
+                          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}
+                        >
+                          {dotCls && (
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${dotCls}`}
+                            />
+                          )}
+                          {label}
+                        </span>
+                      );
+                    },
                   },
                   {
                     title: "CHECK-IN",
@@ -2048,18 +2136,23 @@ const MyBookingsPage: React.FC = () => {
                         >
                           View
                         </button>
-                        {String(record.inviteStatus || "").toUpperCase() === "INVITED" ? (
+                        {String(record.inviteStatus || "").toUpperCase() ===
+                        "INVITED" ? (
                           <>
                             <button
                               type="button"
-                              onClick={() => respondInvitation(record.id, "ACCEPT")}
+                              onClick={() =>
+                                respondInvitation(record.id, "ACCEPT")
+                              }
                               className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600"
                             >
                               Accept
                             </button>
                             <button
                               type="button"
-                              onClick={() => respondInvitation(record.id, "DECLINE")}
+                              onClick={() =>
+                                respondInvitation(record.id, "DECLINE")
+                              }
                               className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100"
                             >
                               Decline
@@ -2120,10 +2213,12 @@ const MyBookingsPage: React.FC = () => {
           loading:
             !!actionModal?.booking?.id &&
             actionLoadingId === actionModal.booking.id,
-          className: "!bg-emerald-600 hover:!bg-emerald-700 !border-emerald-600 !text-white !h-10 !rounded-lg !font-semibold !transition-all"
+          className:
+            "!bg-emerald-600 hover:!bg-emerald-700 !border-emerald-600 !text-white !h-10 !rounded-lg !font-semibold !transition-all",
         }}
         cancelButtonProps={{
-          className: "!bg-slate-200 !hover:bg-slate-300 !text-slate-800 !border-slate-200 !h-10 !rounded-lg !font-semibold !transition-all"
+          className:
+            "!bg-slate-200 !hover:bg-slate-300 !text-slate-800 !border-slate-200 !h-10 !rounded-lg !font-semibold !transition-all",
         }}
         className="[&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:shadow-lg"
       >
@@ -2138,40 +2233,53 @@ const MyBookingsPage: React.FC = () => {
                   : "Review booking details before canceling this booking."}
           </div>
 
-          {actionModal?.type === "cancel" && userProfile?.cancellationCount === 2 && (
-            <Alert
-              type="warning"
-              showIcon
-              message="Cảnh báo quan trọng"
-              description="Bạn đã hủy đặt phòng 2 lần trong ngày hôm nay. Nếu hủy thêm lần này (lần thứ 3), chức năng đặt phòng của bạn sẽ bị khóa trong 24 giờ tới."
-              className="border-amber-200 bg-amber-50"
-            />
-          )}
+          {actionModal?.type === "cancel" &&
+            userProfile?.cancellationCount === 2 && (
+              <Alert
+                type="warning"
+                showIcon
+                message="Cảnh báo quan trọng"
+                description="Bạn đã hủy đặt phòng 2 lần trong ngày hôm nay. Nếu hủy thêm lần này (lần thứ 3), chức năng đặt phòng của bạn sẽ bị khóa trong 24 giờ tới."
+                className="border-amber-200 bg-amber-50"
+              />
+            )}
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase">Location</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase">
+                  Location
+                </p>
                 <p className="text-sm font-semibold text-slate-800 mt-1">
                   {actionModal?.booking.locationCode || "-"}
                 </p>
               </div>
               <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase">Floor</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase">
+                  Floor
+                </p>
                 <p className="text-sm font-semibold text-slate-800 mt-1">
                   {actionModal?.booking.floor || "-"}
                 </p>
               </div>
               <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase">Building</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase">
+                  Building
+                </p>
                 <p className="text-sm font-semibold text-slate-800 mt-1">
-                  {actionModal?.booking.buildingName || actionModal?.booking.address || "-"}
+                  {actionModal?.booking.buildingName ||
+                    actionModal?.booking.address ||
+                    "-"}
                 </p>
               </div>
               <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase">Status</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase">
+                  Status
+                </p>
                 <div className="mt-1">
-                  <Tag color={getStatusColor(actionModal?.booking.status || "")}>
+                  <Tag
+                    color={getStatusColor(actionModal?.booking.status || "")}
+                  >
                     {actionModal?.booking.status || "-"}
                   </Tag>
                 </div>
@@ -2179,13 +2287,17 @@ const MyBookingsPage: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase">Start time</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase">
+                  Start time
+                </p>
                 <p className="text-sm font-semibold text-slate-800 mt-1">
                   {formatDateTime(actionModal?.booking.startTime || "")}
                 </p>
               </div>
               <div className="rounded-lg bg-slate-50 p-2">
-                <p className="text-xs font-semibold text-slate-500 uppercase">End time</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase">
+                  End time
+                </p>
                 <p className="text-sm font-semibold text-slate-800 mt-1">
                   {formatDateTime(actionModal?.booking.endTime || "")}
                 </p>
@@ -2195,19 +2307,36 @@ const MyBookingsPage: React.FC = () => {
               <div className="border-t border-slate-100 pt-3 space-y-2">
                 {actionModal?.booking.purpose && (
                   <div>
-                    <p className="text-xs font-semibold text-slate-500 uppercase">Purpose</p>
-                    <p className="text-sm text-slate-700 mt-1">{actionModal.booking.purpose}</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase">
+                      Purpose
+                    </p>
+                    <p className="text-sm text-slate-700 mt-1">
+                      {actionModal.booking.purpose}
+                    </p>
                   </div>
                 )}
                 {actionModal?.booking.note && (
                   <div>
-                    <p className="text-xs font-semibold text-slate-500 uppercase">Note</p>
-                    <p className="text-sm text-slate-700 mt-1">{actionModal.booking.note}</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase">
+                      Note
+                    </p>
+                    <p className="text-sm text-slate-700 mt-1">
+                      {actionModal.booking.note}
+                    </p>
                   </div>
                 )}
               </div>
             )}
           </div>
+
+          {actionModalError && (
+            <Alert
+              type="error"
+              showIcon
+              message={actionModalError}
+              className="rounded-lg"
+            />
+          )}
 
           {actionModal?.type === "extend" && (
             <div className="rounded-xl border border-slate-200 bg-blue-50 p-3">
@@ -2225,7 +2354,8 @@ const MyBookingsPage: React.FC = () => {
                 className="w-24 text-center"
               />
               <p className="text-xs text-slate-600 mt-2">
-                Extend your meeting by {extendHour} hour{extendHour > 1 ? 's' : ''}
+                Extend your meeting by {extendHour} hour
+                {extendHour > 1 ? "s" : ""}
               </p>
             </div>
           )}
@@ -2262,19 +2392,22 @@ const MyBookingsPage: React.FC = () => {
         okText="Submit feedback"
         cancelText="Skip"
         onOk={handleSubmitFeedback}
-        okButtonProps={{ 
+        okButtonProps={{
           loading: submittingFeedback,
-          className: "!bg-sky-600 hover:!bg-sky-700 !border-sky-600 !text-white !h-10 !rounded-lg !font-semibold !transition-all"
+          className:
+            "!bg-sky-600 hover:!bg-sky-700 !border-sky-600 !text-white !h-10 !rounded-lg !font-semibold !transition-all",
         }}
-        cancelButtonProps={{ 
+        cancelButtonProps={{
           disabled: submittingFeedback,
-          className: "!bg-slate-200 !hover:bg-slate-300 !text-slate-800 !border-slate-200 !h-10 !rounded-lg !font-semibold !transition-all"
+          className:
+            "!bg-slate-200 !hover:bg-slate-300 !text-slate-800 !border-slate-200 !h-10 !rounded-lg !font-semibold !transition-all",
         }}
         className="[&_.ant-modal-content]:rounded-2xl [&_.ant-modal-content]:shadow-lg"
       >
         <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-sky-50 via-white to-cyan-50 p-5">
           <p className="text-base text-slate-700 font-medium mb-5">
-            Help us improve! Share your experience about the meeting room you just used.
+            Help us improve! Share your experience about the meeting room you
+            just used.
           </p>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -2288,7 +2421,9 @@ const MyBookingsPage: React.FC = () => {
                 <div className="flex items-start gap-2">
                   <MapPinIcon className="mt-0.5 h-4 w-4 text-slate-400" />
                   <div>
-                    <p className="text-xs text-slate-500 font-semibold">Location</p>
+                    <p className="text-xs text-slate-500 font-semibold">
+                      Location
+                    </p>
                     <p className="font-medium text-slate-800">
                       {feedbackModal?.booking.locationCode || "-"}
                     </p>
@@ -2298,7 +2433,9 @@ const MyBookingsPage: React.FC = () => {
                 <div className="flex items-start gap-2">
                   <ClockIcon className="mt-0.5 h-4 w-4 text-slate-400" />
                   <div>
-                    <p className="text-xs text-slate-500 font-semibold">Start time</p>
+                    <p className="text-xs text-slate-500 font-semibold">
+                      Start time
+                    </p>
                     <p className="font-medium text-slate-800">
                       {formatDateTime(feedbackModal?.booking.startTime || "")}
                     </p>
@@ -2308,7 +2445,9 @@ const MyBookingsPage: React.FC = () => {
                 <div className="flex items-start gap-2">
                   <ClockIcon className="mt-0.5 h-4 w-4 text-slate-400" />
                   <div>
-                    <p className="text-xs text-slate-500 font-semibold">End time</p>
+                    <p className="text-xs text-slate-500 font-semibold">
+                      End time
+                    </p>
                     <p className="font-medium text-slate-800">
                       {formatDateTime(feedbackModal?.booking.endTime || "")}
                     </p>
@@ -2318,9 +2457,13 @@ const MyBookingsPage: React.FC = () => {
                 <div className="flex items-start gap-2">
                   <StarIcon className="mt-0.5 h-4 w-4 text-slate-400" />
                   <div>
-                    <p className="text-xs text-slate-500 font-semibold">Building</p>
+                    <p className="text-xs text-slate-500 font-semibold">
+                      Building
+                    </p>
                     <p className="font-medium text-slate-800">
-                      {feedbackModal?.booking.buildingName || feedbackModal?.booking.address || "-"}
+                      {feedbackModal?.booking.buildingName ||
+                        feedbackModal?.booking.address ||
+                        "-"}
                     </p>
                   </div>
                 </div>
@@ -2339,7 +2482,9 @@ const MyBookingsPage: React.FC = () => {
                 </div>
                 <p className="text-center mt-3 text-sm text-slate-700">
                   Satisfaction level:{" "}
-                  <span className="font-bold text-amber-600">{feedbackRating}/5</span>
+                  <span className="font-bold text-amber-600">
+                    {feedbackRating}/5
+                  </span>
                 </p>
               </div>
             </div>
@@ -2360,7 +2505,8 @@ const MyBookingsPage: React.FC = () => {
               className="text-sm border-slate-200 rounded-lg"
             />
             <p className="text-xs text-slate-500 mt-2">
-              Your feedback helps us provide better room facilities and services.
+              Your feedback helps us provide better room facilities and
+              services.
             </p>
           </div>
         </div>

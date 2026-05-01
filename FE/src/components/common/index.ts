@@ -6,3 +6,4 @@ export { default as ChangePasswordModal } from "./ChangePasswordModal";
 export { default as AiChatWidget } from "./AiChatWidget";
 export { default as ImportModal } from "./ImportModal";
 export { default as ConfirmDialog } from "./ConfirmDialog";
+export { default as CustomPagination } from "./CustomPagination";

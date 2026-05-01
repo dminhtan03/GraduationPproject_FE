@@ -1,5 +1,5 @@
-import type { AnimatedDropdownOption } from "../../components/common/AnimatedDropdown";
-import type { MapRoomStatus } from "../../utils";
+import type { AnimatedDropdownOption } from "../components/common/AnimatedDropdown";
+import type { MapRoomStatus } from "../utils";
 
 export const ROOM_LAYOUT_STORAGE_KEY = "room-map-layout-order";
 export const FEEDBACK_PAGE_SIZE = 5;

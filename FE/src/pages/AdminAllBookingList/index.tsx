@@ -4,8 +4,6 @@ import {
   Alert,
   Select,
   Input,
-  Button,
-  Tag,
   Space,
   Empty,
   Tooltip,
@@ -25,6 +23,7 @@ import { extractApiMessage } from "../../utils/errorHandlers";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
+import { CustomPagination } from "../../components/common";
 
 interface BookingRow {
   id?: string;
@@ -74,13 +73,6 @@ const pad = (value: number) => value.toString().padStart(2, "0");
 const ALL_HOURS = Array.from({ length: 24 }, (_, index) => pad(index));
 const MINUTE_OPTIONS = ["00", "10", "20", "30", "40", "50", "59"];
 
-const toDatePart = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
 const DEFAULT_START_CLOCK = "00:00";
 const DEFAULT_END_CLOCK = "23:59";
 
@@ -97,18 +89,6 @@ const getClockHour = (clock: string) => {
 const getClockMinute = (clock: string) => {
   if (!clock.includes(":")) return "";
   return clock.split(":")[1] || "";
-};
-
-const getStatusColor = (status: string) => {
-  const normalized = status?.trim().toUpperCase() || "";
-  if (normalized === "RESERVED") return "green";
-  if (normalized === "IN_USE") return "blue";
-  if (normalized === "COMPLETED") return "cyan";
-  if (normalized === "CANCELLED") return "red";
-  if (normalized === "FORCE_CANCELLED") return "volcano";
-  if (normalized === "NO_SHOW") return "orange";
-  if (normalized === "FAILED") return "orange";
-  return "default";
 };
 
 const parseDate = (dateStr?: string) => {
@@ -140,18 +120,6 @@ const parseFloorNumber = (text: string): number | null => {
   if (!matched) return null;
   const value = Number(matched[1]);
   return Number.isFinite(value) ? value : null;
-};
-
-const formatDate = (dateStr?: string) => {
-  const date = parseDate(dateStr);
-  if (!date) return "-";
-  return date.toLocaleDateString();
-};
-
-const formatTime = (dateStr?: string) => {
-  const date = parseDate(dateStr);
-  if (!date) return "-";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
 const AdminAllBookingListPage: React.FC = () => {
@@ -220,16 +188,21 @@ const AdminAllBookingListPage: React.FC = () => {
   const loadBuildingOptions = useCallback(async () => {
     try {
       const response = await adminService.getAllBuildings();
-      const buildings = Array.isArray(response)
+      const rawBuildings = Array.isArray(response)
         ? response
         : Array.isArray(response?.items)
           ? response.items
           : Array.isArray(response?.content)
             ? response.content
             : [];
+      const buildings: Array<Record<string, unknown>> = Array.isArray(
+        rawBuildings,
+      )
+        ? (rawBuildings as Array<Record<string, unknown>>)
+        : [];
 
       const mapped = buildings
-        .map((item: any) => {
+        .map((item) => {
           const id = String(item?.id ?? item?.buildingId ?? "").trim();
           const name = String(item?.name ?? item?.buildingName ?? "").trim();
           if (!id || !name) return null;
@@ -480,50 +453,6 @@ const AdminAllBookingListPage: React.FC = () => {
     return normalized === "RESERVED" || normalized === "IN_USE";
   };
 
-  const generatePaginationItems = (
-    currentPage: number,
-    totalPages: number,
-  ): Array<{ number?: number; type: "page" | "jumper" }> => {
-    // If total pages <= 5, show all
-    if (totalPages <= 5) {
-      return Array.from({ length: totalPages }, (_, i) => ({
-        number: i + 1,
-        type: "page" as const,
-      }));
-    }
-
-    const items: Array<{ number?: number; type: "page" | "jumper" }> = [];
-
-    // Calculate range: currentPage ± 2
-    const rangeStart = Math.max(1, currentPage - 2);
-    const rangeEnd = Math.min(totalPages, currentPage + 2);
-
-    // Add first page if not in range
-    if (rangeStart > 1) {
-      items.push({ number: 1, type: "page" });
-      // Add jumper if there's a gap after page 1
-      if (rangeStart > 2) {
-        items.push({ type: "jumper" });
-      }
-    }
-
-    // Add pages in range
-    for (let i = rangeStart; i <= rangeEnd; i++) {
-      items.push({ number: i, type: "page" });
-    }
-
-    // Add last page if not in range
-    if (rangeEnd < totalPages) {
-      // Add jumper if there's a gap before last page
-      if (rangeEnd < totalPages - 1) {
-        items.push({ type: "jumper" });
-      }
-      items.push({ number: totalPages, type: "page" });
-    }
-
-    return items;
-  };
-
   const reloadBookings = async () => {
     const normalizedStart = normalizeDateTimeForApi(appliedStartDate);
     const normalizedEnd = normalizeDateTimeForApi(appliedEndDate);
@@ -678,9 +607,44 @@ const AdminAllBookingListPage: React.FC = () => {
         String(record.status || "")
           .toLowerCase()
           .includes(String(value).toLowerCase()),
-      render: (status: string) => (
-        <Tag color={getStatusColor(status)}>{status || "-"}</Tag>
-      ),
+      render: (status: string | undefined) => {
+        const normalized = String(status || "").toUpperCase();
+        const label =
+          normalized === "IN_USE" || normalized === "CHECKED_IN"
+            ? "On-going"
+            : normalized === "APPROVED" || normalized === "RESERVED"
+              ? "In-coming"
+              : normalized === "COMPLETED"
+                ? "Completed"
+                : normalized === "CANCELLED" ||
+                    normalized === "NO_SHOW" ||
+                    normalized === "FORCE_CANCELLED"
+                  ? "Cancelled"
+                  : normalized === "PENDING"
+                    ? "Pending"
+                    : status || "—";
+        const cls =
+          normalized === "IN_USE" || normalized === "CHECKED_IN"
+            ? "bg-emerald-50 text-emerald-700"
+            : normalized === "APPROVED" || normalized === "RESERVED"
+              ? "bg-blue-50 text-blue-700"
+              : normalized === "COMPLETED"
+                ? "bg-slate-100 text-slate-700"
+                : normalized === "CANCELLED" ||
+                    normalized === "NO_SHOW" ||
+                    normalized === "FORCE_CANCELLED"
+                  ? "bg-red-50 text-red-600"
+                  : normalized === "PENDING"
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-slate-100 text-slate-500";
+        return (
+          <span
+            className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}
+          >
+            {label}
+          </span>
+        );
+      },
     },
     {
       title: "ACTIONS",
@@ -728,14 +692,16 @@ const AdminAllBookingListPage: React.FC = () => {
 
             {canForceCancel(record.status) && Boolean(reservationKey) && (
               <Tooltip title="Force cancel booking">
-                <Button
-                  danger
-                  size="small"
-                  loading={forceCancelLoadingId === reservationKey}
+                <button
+                  type="button"
                   onClick={() => handleForceCancel(record)}
+                  disabled={forceCancelLoadingId === reservationKey}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-red-300 hover:bg-red-100 hover:shadow disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Force Cancel
-                </Button>
+                  {forceCancelLoadingId === reservationKey
+                    ? "Cancelling..."
+                    : "Force Cancel"}
+                </button>
               </Tooltip>
             )}
           </Space>
@@ -1110,74 +1076,30 @@ const AdminAllBookingListPage: React.FC = () => {
                 />
 
                 {/* Custom Pagination */}
-                <div className="border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50">
-                  <div className="text-sm text-slate-700 font-medium">
-                    {total > 0
-                      ? `Results: ${(page - 1) * pageSize + 1} - ${Math.min(
-                          page * pageSize,
-                          total,
-                        )} of ${total}`
-                      : "0 of 0"}
-                  </div>
+                <div className="border-t border-slate-200 px-6 py-4 bg-slate-50">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <CustomPagination
+                      currentPage={page}
+                      totalPages={Math.ceil(total / pageSize)}
+                      onPageChange={(p) => setPage(p)}
+                      totalItems={total}
+                      pageSize={pageSize}
+                      className="w-full lg:flex-1"
+                    />
 
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    <button
-                      onClick={() => setPage(Math.max(1, page - 1))}
-                      disabled={page === 1}
-                      className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:text-slate-300 disabled:hover:bg-white transition-all"
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setPage(1);
+                      }}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                     >
-                      &lt;
-                    </button>
-
-                    {generatePaginationItems(
-                      page,
-                      Math.ceil(total / pageSize),
-                    ).map((item, index) =>
-                      item.type === "page" ? (
-                        <button
-                          key={`page-${item.number}`}
-                          onClick={() => setPage(item.number || 1)}
-                          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                            page === item.number
-                              ? "bg-slate-900 text-white shadow-md"
-                              : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
-                          }`}
-                        >
-                          {item.number}
-                        </button>
-                      ) : (
-                        <span
-                          key={`jumper-${index}`}
-                          className="px-2 text-slate-400 font-semibold"
-                        >
-                          ...
-                        </span>
-                      ),
-                    )}
-
-                    <button
-                      onClick={() =>
-                        setPage(Math.min(Math.ceil(total / pageSize), page + 1))
-                      }
-                      disabled={page >= Math.ceil(total / pageSize)}
-                      className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:text-slate-300 disabled:hover:bg-white transition-all"
-                    >
-                      &gt;
-                    </button>
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                    </select>
                   </div>
-
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setPage(1);
-                    }}
-                    className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-                  >
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                  </select>
                 </div>
               </>
             )}

@@ -49,7 +49,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
       path: ROUTES.ADMIN_ALL_BOOKINGS,
     },
     {
-      label: "Manage Event Booking",
+      label: "Event Booking Management",
       icon: CalendarDaysIcon,
       path: ROUTES.ADMIN_EVENT_BOOKINGS,
     },
@@ -64,7 +64,7 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
       path: ROUTES.ADMIN_AMENITY_MANAGEMENT,
     },
     {
-      label: "Service Items",
+      label: "Service Management",
       icon: ClipboardDocumentListIcon,
       path: ROUTES.ADMIN_SERVICE_ITEMS,
     },

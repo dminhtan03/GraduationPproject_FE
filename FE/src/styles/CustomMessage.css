@@ -60,8 +60,8 @@
 }
 
 .custom-message.warning {
-  background: #ffc107;
-  color: #212529;
+  background: #eab308;
+  color: #fff;
 }
 
 .custom-message.info {

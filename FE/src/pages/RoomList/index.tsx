@@ -266,61 +266,79 @@ const DashboardPage: React.FC = () => {
     }
   }, [endDate, endHour, endMinute, minEndDate, minEndMinutes]);
 
-  const loadRooms = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const mapData = await roomService.getRoomsMap();
-      const buildings: RawMapBuilding[] = Array.isArray(
-        mapData.buildingResponse,
-      )
-        ? (mapData.buildingResponse as RawMapBuilding[])
-        : [];
+  const normalizeRoomsMap = useCallback((mapData: unknown): RoomListItem[] => {
+    const buildings: RawMapBuilding[] = Array.isArray(
+      (mapData as { buildingResponse?: unknown })?.buildingResponse,
+    )
+      ? ((mapData as { buildingResponse?: unknown })
+          .buildingResponse as RawMapBuilding[])
+      : [];
 
-      const flattened: RoomListItem[] = [];
-      buildings.forEach((building) => {
-        const floors = Array.isArray(building.floors) ? building.floors : [];
-        floors.forEach((floor) => {
-          const floorRooms = Array.isArray(floor.rooms) ? floor.rooms : [];
-          floorRooms.forEach((room) => {
-            const roomId = room.roomId || room.id;
-            if (!roomId) return;
+    const flattened: RoomListItem[] = [];
+    buildings.forEach((building) => {
+      const floors = Array.isArray(building.floors) ? building.floors : [];
+      floors.forEach((floor) => {
+        const floorRooms = Array.isArray(floor.rooms) ? floor.rooms : [];
+        floorRooms.forEach((room) => {
+          const roomId = room.roomId || room.id;
+          if (!roomId) return;
 
-            const rawStatus = String(room.status || "").toUpperCase();
-            const normalizedStatus: RoomListStatus =
-              rawStatus === "BROKEN"
-                ? "BROKEN"
-                : rawStatus === "UNAVAILABLE"
-                  ? "UNAVAILABLE"
-                  : rawStatus === "LEARNING"
-                    ? "LEARNING"
-                    : "AVAILABLE";
+          const rawStatus = String(room.status || "").toUpperCase();
+          const normalizedStatus: RoomListStatus =
+            rawStatus === "BROKEN"
+              ? "BROKEN"
+              : rawStatus === "UNAVAILABLE"
+                ? "UNAVAILABLE"
+                : rawStatus === "LEARNING"
+                  ? "LEARNING"
+                  : "AVAILABLE";
 
-            flattened.push({
-              id: roomId,
-              roomName: room.locationCode || room.roomName || "",
-              building: building.buildingName || "",
-              floorInfo: floor.floorName || "",
-              status: normalizedStatus,
-              buildingId: building.buildingId,
-              floorId: floor.floorId,
-            });
+          flattened.push({
+            id: roomId,
+            roomName: room.locationCode || room.roomName || "",
+            building: building.buildingName || "",
+            floorInfo: floor.floorName || "",
+            status: normalizedStatus,
+            buildingId: building.buildingId,
+            floorId: floor.floorId,
           });
         });
       });
+    });
 
-      setRooms(flattened);
-    } catch (e: unknown) {
-      setError(extractApiMessage(e, "Unable to load room data"));
-      setRooms([]);
-    } finally {
-      setLoading(false);
-    }
+    return flattened;
   }, []);
 
+  const loadRooms = useCallback(
+    async (skipLoading = false) => {
+      if (!skipLoading) {
+        setLoading(true);
+      }
+      setError(null);
+      try {
+        const mapData = await roomService.getRoomsMap();
+        setRooms(normalizeRoomsMap(mapData));
+      } catch (e: unknown) {
+        setError(extractApiMessage(e, "Unable to load room data"));
+        setRooms([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [normalizeRoomsMap],
+  );
+
   useEffect(() => {
-    loadRooms();
-  }, [loadRooms]);
+    const cached = roomService.getRoomsMapCached();
+    const hasCached = Boolean(cached);
+
+    if (cached) {
+      setRooms(normalizeRoomsMap(cached));
+      setLoading(false);
+    }
+
+    loadRooms(hasCached);
+  }, [loadRooms, normalizeRoomsMap]);
 
   const columns: ColumnsType<RoomListItem> = [
     {

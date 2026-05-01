@@ -1,165 +1,106 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Typography, TimePicker, DatePicker, Tag } from "antd";
+import { Typography, Tag } from "antd";
 import { ClockIcon, CalendarDaysIcon } from "@heroicons/react/24/outline";
-import dayjs, { type Dayjs } from "dayjs";
 import { api } from "../../services/api";
 import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
 import { roomService } from "../../services/roomService";
-import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
 import { extractApiMessage } from "../../utils/errorHandlers";
+import DatePickerField from "../../components/common/DatePickerField";
+import TimeSelectField from "../../components/common/TimeSelectField";
+import {
+  DEFAULT_RECURRING_SERIES_DAYS,
+  RECURRING_SERIES_DAYS,
+  type RecurringSeriesDay,
+} from "../../constants/recurringSeries";
+import type { RecurringSeries, RoomOption } from "../../types/recurringSeries";
+import {
+  buildRoomOptionsFromMap,
+  formatDateRange,
+  formatDaysOfWeek,
+  formatTimeRange,
+  getRecurringSeriesStatusColor,
+  toMinutesFromTime,
+  toTimeWithSeconds,
+} from "../../utils/recurringSeries";
+import { getCurrentTimeRange, toDateInputValue } from "../../utils";
 
 const { Title, Paragraph } = Typography;
 
-type Series = {
-  id: string;
-  roomId: string;
-  roomCode: string;
-  startTimeOfDay: string;
-  endTimeOfDay: string;
-  daysOfWeek: string;
-  purpose: string;
-  note?: string | null;
-  fromDate: string;
-  untilDate?: string | null;
-  rollingWindowWeeks?: number | null;
-  status: string;
-  lastSyncUntil?: string | null;
-  createdAt?: string | null;
-};
-
-type RoomOption = {
-  id: string;
-  locationCode: string;
-  roomName: string;
-};
-
-const DAYS: Array<{ key: string; label: string }> = [
-  { key: "MONDAY", label: "Mon" },
-  { key: "TUESDAY", label: "Tue" },
-  { key: "WEDNESDAY", label: "Wed" },
-  { key: "THURSDAY", label: "Thu" },
-  { key: "FRIDAY", label: "Fri" },
-  { key: "SATURDAY", label: "Sat" },
-  { key: "SUNDAY", label: "Sun" },
-];
-
-// Helper: Convert DAYS string to short labels
-const formatDaysOfWeek = (daysString: string): string => {
-  if (!daysString) return "";
-  const days = daysString.split(",").map((d) => d.trim());
-  return days
-    .map((day) => {
-      const found = DAYS.find((d) => d.key === day);
-      return found ? found.label : day;
-    })
-    .join(", ");
-};
-
-// Helper: Format date range
-const formatDateRange = (fromDate: string, untilDate?: string | null): string => {
-  if (!fromDate) return "-";
-  const from = fromDate.split("-").slice(1).reverse().join("/"); // YYYY-MM-DD → DD/MM
-  if (!untilDate) return from;
-  const until = untilDate.split("-").slice(1).reverse().join("/");
-  return `${from} → ${until}`;
-};
-
-// Helper: Format time
-const formatTimeRange = (startTime: string, endTime: string): string => {
-  return `${String(startTime).slice(0, 5)} - ${String(endTime).slice(0, 5)}`;
-};
-
-// Helper: Get status color
-const getStatusColor = (status: string): string => {
-  const upper = status.toUpperCase();
-  if (upper === "ACTIVE") return "success";
-  if (upper === "CANCELLED") return "error";
-  if (upper === "PAUSED") return "warning";
-  return "default";
-};
-
 // start+ chức năng đặt phòng lặp lại (demo UI)
 const MyRecurringSeriesPage: React.FC = () => {
-  const [series, setSeries] = useState<Series[]>([]);
+  const [series, setSeries] = useState<RecurringSeries[]>([]);
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{ type: MessageType; message: string } | null>(
-    null,
-  );
+  const [toast, setToast] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [roomSearch, setRoomSearch] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  
-  const [form, setForm] = useState({
-    roomId: "",
-    roomName: "",
-    startTimeOfDay: "08:00",
-    endTimeOfDay: "09:00",
-    startTime: dayjs("08:00", "HH:mm") as Dayjs | null,
-    endTime: dayjs("09:00", "HH:mm") as Dayjs | null,
-    daysOfWeek: ["MONDAY", "WEDNESDAY", "FRIDAY"] as string[],
-    fromDate: "",
-    untilDate: "",
-    fromDateObj: null as Dayjs | null,
-    untilDateObj: null as Dayjs | null,
-    purpose: "Recurring booking",
-    note: "",
-  });
+
+  const createDefaultForm = () => {
+    const timeRange = getCurrentTimeRange();
+    return {
+      roomId: "",
+      roomName: "",
+      startTime: `${timeRange.startHour}:${timeRange.startMinute}`,
+      endTime: `${timeRange.endHour}:${timeRange.endMinute}`,
+      daysOfWeek: [...DEFAULT_RECURRING_SERIES_DAYS],
+      fromDate: timeRange.startDate,
+      untilDate: "",
+      purpose: "Recurring booking",
+      note: "",
+    };
+  };
+
+  const [form, setForm] = useState(createDefaultForm);
 
   // Load all rooms for search
   useEffect(() => {
     if (!isModalOpen) return;
-    
+
+    const cached = roomService.getRoomsMapCached();
+    const hasCached = Boolean(cached);
+
+    if (cached) {
+      setRooms(buildRoomOptionsFromMap(cached));
+      setRoomsLoading(false);
+    }
+
     const loadRooms = async () => {
-      setRoomsLoading(true);
+      if (!hasCached) {
+        setRoomsLoading(true);
+      }
       try {
         const roomsMap = await roomService.getRoomsMap();
-        const allRooms: RoomOption[] = [];
-        
-        if (roomsMap.buildingResponse) {
-          roomsMap.buildingResponse.forEach((building) => {
-            building.floors?.forEach((floor) => {
-              floor.rooms?.forEach((room: any) => {
-                if (room.roomId || room.id) {
-                  allRooms.push({
-                    id: room.roomId || room.id,
-                    locationCode: room.locationCode || "",
-                    roomName: room.roomName || room.locationCode || room.roomId || room.id,
-                  });
-                }
-              });
-            });
-          });
-        }
-        
-        setRooms(allRooms);
-      } catch (err: any) {
-        const msg = err?.response?.data?.message || err?.message || "Failed to load rooms";
-        setToast({ type: "error", message: String(msg) });
+        setRooms(buildRoomOptionsFromMap(roomsMap));
+      } catch (err: unknown) {
+        setToast({
+          type: "error",
+          message: extractApiMessage(err, "Failed to load rooms"),
+        });
       } finally {
         setRoomsLoading(false);
       }
     };
-    
+
     loadRooms();
   }, [isModalOpen]);
 
   const payload = useMemo(() => {
-    // Convert dayjs objects to string format
-    const start = form.startTime ? form.startTime.format("HH:mm:00") : null;
-    const end = form.endTime ? form.endTime.format("HH:mm:00") : null;
-    const fromDateStr = form.fromDateObj ? form.fromDateObj.format("YYYY-MM-DD") : null;
-    const untilDateStr = form.untilDateObj ? form.untilDateObj.format("YYYY-MM-DD") : null;
-    
     return {
       roomId: form.roomId.trim(),
-      startTimeOfDay: start,
-      endTimeOfDay: end,
+      startTimeOfDay: form.startTime ? toTimeWithSeconds(form.startTime) : null,
+      endTimeOfDay: form.endTime ? toTimeWithSeconds(form.endTime) : null,
       daysOfWeek: form.daysOfWeek,
-      fromDate: fromDateStr,
-      untilDate: untilDateStr,
+      fromDate: form.fromDate ? form.fromDate : null,
+      untilDate: form.untilDate ? form.untilDate : null,
       rollingWindowWeeks: null,
       purpose: form.purpose.trim(),
       note: form.note.trim() || null,
@@ -183,18 +124,26 @@ const MyRecurringSeriesPage: React.FC = () => {
     }
 
     if (form.startTime && form.endTime) {
-      if (!form.endTime.isAfter(form.startTime)) {
-        errors.endTimeOfDay = "End time must be later than start time";
+      const startMinutes = toMinutesFromTime(form.startTime);
+      const endMinutes = toMinutesFromTime(form.endTime);
+      if (!Number.isNaN(startMinutes) && !Number.isNaN(endMinutes)) {
+        if (endMinutes <= startMinutes) {
+          errors.endTimeOfDay = "End time must be later than start time";
+        }
       }
     }
 
-    if (!form.fromDateObj) {
+    if (!form.fromDate) {
       errors.fromDate = "From date is required";
     } else {
-      const today = dayjs().startOf("day");
-      if (form.fromDateObj.isBefore(today)) {
+      const todayValue = toDateInputValue(new Date());
+      if (form.fromDate < todayValue) {
         errors.fromDate = "From date cannot be in the past";
       }
+    }
+
+    if (form.untilDate && form.fromDate && form.untilDate < form.fromDate) {
+      errors.untilDate = "Until date must be after from date";
     }
 
     if (!form.purpose.trim()) {
@@ -214,10 +163,11 @@ const MyRecurringSeriesPage: React.FC = () => {
     const search = roomSearch.toLowerCase().trim();
     if (!search) return rooms;
 
-    return rooms.filter((room) =>
-      room.locationCode.toLowerCase().includes(search) ||
-      room.roomName.toLowerCase().includes(search) ||
-      room.id.toLowerCase().includes(search)
+    return rooms.filter(
+      (room) =>
+        room.locationCode.toLowerCase().includes(search) ||
+        room.roomName.toLowerCase().includes(search) ||
+        room.id.toLowerCase().includes(search),
     );
   }, [rooms, roomSearch]);
 
@@ -225,11 +175,17 @@ const MyRecurringSeriesPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await api.get(API_ENDPOINTS.RESERVATION_SERIES.MY);
-      const raw = (res.data as any)?.data ?? res.data;
-      setSeries(Array.isArray(raw) ? (raw as Series[]) : []);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Failed to load series";
-      setToast({ type: "error", message: String(msg) });
+      const payload = res.data as { data?: unknown } | unknown;
+      const raw =
+        payload && typeof payload === "object" && "data" in payload
+          ? (payload as { data?: unknown }).data
+          : payload;
+      setSeries(Array.isArray(raw) ? (raw as RecurringSeries[]) : []);
+    } catch (err: unknown) {
+      setToast({
+        type: "error",
+        message: extractApiMessage(err, "Failed to load series"),
+      });
     } finally {
       setLoading(false);
     }
@@ -239,25 +195,46 @@ const MyRecurringSeriesPage: React.FC = () => {
     load();
   }, []);
 
-  const toggleDay = (day: string) => {
+  const openModal = () => {
+    setForm(createDefaultForm());
+    setFormErrors({});
+    setRoomSearch("");
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setFormErrors({});
+    setRoomSearch("");
+  };
+
+  const toggleDay = (day: RecurringSeriesDay) => {
     setForm((prev) => {
       const exists = prev.daysOfWeek.includes(day);
       return {
         ...prev,
-        daysOfWeek: exists ? prev.daysOfWeek.filter((d) => d !== day) : [...prev.daysOfWeek, day],
+        daysOfWeek: exists
+          ? prev.daysOfWeek.filter((d) => d !== day)
+          : [...prev.daysOfWeek, day],
       };
     });
   };
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       setToast({ type: "error", message: "Please fix the errors in the form" });
       return;
     }
 
-    if (!payload.roomId || !payload.startTimeOfDay || !payload.endTimeOfDay || !payload.fromDate) return;
+    if (
+      !payload.roomId ||
+      !payload.startTimeOfDay ||
+      !payload.endTimeOfDay ||
+      !payload.fromDate
+    )
+      return;
     if (!payload.purpose) return;
     if (!payload.daysOfWeek.length) return;
 
@@ -274,25 +251,10 @@ const MyRecurringSeriesPage: React.FC = () => {
         note: payload.note,
       });
       setToast({ type: "success", message: "Series created and synced" });
-      setIsModalOpen(false);
-      setFormErrors({});
-      setForm({
-        roomId: "",
-        roomName: "",
-        startTimeOfDay: "08:00",
-        endTimeOfDay: "09:00",
-        startTime: dayjs("08:00", "HH:mm"),
-        endTime: dayjs("09:00", "HH:mm"),
-        daysOfWeek: ["MONDAY", "WEDNESDAY", "FRIDAY"],
-        fromDate: "",
-        untilDate: "",
-        fromDateObj: null,
-        untilDateObj: null,
-        purpose: "Recurring booking",
-        note: "",
-      });
+      closeModal();
+      setForm(createDefaultForm());
       load();
-    } catch (err: any) {
+    } catch (err: unknown) {
       const msg = extractApiMessage(err, "Create series failed");
       setToast({ type: "error", message: String(msg) });
     }
@@ -300,24 +262,37 @@ const MyRecurringSeriesPage: React.FC = () => {
 
   const syncNow = async (seriesId: string) => {
     try {
-      await api.put(buildUrl(API_ENDPOINTS.RESERVATION_SERIES.SYNC, { seriesId }));
+      await api.put(
+        buildUrl(API_ENDPOINTS.RESERVATION_SERIES.SYNC, { seriesId }),
+      );
       setToast({ type: "success", message: "Synced successfully" });
       load();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Sync failed";
-      setToast({ type: "error", message: String(msg) });
+    } catch (err: unknown) {
+      setToast({
+        type: "error",
+        message: extractApiMessage(err, "Sync failed"),
+      });
     }
   };
 
   const cancel = async (seriesId: string) => {
-    if (!window.confirm("Cancel this recurring series? Future reservations will be cancelled.")) return;
+    if (
+      !window.confirm(
+        "Cancel this recurring series? Future reservations will be cancelled.",
+      )
+    )
+      return;
     try {
-      await api.delete(buildUrl(API_ENDPOINTS.RESERVATION_SERIES.CANCEL, { seriesId }));
+      await api.delete(
+        buildUrl(API_ENDPOINTS.RESERVATION_SERIES.CANCEL, { seriesId }),
+      );
       setToast({ type: "success", message: "Series cancelled" });
       load();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Cancel failed";
-      setToast({ type: "error", message: String(msg) });
+    } catch (err: unknown) {
+      setToast({
+        type: "error",
+        message: extractApiMessage(err, "Cancel failed"),
+      });
     }
   };
 
@@ -325,16 +300,19 @@ const MyRecurringSeriesPage: React.FC = () => {
     <div className="fade-in">
       <Title level={2}>My Recurring Series</Title>
       <Paragraph className="text-gray-600 mb-6">
-        Manage your recurring room reservations. Create series to automatically book rooms on a regular schedule.
+        Manage your recurring room reservations. Create series to automatically
+        book rooms on a regular schedule.
       </Paragraph>
 
       <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold text-slate-700">Recurring Series</p>
+            <p className="text-sm font-semibold text-slate-700">
+              Recurring Series
+            </p>
           </div>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={openModal}
             className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
           >
             Create series
@@ -346,18 +324,33 @@ const MyRecurringSeriesPage: React.FC = () => {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
-              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">Room</th>
-              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">Time</th>
-              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">Days</th>
-              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">Range</th>
-              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">Status</th>
-              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-right">Actions</th>
+              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                Room
+              </th>
+              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                Time
+              </th>
+              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                Days
+              </th>
+              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                Range
+              </th>
+              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                Status
+              </th>
+              <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-right">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td
+                  colSpan={6}
+                  className="px-4 py-10 text-center text-sm text-slate-500"
+                >
                   Loading...
                 </td>
               </tr>
@@ -365,9 +358,11 @@ const MyRecurringSeriesPage: React.FC = () => {
               series.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50/50 transition">
                   <td className="px-4 py-3">
-                    <div className="font-semibold text-slate-900">{s.roomCode}</div>
+                    <div className="font-semibold text-slate-900">
+                      {s.roomCode}
+                    </div>
                   </td>
-                  
+
                   {/* Time Cell */}
                   <td className="px-4 py-3">
                     <div className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-1.5">
@@ -377,7 +372,7 @@ const MyRecurringSeriesPage: React.FC = () => {
                       </span>
                     </div>
                   </td>
-                  
+
                   {/* Days Cell */}
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
@@ -393,22 +388,27 @@ const MyRecurringSeriesPage: React.FC = () => {
                         ))}
                     </div>
                   </td>
-                  
+
                   {/* Range Cell */}
                   <td className="px-4 py-3">
                     <div className="inline-flex items-center gap-2 text-sm text-slate-700">
                       <CalendarDaysIcon className="h-4 w-4 text-amber-600" />
-                      <span className="font-medium">{formatDateRange(s.fromDate, s.untilDate)}</span>
+                      <span className="font-medium">
+                        {formatDateRange(s.fromDate, s.untilDate)}
+                      </span>
                     </div>
                   </td>
-                  
+
                   {/* Status Cell */}
                   <td className="px-4 py-3">
-                    <Tag color={getStatusColor(s.status)} className="px-2 py-1 text-xs font-semibold">
+                    <Tag
+                      color={getRecurringSeriesStatusColor(s.status)}
+                      className="px-2 py-1 text-xs font-semibold"
+                    >
                       {s.status}
                     </Tag>
                   </td>
-                  
+
                   <td className="px-4 py-3 text-right">
                     <div className="inline-flex items-center gap-2">
                       <button
@@ -429,7 +429,10 @@ const MyRecurringSeriesPage: React.FC = () => {
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td
+                  colSpan={6}
+                  className="px-4 py-10 text-center text-sm text-slate-500"
+                >
                   No recurring series yet.
                 </td>
               </tr>
@@ -439,234 +442,256 @@ const MyRecurringSeriesPage: React.FC = () => {
       </div>
 
       {isModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 z-10">
-              <h2 className="text-lg font-bold text-slate-900">Create recurring series</h2>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 px-4 py-6 backdrop-blur-sm sm:items-center sm:px-6 sm:py-10">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-4 text-white sm:px-6">
+              <div>
+                <h2 className="text-lg font-bold">Create recurring series</h2>
+                <p className="text-xs text-orange-100">
+                  Auto-book rooms on a weekly schedule.
+                </p>
+              </div>
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setFormErrors({});
-                  setRoomSearch("");
-                }}
-                className="rounded-lg px-2 py-1 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                onClick={closeModal}
+                className="rounded-full border border-white/40 px-3 py-1 text-xs font-semibold text-white hover:bg-white/10"
               >
                 Close
               </button>
             </div>
 
-            <form onSubmit={create} className="space-y-4 px-6 py-5">
-              {/* Room Select with Search */}
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-slate-700">
-                  Room Name <span className="text-red-500">*</span>
-                </label>
+            <form
+              onSubmit={create}
+              className="flex-1 space-y-6 overflow-y-auto px-4 py-6 sm:px-6"
+            >
+              <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Room selection
+                </div>
                 <div className="relative">
                   <input
                     type="text"
                     placeholder="Search by room name, code, or ID..."
                     value={roomSearch}
                     onChange={(e) => setRoomSearch(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-orange-200"
                   />
-                  
-                  {/* Dropdown List */}
-                  {roomSearch && filteredRooms.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg z-10">
-                      {filteredRooms.map((room) => (
-                        <button
-                          key={room.id}
-                          type="button"
-                          onClick={() => {
-                            setForm((p) => ({
-                              ...p,
-                              roomId: room.id,
-                              roomName: room.roomName,
-                            }));
-                            setRoomSearch("");
-                            setFormErrors((p) => ({ ...p, roomId: "" }));
-                          }}
-                          className="w-full block px-4 py-2.5 text-left text-sm hover:bg-orange-50 border-b border-slate-100 last:border-b-0 transition"
-                        >
-                          <div className="font-medium text-slate-900">{room.roomName}</div>
-                          <div className="text-xs text-slate-500">{room.locationCode || room.id}</div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {roomSearch && filteredRooms.length === 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 rounded-xl border border-slate-200 bg-white shadow-lg z-10">
-                      <div className="px-4 py-3 text-sm text-slate-500">No rooms found</div>
+
+                  {roomSearch && (
+                    <div className="absolute top-full left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg z-10">
+                      {roomsLoading && (
+                        <div className="px-4 py-3 text-sm text-slate-500">
+                          Loading rooms...
+                        </div>
+                      )}
+                      {!roomsLoading && filteredRooms.length === 0 && (
+                        <div className="px-4 py-3 text-sm text-slate-500">
+                          No rooms found
+                        </div>
+                      )}
+                      {!roomsLoading &&
+                        filteredRooms.map((room) => (
+                          <button
+                            key={room.id}
+                            type="button"
+                            onClick={() => {
+                              setForm((p) => ({
+                                ...p,
+                                roomId: room.id,
+                                roomName: room.roomName,
+                              }));
+                              setRoomSearch("");
+                              setFormErrors((p) => ({ ...p, roomId: "" }));
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm transition hover:bg-orange-50 border-b border-slate-100 last:border-b-0"
+                          >
+                            <div className="font-medium text-slate-900">
+                              {room.roomName}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {room.locationCode || room.id}
+                            </div>
+                          </button>
+                        ))}
                     </div>
                   )}
                 </div>
-                
+
                 {form.roomId && (
-                  <div className="mt-2 inline-flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-1.5 text-sm">
-                    <span className="text-orange-700 font-medium">{form.roomName}</span>
+                  <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-orange-100 px-3 py-1.5 text-sm font-semibold text-orange-700">
+                    <span>{form.roomName}</span>
                     <button
                       type="button"
                       onClick={() => {
                         setForm((p) => ({ ...p, roomId: "", roomName: "" }));
                         setRoomSearch("");
                       }}
-                      className="text-orange-600 hover:text-orange-700 font-bold"
+                      className="text-orange-600 hover:text-orange-800"
                     >
                       ✕
                     </button>
                   </div>
                 )}
-                
+
                 {formErrors.roomId && (
-                  <p className="mt-1 text-xs text-red-500">{formErrors.roomId}</p>
+                  <p className="mt-2 text-xs text-rose-500">
+                    {formErrors.roomId}
+                  </p>
                 )}
-              </div>
+              </section>
 
-              {/* Time Inputs - Using Ant Design TimePicker */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">
-                    Start Time <span className="text-red-500">*</span>
-                  </label>
-                  <TimePicker
-                    value={form.startTime}
-                    onChange={(time) => {
-                      setForm((p) => ({ ...p, startTime: time }));
-                      setFormErrors((p) => ({ ...p, startTimeOfDay: "", endTimeOfDay: "" }));
-                    }}
-                    format="HH:mm"
-                    placeholder="Select start time"
-                    className={`w-full ${formErrors.startTimeOfDay ? "ant-input-status-error" : ""}`}
-                    status={formErrors.startTimeOfDay ? "error" : undefined}
-                  />
-                  {formErrors.startTimeOfDay && (
-                    <p className="mt-1 text-xs text-red-500">{formErrors.startTimeOfDay}</p>
-                  )}
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Schedule
                 </div>
-                
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">
-                    End Time <span className="text-red-500">*</span>
-                  </label>
-                  <TimePicker
-                    value={form.endTime}
-                    onChange={(time) => {
-                      setForm((p) => ({ ...p, endTime: time }));
-                      setFormErrors((p) => ({ ...p, endTimeOfDay: "" }));
-                    }}
-                    format="HH:mm"
-                    placeholder="Select end time"
-                    className={`w-full ${formErrors.endTimeOfDay ? "ant-input-status-error" : ""}`}
-                    status={formErrors.endTimeOfDay ? "error" : undefined}
-                  />
-                  {formErrors.endTimeOfDay && (
-                    <p className="mt-1 text-xs text-red-500">{formErrors.endTimeOfDay}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-slate-700">
-                  Days of week <span className="text-red-500">*</span>
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {DAYS.map((d) => (
-                    <button
-                      type="button"
-                      key={d.key}
-                      onClick={() => {
-                        toggleDay(d.key);
-                        setFormErrors((p) => ({ ...p, daysOfWeek: "" }));
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Start time <span className="text-red-500">*</span>
+                    </label>
+                    <TimeSelectField
+                      value={form.startTime}
+                      onChange={(nextValue) => {
+                        setForm((p) => ({ ...p, startTime: nextValue }));
+                        setFormErrors((p) => ({
+                          ...p,
+                          startTimeOfDay: "",
+                          endTimeOfDay: "",
+                        }));
                       }}
-                      className={[
-                        "rounded-lg border px-3 py-1.5 text-sm font-semibold transition",
-                        form.daysOfWeek.includes(d.key)
-                          ? "border-orange-200 bg-orange-50 text-orange-700"
-                          : "border-slate-300 text-slate-700 hover:bg-slate-50",
-                      ].join(" ")}
-                    >
-                      {d.label}
-                    </button>
-                  ))}
+                      error={formErrors.startTimeOfDay}
+                      minuteStep={5}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      End time <span className="text-red-500">*</span>
+                    </label>
+                    <TimeSelectField
+                      value={form.endTime}
+                      onChange={(nextValue) => {
+                        setForm((p) => ({ ...p, endTime: nextValue }));
+                        setFormErrors((p) => ({ ...p, endTimeOfDay: "" }));
+                      }}
+                      error={formErrors.endTimeOfDay}
+                      minuteStep={5}
+                    />
+                  </div>
                 </div>
-                {formErrors.daysOfWeek && (
-                  <p className="mt-1 text-xs text-red-500">{formErrors.daysOfWeek}</p>
-                )}
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">
-                    From date <span className="text-red-500">*</span>
-                  </label>
-                  <DatePicker
-                    value={form.fromDateObj}
-                    onChange={(date) => {
-                      setForm((p) => ({ ...p, fromDateObj: date }));
-                      setFormErrors((p) => ({ ...p, fromDate: "" }));
-                    }}
-                    disabledDate={(current) => {
-                      return current && current.isBefore(dayjs().startOf("day"));
-                    }}
-                    placeholder="Select from date"
-                    format="DD/MM/YYYY"
-                    className={`w-full ${formErrors.fromDate ? "ant-input-status-error" : ""}`}
-                    status={formErrors.fromDate ? "error" : undefined}
-                  />
-                  {formErrors.fromDate && (
-                    <p className="mt-1 text-xs text-red-500">{formErrors.fromDate}</p>
+                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <DatePickerField
+                      label="From date"
+                      value={form.fromDate}
+                      minDate={toDateInputValue(new Date())}
+                      onChange={(nextDate) => {
+                        setForm((p) => ({ ...p, fromDate: nextDate }));
+                        setFormErrors((p) => ({ ...p, fromDate: "" }));
+                      }}
+                    />
+                    {formErrors.fromDate && (
+                      <p className="mt-1 text-xs text-rose-500">
+                        {formErrors.fromDate}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <DatePickerField
+                      label="Until date (optional)"
+                      value={form.untilDate}
+                      minDate={form.fromDate || toDateInputValue(new Date())}
+                      onChange={(nextDate) => {
+                        setForm((p) => ({ ...p, untilDate: nextDate }));
+                        setFormErrors((p) => ({ ...p, untilDate: "" }));
+                      }}
+                    />
+                    {formErrors.untilDate && (
+                      <p className="mt-1 text-xs text-rose-500">
+                        {formErrors.untilDate}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Days of week
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {RECURRING_SERIES_DAYS.map((day) => (
+                      <button
+                        type="button"
+                        key={day.key}
+                        onClick={() => {
+                          toggleDay(day.key);
+                          setFormErrors((p) => ({ ...p, daysOfWeek: "" }));
+                        }}
+                        className={[
+                          "rounded-full border px-3 py-1.5 text-sm font-semibold transition",
+                          form.daysOfWeek.includes(day.key)
+                            ? "border-orange-200 bg-orange-50 text-orange-700"
+                            : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        {day.label}
+                      </button>
+                    ))}
+                  </div>
+                  {formErrors.daysOfWeek && (
+                    <p className="mt-1 text-xs text-rose-500">
+                      {formErrors.daysOfWeek}
+                    </p>
                   )}
                 </div>
-                
-                <div>
-                  <label className="mb-1 block text-sm font-semibold text-slate-700">Until date (optional)</label>
-                  <DatePicker
-                    value={form.untilDateObj}
-                    onChange={(date) => setForm((p) => ({ ...p, untilDateObj: date }))}
-                    placeholder="Select until date"
-                    format="DD/MM/YYYY"
-                    className="w-full"
-                  />
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Details
                 </div>
-              </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Purpose <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      value={form.purpose}
+                      onChange={(e) => {
+                        setForm((p) => ({ ...p, purpose: e.target.value }));
+                        setFormErrors((p) => ({ ...p, purpose: "" }));
+                      }}
+                      className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-200 transition ${
+                        formErrors.purpose
+                          ? "border-rose-300"
+                          : "border-slate-300"
+                      }`}
+                    />
+                    {formErrors.purpose && (
+                      <p className="mt-1 text-xs text-rose-500">
+                        {formErrors.purpose}
+                      </p>
+                    )}
+                  </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-slate-700">
-                  Purpose <span className="text-red-500">*</span>
-                </label>
-                <input
-                  value={form.purpose}
-                  onChange={(e) => {
-                    setForm((p) => ({ ...p, purpose: e.target.value }));
-                    setFormErrors((p) => ({ ...p, purpose: "" }));
-                  }}
-                  className={`w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200 transition ${
-                    formErrors.purpose ? "border-red-300" : "border-slate-300"
-                  }`}
-                />
-                {formErrors.purpose && (
-                  <p className="mt-1 text-xs text-red-500">{formErrors.purpose}</p>
-                )}
-              </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-slate-700">
+                      Note (optional)
+                    </label>
+                    <input
+                      value={form.note}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, note: e.target.value }))
+                      }
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-orange-200"
+                    />
+                  </div>
+                </div>
+              </section>
 
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-slate-700">Note (optional)</label>
-                <input
-                  value={form.note}
-                  onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+              <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setFormErrors({});
-                    setRoomSearch("");
-                  }}
+                  onClick={closeModal}
                   className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                 >
                   Cancel
@@ -698,4 +723,3 @@ const MyRecurringSeriesPage: React.FC = () => {
 
 export default MyRecurringSeriesPage;
 // end+ chức năng đặt phòng lặp lại (demo UI)
-

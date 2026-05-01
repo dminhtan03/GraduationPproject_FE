@@ -65,6 +65,18 @@ export interface RoomAcademicScheduleItem {
   description?: string | null;
 }
 
+interface RoomsMapCacheEntry {
+  cachedAt: number;
+  data: RoomsMapResponse;
+}
+
+const ROOMS_MAP_CACHE_KEY = "rooms-map-cache";
+const DEFAULT_ROOMS_MAP_CACHE_TTL_MS = 60_000;
+const ROOMS_MAP_MAX_STALE_MS = 5 * 60_000;
+
+let roomsMapCache: RoomsMapCacheEntry | null = null;
+let roomsMapInFlight: Promise<RoomsMapResponse> | null = null;
+
 const extractData = (raw: unknown): unknown => {
   if (!raw || typeof raw !== "object") return raw;
   const body = raw as UnknownRecord;
@@ -178,6 +190,53 @@ const normalizeRoomStatusItems = (list: unknown): RoomStatusItem[] => {
   });
 };
 
+const isRoomsMapCacheEntry = (value: unknown): value is RoomsMapCacheEntry => {
+  if (!value || typeof value !== "object") return false;
+  const record = value as UnknownRecord;
+  return (
+    typeof record.cachedAt === "number" &&
+    Boolean(record.data) &&
+    typeof record.data === "object"
+  );
+};
+
+const readRoomsMapCache = (): RoomsMapCacheEntry | null => {
+  if (roomsMapCache) return roomsMapCache;
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = sessionStorage.getItem(ROOMS_MAP_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRoomsMapCacheEntry(parsed)) return null;
+    roomsMapCache = parsed;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const writeRoomsMapCache = (entry: RoomsMapCacheEntry) => {
+  roomsMapCache = entry;
+  if (typeof window === "undefined") return;
+
+  try {
+    sessionStorage.setItem(ROOMS_MAP_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    // Ignore storage errors (quota/privacy mode)
+  }
+};
+
+const clearRoomsMapCacheInternal = () => {
+  roomsMapCache = null;
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(ROOMS_MAP_CACHE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+};
+
 const requestSearchAvailableRooms = async (
   payload: RoomStatusRequest,
 ): Promise<RoomStatusSearchResponse> => {
@@ -259,6 +318,19 @@ function flattenRooms(data: unknown, params: GetRoomParams): Room[] {
 }
 
 export const roomService = {
+  getRoomsMapCached(
+    maxStaleMs = ROOMS_MAP_MAX_STALE_MS,
+  ): RoomsMapResponse | null {
+    const entry = readRoomsMapCache();
+    if (!entry) return null;
+    if (Date.now() - entry.cachedAt > maxStaleMs) return null;
+    return entry.data;
+  },
+
+  clearRoomsMapCache() {
+    clearRoomsMapCacheInternal();
+  },
+
   async getRooms(params: GetRoomParams): Promise<RoomResponse> {
     const res = await api.get<unknown>("/api/v1/dashboard/rooms-map", {
       params: {
@@ -291,14 +363,47 @@ export const roomService = {
     };
   },
 
-  async getRoomsMap(): Promise<RoomsMapResponse> {
-    const res = await api.get<unknown>("/api/v1/dashboard/rooms-map");
-    const raw =
-      res.data && typeof res.data === "object"
-        ? (res.data as UnknownRecord)
-        : ({} as UnknownRecord);
-    const data = (raw.data as UnknownRecord) || raw;
-    return data as unknown as RoomsMapResponse;
+  async getRoomsMap(options?: {
+    forceRefresh?: boolean;
+    cacheTtlMs?: number;
+  }): Promise<RoomsMapResponse> {
+    const {
+      forceRefresh = false,
+      cacheTtlMs = DEFAULT_ROOMS_MAP_CACHE_TTL_MS,
+    } = options || {};
+    const now = Date.now();
+    const cached = readRoomsMapCache();
+
+    if (!forceRefresh && cached) {
+      if (now - cached.cachedAt < cacheTtlMs) {
+        return cached.data;
+      }
+    }
+
+    if (!forceRefresh && roomsMapInFlight) {
+      return roomsMapInFlight;
+    }
+
+    roomsMapInFlight = (async () => {
+      const res = await api.get<unknown>("/api/v1/dashboard/rooms-map");
+      const raw =
+        res.data && typeof res.data === "object"
+          ? (res.data as UnknownRecord)
+          : ({} as UnknownRecord);
+      const data = (raw.data as UnknownRecord) || raw;
+      const response = data as unknown as RoomsMapResponse;
+      if (cacheTtlMs > 0) {
+        writeRoomsMapCache({
+          cachedAt: Date.now(),
+          data: response,
+        });
+      }
+      return response;
+    })().finally(() => {
+      roomsMapInFlight = null;
+    });
+
+    return roomsMapInFlight;
   },
 
   // Tìm phòng TRỐNG theo khoảng thời gian (BE: /api/v1/rooms/search)

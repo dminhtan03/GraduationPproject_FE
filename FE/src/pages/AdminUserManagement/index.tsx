@@ -26,7 +26,7 @@ import { extractApiMessage } from "../../utils/errorHandlers";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
-import { ImportModal } from "../../components/common";
+import { ImportModal, CustomPagination } from "../../components/common";
 
 type ProfilePayload = {
   firstName?: string;
@@ -985,36 +985,16 @@ const AdminUserManagementPage: React.FC = () => {
             </div>
           )}
 
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 text-sm text-slate-600">
-            <p>
-              Showing{" "}
-              {filteredUsers.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}-
-              {Math.min(safePage * PAGE_SIZE, filteredUsers.length)} of{" "}
-              {filteredUsers.length}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-3 py-1.5 disabled:opacity-40"
-                disabled={safePage <= 1}
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              >
-                Prev
-              </button>
-              <span className="font-semibold text-slate-800">
-                {safePage}/{totalPages}
-              </span>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-3 py-1.5 disabled:opacity-40"
-                disabled={safePage >= totalPages}
-                onClick={() =>
-                  setPage((prev) => Math.min(totalPages, prev + 1))
-                }
-              >
-                Next
-              </button>
-            </div>
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <CustomPagination
+              currentPage={safePage}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              totalItems={filteredUsers.length}
+              pageSize={PAGE_SIZE}
+              showSummary
+              className="w-full"
+            />
           </div>
         </section>
       </main>

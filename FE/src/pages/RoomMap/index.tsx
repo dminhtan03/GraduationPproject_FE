@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert, Pagination, Rate, message } from "antd";
 import { TagIcon, ClockIcon } from "@heroicons/react/24/outline";
@@ -6,6 +6,7 @@ import {
   roomService,
   type RoomAcademicScheduleItem,
   type RoomsMapBuilding,
+  type RoomsMapResponse,
   type RoomStatusItem,
 } from "../../services/roomService";
 import { getProfile } from "../../services/authService";
@@ -48,7 +49,7 @@ import {
   FEEDBACK_PAGE_SIZE,
   ROOM_LAYOUT_STORAGE_KEY,
   roomMapStatusFilterOptions,
-} from "./constants";
+} from "../../constants/roomMap";
 import type {
   FloorDecoration,
   RawMapBuilding,
@@ -376,30 +377,62 @@ const RoomMapPage: React.FC = () => {
     loadProfile();
   }, []);
 
+  const applyRoomsMapData = useCallback((data: RoomsMapResponse) => {
+    const list: RawMapBuilding[] = Array.isArray(data.buildingResponse)
+      ? (data.buildingResponse as RawMapBuilding[])
+      : [];
+
+    const normalizedList = list.map((building) => ({
+      ...building,
+      floors: sortFloorsByLevel(building.floors),
+    }));
+
+    setBuildings(normalizedList as RoomsMapBuilding[]);
+
+    if (normalizedList.length === 0) {
+      setSelectedBuildingId(null);
+      setSelectedFloorId(null);
+      return;
+    }
+
+    setSelectedBuildingId((prevBuildingId) => {
+      const resolvedBuilding =
+        normalizedList.find((b) => b.buildingId === prevBuildingId) ||
+        normalizedList[0];
+
+      setSelectedFloorId((prevFloorId) => {
+        const resolvedFloor = resolvedBuilding?.floors?.find(
+          (floor) => floor.floorId === prevFloorId,
+        );
+
+        return (
+          resolvedFloor?.floorId ||
+          resolvedBuilding?.floors?.[0]?.floorId ||
+          null
+        );
+      });
+
+      return resolvedBuilding?.buildingId || null;
+    });
+  }, []);
+
   useEffect(() => {
+    const cached = roomService.getRoomsMapCached();
+    const hasCached = Boolean(cached);
+
+    if (cached) {
+      applyRoomsMapData(cached);
+      setLoading(false);
+    }
+
     const fetchData = async () => {
-      setLoading(true);
+      if (!hasCached) {
+        setLoading(true);
+      }
       setError(null);
       try {
         const data = await roomService.getRoomsMap();
-        const list: RawMapBuilding[] = Array.isArray(data.buildingResponse)
-          ? (data.buildingResponse as RawMapBuilding[])
-          : [];
-
-        const normalizedList = list.map((building) => ({
-          ...building,
-          floors: sortFloorsByLevel(building.floors),
-        }));
-
-        setBuildings(normalizedList as RoomsMapBuilding[]);
-
-        if (normalizedList.length > 0) {
-          const firstBuilding = normalizedList[0];
-          setSelectedBuildingId(firstBuilding.buildingId);
-          if (firstBuilding.floors && firstBuilding.floors.length > 0) {
-            setSelectedFloorId(firstBuilding.floors[0].floorId);
-          }
-        }
+        applyRoomsMapData(data);
       } catch (e: unknown) {
         const message =
           e && typeof e === "object" && "message" in e
@@ -412,7 +445,7 @@ const RoomMapPage: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [applyRoomsMapData]);
 
   useEffect(() => {
     const fetchDecorations = async () => {

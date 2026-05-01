@@ -13,6 +13,7 @@ import {
   Badge,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { ArrowLeftIcon, SparklesIcon, CheckCircleIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { api } from "../../services/api";
 import { reservationService } from "../../services/reservationService";
 import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
@@ -51,9 +52,36 @@ const statusConfig: Record<ServiceStatus, { label: string; color: string }> = {
 };
 
 const StatusBadge: React.FC<{ status?: string | null }> = ({ status }) => {
-  const key = ((status || "PENDING").toUpperCase()) as ServiceStatus;
-  const cfg = statusConfig[key] ?? statusConfig.PENDING;
-  return <Tag color={cfg.color}>{cfg.label}</Tag>;
+  const normalized = String(status || "PENDING").toUpperCase();
+  const label = statusConfig[normalized as ServiceStatus]?.label ?? status;
+  
+  const cls =
+    normalized === "DONE"
+      ? "bg-emerald-50 text-emerald-700"
+      : normalized === "CONFIRMED" || normalized === "IN_PROGRESS"
+        ? "bg-blue-50 text-blue-700"
+        : normalized === "CANCELLED"
+          ? "bg-red-50 text-red-600"
+          : normalized === "PENDING"
+            ? "bg-amber-50 text-amber-700"
+            : "bg-slate-100 text-slate-500";
+  const dotCls =
+    normalized === "DONE"
+      ? "bg-emerald-500"
+      : normalized === "CONFIRMED" || normalized === "IN_PROGRESS"
+        ? "bg-blue-500"
+        : normalized === "CANCELLED"
+          ? "bg-red-500"
+          : normalized === "PENDING"
+            ? "bg-amber-500"
+            : "bg-slate-400";
+            
+  return (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dotCls}`} />
+      {label}
+    </span>
+  );
 };
 // end+ chức năng service item status
 
@@ -315,127 +343,148 @@ const AdminEventBookingDetailPage: React.FC = () => {
         <div className="p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Event Details (Admin)</h1>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Event Details</h1>
               <p className="mt-1 text-sm text-slate-500">
-                Room: <span className="font-semibold">{roomCode}</span>
+                Room: <span className="font-semibold text-slate-800">{roomCode}</span>
               </p>
             </div>
-            <Button onClick={() => navigate(-1)} type="primary">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600"
+            >
+              <ArrowLeftIcon className="h-4 w-4" />
               Back
-            </Button>
+            </button>
           </div>
 
           {/* Event info + Amenities */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-6">
-            <Card title="Event Information" bordered={false} className="shadow-sm">
-              {eventData ? (
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <span className="font-semibold">Title:</span>
-                    <div className="text-slate-700 mt-1">{eventData.title}</div>
-                  </div>
-                  <Divider style={{ margin: "8px 0" }} />
-                  <div>
-                    <span className="font-semibold">Visibility:</span>
-                    <div className="text-slate-700 mt-1">{eventData.visibility}</div>
-                  </div>
-                  {eventData.description && (
-                    <>
-                      <Divider style={{ margin: "8px 0" }} />
-                      <div>
-                        <span className="font-semibold">Description:</span>
-                        <div className="text-slate-700 mt-1">{eventData.description}</div>
+            {/* Event Information */}
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+                <SparklesIcon className="h-5 w-5 text-orange-500" />
+                <p className="text-base font-semibold text-slate-900">Event Information</p>
+              </div>
+              <div className="p-5">
+                {eventData ? (
+                  <div className="space-y-4 text-sm">
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Title</p>
+                      <p className="mt-1 font-semibold text-slate-800">{eventData.title}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Visibility</p>
+                      <p className="mt-1 font-semibold text-slate-800">{eventData.visibility}</p>
+                    </div>
+                    {eventData.description && (
+                      <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Description</p>
+                        <p className="mt-1 text-slate-700 leading-relaxed">{eventData.description}</p>
                       </div>
-                    </>
-                  )}
-                  <Divider style={{ margin: "8px 0" }} />
-                  <div>
-                    <span className="font-semibold">Time:</span>
-                    <div className="text-slate-700 mt-1">
-                      {formatDateTime24(startTime)} → {formatDateTime24(endTime)}
+                    )}
+                    <div className="rounded-xl border border-orange-100 bg-orange-50 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-orange-500">Time</p>
+                      <p className="mt-1 font-semibold text-slate-800">
+                        {formatDateTime24(startTime)} → {formatDateTime24(endTime)}
+                      </p>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <span className="text-slate-500">Event not found.</span>
-              )}
-            </Card>
-
-            <Card title="Room Amenities" bordered={false} className="shadow-sm">
-              <div className="flex flex-wrap gap-2">
-                {amenities.length ? (
-                  amenities.map((a) => (
-                    <Tag key={a.id} color="blue">
-                      {a.name}
-                    </Tag>
-                  ))
                 ) : (
-                  <span className="text-sm text-slate-500">No amenities.</span>
+                  <span className="text-slate-500">Event not found.</span>
                 )}
               </div>
-            </Card>
+            </div>
+
+            {/* Room Amenities */}
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+                <SparklesIcon className="h-5 w-5 text-orange-500" />
+                <p className="text-base font-semibold text-slate-900">Room Amenities</p>
+              </div>
+              <div className="p-5">
+                <div className="flex flex-wrap gap-2">
+                  {amenities.length ? (
+                    amenities.map((a) => (
+                      <span
+                        key={a.id}
+                        className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 border border-orange-100"
+                      >
+                        {a.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-sm text-slate-500">No amenities.</span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* ── ACTIVE ORDERS ── */}
-          <Card
-            title={
-              <div className="flex items-center justify-between w-full">
-                <span>Active Service Orders</span>
-                {activeLines.length > 0 && (
-                  <Badge
-                    count={activeLines.length}
-                    style={{ backgroundColor: "#f97316" }}
-                  />
-                )}
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm mb-6">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <CheckCircleIcon className="h-5 w-5 text-orange-500" />
+                <p className="text-base font-semibold text-slate-900">Active Service Orders</p>
               </div>
-            }
-            bordered={false}
-            className="shadow-sm mb-6"
-          >
-            <p className="text-sm text-slate-600 mb-4">
-              Latest requests from users. Admin updates the status of each line.
-            </p>
-            {loading ? (
-              <span className="text-slate-400">Loading...</span>
-            ) : (
-              <ServiceTable
-                lines={activeLines}
-                editable={true}
-                emptyText="No active service orders."
-              />
-            )}
-          </Card>
+              {activeLines.length > 0 && (
+                <span className="rounded-full bg-orange-500 px-2.5 py-0.5 text-xs font-bold text-white">
+                  {activeLines.length}
+                </span>
+              )}
+            </div>
+            <div className="p-5">
+              <p className="mb-4 text-sm text-slate-500">Latest requests from users. Admin updates the status of each line.</p>
+              {loading ? (
+                <span className="text-slate-400">Loading...</span>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <ServiceTable
+                    lines={activeLines}
+                    editable={true}
+                    emptyText="No active service orders."
+                  />
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* ── HISTORY (DONE / CANCELLED) ── */}
-          <Card
-            title={
-              <div className="flex items-center justify-between w-full">
-                <span>Completed / Cancelled History</span>
-                {historyLines.length > 0 && (
-                  <Badge count={historyLines.length} style={{ backgroundColor: "#6b7280" }} />
-                )}
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm mb-6">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <QueueListIcon className="h-5 w-5 text-slate-400" />
+                <p className="text-base font-semibold text-slate-900">Completed / Cancelled History</p>
               </div>
-            }
-            bordered={false}
-            className="shadow-sm mb-6"
-          >
-            <p className="text-sm text-slate-600 mb-4">
-              Processed orders. Status cannot be changed.
-            </p>
-            <ServiceTable
-              lines={historyLines}
-              editable={false}
-              emptyText="No completed or cancelled orders yet."
-            />
-          </Card>
+              {historyLines.length > 0 && (
+                <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-bold text-white">
+                  {historyLines.length}
+                </span>
+              )}
+            </div>
+            <div className="p-5">
+              <p className="mb-4 text-sm text-slate-500">Processed orders. Status cannot be changed.</p>
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <ServiceTable
+                  lines={historyLines}
+                  editable={false}
+                  emptyText="No completed or cancelled orders yet."
+                />
+              </div>
+            </div>
+          </div>
 
           {/* ── SUMMARY TABLE ── */}
           {allServiceLines.length > 0 && (
-            <Card title="Service Summary" bordered={false} className="shadow-sm">
-              <p className="text-sm text-slate-600 mb-4">
-                Aggregated service requests for this event.
-              </p>
-              <div className="overflow-hidden rounded-xl border border-slate-200">
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm mb-6">
+              <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+                <QueueListIcon className="h-5 w-5 text-orange-500" />
+                <p className="text-base font-semibold text-slate-900">Service Summary</p>
+              </div>
+              <div className="p-5">
+                <p className="mb-4 text-sm text-slate-500">Aggregated service requests for this event.</p>
+                <div className="overflow-hidden rounded-xl border border-slate-200">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50">
                     <tr>
@@ -512,8 +561,9 @@ const AdminEventBookingDetailPage: React.FC = () => {
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
-            </Card>
+            </div>
           )}
         </div>
 

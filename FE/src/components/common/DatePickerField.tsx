@@ -66,7 +66,7 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
   }, [open]);
 
   return (
-    <div ref={containerRef} className="relative min-w-0">
+    <div ref={containerRef} className="relative min-w-0 h-full">
       {label && (
         <div className="mb-1 text-[11px] font-semibold tracking-wide uppercase text-slate-500">
           {label}
@@ -76,7 +76,7 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="relative w-full overflow-hidden border border-gray-200 rounded-lg pl-8 pr-2.5 py-2 text-sm text-left bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+        className="relative w-full h-full min-h-[38px] overflow-hidden border border-gray-200 rounded-lg pl-8 pr-2.5 py-2 text-sm text-left bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
       >
         <CalendarDaysIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <span className="block truncate tabular-nums">

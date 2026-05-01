@@ -25,6 +25,7 @@ import AnimatedDropdown, {
   type AnimatedDropdownOption,
 } from "../../components/common/AnimatedDropdown";
 import DatePickerField from "../../components/common/DatePickerField";
+import { CustomPagination } from "../../components/common";
 
 const DAYS_OF_WEEK = [
   "MONDAY",
@@ -817,24 +818,12 @@ const AdminAcademicSchedulePage: React.FC = () => {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-4">
-              <button
-                disabled={page === 0}
-                onClick={() => setPage(page - 1)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-slate-500">
-                Page {page + 1} of {totalPages}
-              </span>
-              <button
-                disabled={page >= totalPages - 1}
-                onClick={() => setPage(page + 1)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
-              >
-                Next
-              </button>
+            <div className="border-t border-slate-100 bg-slate-50/50 px-6 py-4">
+              <CustomPagination
+                currentPage={page + 1}
+                totalPages={totalPages}
+                onPageChange={(p) => setPage(p - 1)}
+              />
             </div>
           )}
         </div>

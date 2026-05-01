@@ -13,9 +13,11 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { EyeIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { StarIcon } from "@heroicons/react/24/solid";
 
 import AdminSidebar from "../../components/Layout/AdminSidebar";
 import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
+import { CustomPagination } from "../../components/common";
 import { adminService } from "../../services/adminService";
 import { logout } from "../../services/authService";
 import { ROUTES } from "../../constants";
@@ -208,12 +210,14 @@ const AdminFeedbackManagement: React.FC = () => {
       key: "action",
       align: "center",
       render: (_, record) => (
-        <Button
-          type="text"
-          icon={<EyeIcon className="h-5 w-5 text-blue-600" />}
+        <button
+          type="button"
           onClick={() => showDetail(record.id)}
-          className="flex items-center justify-center hover:bg-blue-50"
-        />
+          className="group inline-flex items-center gap-1.5 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-300 hover:bg-cyan-100 hover:shadow"
+        >
+          <EyeIcon className="h-3.5 w-3.5 transition-transform duration-200 group-hover:scale-110" />
+          View
+        </button>
       ),
     },
   ];
@@ -240,8 +244,8 @@ const AdminFeedbackManagement: React.FC = () => {
           </div>
 
           {/* Filters */}
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+            <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800">Filter & Search</h2>
               {(searchEmail || filterRating !== undefined) && (
                 <button
@@ -280,51 +284,60 @@ const AdminFeedbackManagement: React.FC = () => {
                   allowClear
                   value={filterRating}
                   onChange={handleRatingChange}
-                  options={[
-                    { value: 5, label: "⭐⭐⭐⭐⭐ (5)" },
-                    { value: 4, label: "⭐⭐⭐⭐ (4)" },
-                    { value: 3, label: "⭐⭐⭐ (3)" },
-                    { value: 2, label: "⭐⭐ (2)" },
-                    { value: 1, label: "⭐ (1)" },
-                  ]}
+                  options={[5, 4, 3, 2, 1].map((num) => ({
+                    value: num,
+                    label: (
+                      <div className="flex items-center gap-2">
+                        <div className="flex">
+                          {Array.from({ length: num }).map((_, i) => (
+                            <StarIcon key={i} className="h-4 w-4 text-amber-400" />
+                          ))}
+                        </div>
+                        <span className="text-sm font-medium text-slate-600">({num})</span>
+                      </div>
+                    ),
+                  }))}
                 />
               </div>
             </div>
           </div>
 
           {/* Table */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl bg-white shadow-sm overflow-hidden">
             <Table
               columns={columns}
               dataSource={feedbacks}
               rowKey="id"
               loading={loading}
-              pagination={{
-                current: currentPage,
-                pageSize: pageSize,
-                total: total,
-                showSizeChanger: true,
-                onChange: (page, size) => {
-                  setCurrentPage(page);
-                  setPageSize(size);
-                },
-                showTotal: (total) => `Total ${total} items`,
-                className: "px-4",
-              }}
+              pagination={false}
               className="ant-table-striped overflow-hidden"
             />
+            {total > 0 && Math.ceil(total / pageSize) > 1 && (
+              <div className="border-t border-slate-100 p-4">
+                <CustomPagination
+                  currentPage={currentPage}
+                  totalPages={Math.ceil(total / pageSize)}
+                  onPageChange={(page) => setCurrentPage(page)}
+                />
+              </div>
+            )}
           </div>
         </div>
 
         {/* Detail Modal */}
         <Modal
-          title={<div className="text-lg font-bold text-slate-800">Feedback Detail</div>}
+          title={<div className="text-xl font-bold text-slate-900 tracking-tight">Feedback Detail</div>}
           open={isModalVisible}
           onCancel={() => setIsModalVisible(false)}
           footer={[
-            <Button key="close" type="primary" onClick={() => setIsModalVisible(false)}>
+            <button
+              key="close"
+              type="button"
+              onClick={() => setIsModalVisible(false)}
+              className="rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95"
+            >
               Close
-            </Button>
+            </button>
           ]}
           width={600}
         >
@@ -333,45 +346,44 @@ const AdminFeedbackManagement: React.FC = () => {
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent" />
             </div>
           ) : selectedFeedback ? (
-            <div className="mt-4 space-y-4">
-              <div className="rounded-xl bg-slate-50 p-4 border border-slate-100">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Text className="text-xs font-semibold uppercase text-slate-500">User</Text>
-                    <div className="font-medium text-slate-900">{selectedFeedback.userName || "-"}</div>
-                    <div className="text-sm text-slate-500">{selectedFeedback.userEmail || "-"}</div>
+            <div className="mt-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">User Info</Text>
+                  <div className="mt-2 font-semibold text-slate-900">{selectedFeedback.userName || "-"}</div>
+                  <div className="text-sm text-slate-500">{selectedFeedback.userEmail || "-"}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">Date & Time</Text>
+                  <div className="mt-2 font-semibold text-slate-900">
+                    {selectedFeedback.createdAt ? new Date(selectedFeedback.createdAt).toLocaleDateString("vi-VN") : "-"}
                   </div>
-                  <div>
-                    <Text className="text-xs font-semibold uppercase text-slate-500">Date</Text>
-                    <div className="text-sm text-slate-800">
-                      {selectedFeedback.createdAt ? new Date(selectedFeedback.createdAt).toLocaleString("vi-VN") : "-"}
-                    </div>
+                  <div className="text-sm text-slate-500">
+                    {selectedFeedback.createdAt ? new Date(selectedFeedback.createdAt).toLocaleTimeString("vi-VN") : "-"}
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-xl bg-slate-50 p-4 border border-slate-100">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Text className="text-xs font-semibold uppercase text-slate-500">Location</Text>
-                    <div className="font-medium text-slate-900">{selectedFeedback.roomName || "-"}</div>
-                    <div className="text-sm text-slate-500">
-                      {selectedFeedback.buildingName || "-"} &bull; {selectedFeedback.floorName || "-"}
-                    </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">Location</Text>
+                  <div className="mt-2 font-semibold text-slate-900">{selectedFeedback.roomName || "-"}</div>
+                  <div className="text-sm text-slate-500">
+                    {selectedFeedback.buildingName || "-"} &bull; {selectedFeedback.floorName || "-"}
                   </div>
-                  <div>
-                    <Text className="text-xs font-semibold uppercase text-slate-500">Rating</Text>
-                    <div className="mt-1">
-                      <Rate disabled defaultValue={selectedFeedback.rating} />
-                    </div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-slate-400">Rating</Text>
+                  <div className="mt-2 flex items-center">
+                    <Rate disabled defaultValue={selectedFeedback.rating} className="text-amber-400 text-lg" />
                   </div>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 p-4 shadow-sm">
-                <Text className="text-xs font-semibold uppercase text-slate-500 mb-2 block">Content</Text>
-                <div className="whitespace-pre-wrap text-sm text-slate-700 min-h-[80px]">
-                  {selectedFeedback.description || <span className="italic text-gray-400">No content provided by the user.</span>}
+              <div className="rounded-2xl bg-slate-50 p-5 border border-slate-100">
+                <Text className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2 block">User Feedback</Text>
+                <div className="whitespace-pre-wrap text-sm text-slate-700 leading-relaxed font-medium">
+                  {selectedFeedback.description || <span className="italic text-slate-400">No content provided by the user.</span>}
                 </div>
               </div>
             </div>
