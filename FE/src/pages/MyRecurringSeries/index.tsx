@@ -318,6 +318,15 @@ const MyRecurringSeriesPage: React.FC = () => {
             Create series
           </button>
         </div>
+<<<<<<< HEAD
+=======
+        {/* <button
+          onClick={() => setIsModalOpen(true)}
+          className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+        >
+          Create series
+        </button> */}
+>>>>>>> son
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
