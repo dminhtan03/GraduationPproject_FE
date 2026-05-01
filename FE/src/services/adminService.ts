@@ -33,11 +33,26 @@ export type AdminOverviewStatItem = {
   change: number;
 };
 
+export type DailyTrend = {
+  date: string;   // "YYYY-MM-DD"
+  count: number;
+};
+
+export type StatusCount = {
+  status: string;
+  count: number;
+  percentage: number;
+};
+
 export type AdminOverviewStats = {
   totalBookings: AdminOverviewStatItem;
   activeUsers: AdminOverviewStatItem;
-  utilizationRate: AdminOverviewStatItem;
+  completedBookings: AdminOverviewStatItem;
+  cancellationRate: AdminOverviewStatItem;
   todaysBookings: AdminOverviewStatItem;
+  noShowBookings: AdminOverviewStatItem;
+  dailyTrend: DailyTrend[];
+  statusDistribution: StatusCount[];
 };
 
 type BackendPage<T> = {
@@ -366,11 +381,17 @@ export const adminService = {
     const res = await api.get<any>(API_ENDPOINTS.DASHBOARD.OVERVIEW_STATS);
     const payload = res.data?.data ?? res.data ?? {};
 
+    const normArray = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+
     return {
-      totalBookings: normalizeOverviewStatItem(payload.totalBookings),
-      activeUsers: normalizeOverviewStatItem(payload.activeUsers),
-      utilizationRate: normalizeOverviewStatItem(payload.utilizationRate),
-      todaysBookings: normalizeOverviewStatItem(payload.todaysBookings),
+      totalBookings:     normalizeOverviewStatItem(payload.totalBookings),
+      activeUsers:       normalizeOverviewStatItem(payload.activeUsers),
+      completedBookings: normalizeOverviewStatItem(payload.completedBookings),
+      cancellationRate:  normalizeOverviewStatItem(payload.cancellationRate),
+      todaysBookings:    normalizeOverviewStatItem(payload.todaysBookings),
+      noShowBookings:    normalizeOverviewStatItem(payload.noShowBookings),
+      dailyTrend:        normArray<DailyTrend>(payload.dailyTrend),
+      statusDistribution: normArray<StatusCount>(payload.statusDistribution),
     };
   },
 

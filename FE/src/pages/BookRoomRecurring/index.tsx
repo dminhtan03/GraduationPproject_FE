@@ -186,7 +186,7 @@ const BookRoomRecurringPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
+              {/* <div>
                 <label className="mb-1 block text-sm font-semibold text-slate-700">Rolling window (tuần)</label>
                 <input
                   value={rollingWeeks}
@@ -197,7 +197,7 @@ const BookRoomRecurringPage: React.FC = () => {
                 <p className="mt-1 text-xs text-slate-500">
                   Số tuần phía trước được tự động tạo booking.
                 </p>
-              </div>
+              </div> */}
               <div>
                 <label className="mb-1 block text-sm font-semibold text-slate-700">
                   Mục đích <span className="text-red-500">*</span>

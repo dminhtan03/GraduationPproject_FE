@@ -157,12 +157,12 @@ const MyRecurringSeriesPage: React.FC = () => {
             Tạo đặt phòng lặp lại theo tuần và tự sync các booking trong rolling window.
           </p>
         </div>
-        <button
+        {/* <button
           onClick={() => setIsModalOpen(true)}
           className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
         >
           Create series
-        </button>
+        </button> */}
       </div>
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
