@@ -7,13 +7,9 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDownIcon, TrashIcon } from "@heroicons/react/24/outline";
-import {
-  aiService,
-  type AiChatHistoryDetailMessageDto,
-  type AiChatHistorySummaryDto,
-} from "../../services/aiService";
+import { aiService } from "../../services/aiService";
 import type { AiChatResponseDto, AiRoomSuggestion } from "../../types/api";
-import type { Reservation, UserProfile } from "../../types";
+import type { UserProfile } from "../../types";
 import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
@@ -24,8 +20,11 @@ import CustomMessage, {
 } from "../../components/common/CustomMessage";
 import { extractApiMessage } from "../../utils/errorHandlers";
 
-import type { ChatMessage, ChatSessionSummary, Sender } from "../../types/chat";
-import type { SpeechRecognitionEventLike, SpeechRecognitionLike } from "../../types/speech.d";
+import type { ChatMessage, ChatSessionSummary } from "../../types/chat";
+import type {
+  SpeechRecognitionEventLike,
+  SpeechRecognitionLike,
+} from "../../types/speech.d";
 import {
   createId,
   createWelcomeMessage,
@@ -1355,8 +1354,8 @@ const AIAssistantPage: React.FC = () => {
                       }}
                       className={`absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold transition ${
                         active
-                          ? "border-white/35 text-white hover:bg-white/15"
-                          : "border-orange-200 text-orange-600 hover:border-orange-300 hover:bg-orange-100"
+                          ? "border-white/30 text-white hover:bg-white/10"
+                          : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-100"
                       }`}
                       aria-label="Delete conversation"
                     >
@@ -1691,8 +1690,8 @@ const AIAssistantPage: React.FC = () => {
                       }}
                       className={`absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold transition ${
                         active
-                          ? "border-white/35 text-white hover:bg-white/15"
-                          : "border-orange-200 text-orange-600 hover:border-orange-300 hover:bg-orange-100"
+                          ? "border-white/30 text-white hover:bg-white/10"
+                          : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-100"
                       }`}
                       aria-label="Delete conversation"
                     >

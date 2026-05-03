@@ -1,14 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  Table,
-  Tag,
-  Space,
-  Card,
-  Input,
-  InputNumber,
-  Empty,
-} from "antd";
+import { Table, Space, Input, InputNumber, Empty } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
   ArrowLeftIcon,
@@ -27,7 +19,9 @@ import { isAdminUser } from "../../services/authService";
 import { api } from "../../services/api";
 import { reservationService } from "../../services/reservationService";
 import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
-import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
 import { formatDateTime24, formatPriceVN } from "../../utils/helpers";
 
 type Amenity = { id: string; name: string };
@@ -72,7 +66,9 @@ const extractData = (res: any) => (res?.data?.data ?? res?.data) as any;
 const getRoomInfo = (detail: any) => {
   const room = detail?.room ?? detail?.reservation?.room ?? null;
   const code = room?.locationCode ?? room?.roomCode ?? room?.code ?? "";
-  const amenities = Array.isArray(room?.amenities) ? (room.amenities as Amenity[]) : [];
+  const amenities = Array.isArray(room?.amenities)
+    ? (room.amenities as Amenity[])
+    : [];
   return { room, code, amenities };
 };
 
@@ -80,14 +76,22 @@ const getRoomInfo = (detail: any) => {
 const EventLivePage: React.FC = () => {
   const navigate = useNavigate();
   const { reservationId } = useParams();
-  const normalizedReservationId = useMemo(() => String(reservationId || "").trim(), [reservationId]);
+  const normalizedReservationId = useMemo(
+    () => String(reservationId || "").trim(),
+    [reservationId],
+  );
 
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
   const [eventData, setEventData] = useState<EventData | null>(null);
   const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
-  const [addDraft, setAddDraft] = useState<Record<string, { quantity: string; note: string }>>({});
+  const [addDraft, setAddDraft] = useState<
+    Record<string, { quantity: string; note: string }>
+  >({});
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{ type: MessageType; message: string } | null>(null);
+  const [toast, setToast] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
   const [liveCode, setLiveCode] = useState<string>("");
   const [codeCountdown, setCodeCountdown] = useState<number>(0);
   const [checkInInput, setCheckInInput] = useState<string>("");
@@ -96,18 +100,26 @@ const EventLivePage: React.FC = () => {
   const isOwnerOrAdmin = useMemo(() => {
     if (!user) return false;
     if (isAdminUser(user)) return true;
-    const reservationUserId = (detail as any)?.reservation?.userId || (detail as any)?.userId;
-    return String(reservationUserId) === String(user.id) || (user.email && (detail as any)?.reservation?.userEmail === user.email);
+    const reservationUserId =
+      (detail as any)?.reservation?.userId || (detail as any)?.userId;
+    return (
+      String(reservationUserId) === String(user.id) ||
+      (user.email && (detail as any)?.reservation?.userEmail === user.email)
+    );
   }, [user, detail]);
 
   const isOwnerCheckedIn = useMemo(() => {
-    const status = String((detail as any)?.status || (detail as any)?.reservation?.status || "").toUpperCase();
+    const status = String(
+      (detail as any)?.status || (detail as any)?.reservation?.status || "",
+    ).toUpperCase();
     return status === "IN_USE" || status === "CHECKED_IN";
   }, [detail]);
 
   const loadReservationDetail = async () => {
     if (!normalizedReservationId) return;
-    const res = await reservationService.getBookingDetail(normalizedReservationId);
+    const res = await reservationService.getBookingDetail(
+      normalizedReservationId,
+    );
     setDetail(res);
   };
 
@@ -115,7 +127,9 @@ const EventLivePage: React.FC = () => {
     if (!normalizedReservationId) return;
     try {
       const res = await api.get(
-        buildUrl(API_ENDPOINTS.EVENTS.BY_RESERVATION, { reservationId: normalizedReservationId }),
+        buildUrl(API_ENDPOINTS.EVENTS.BY_RESERVATION, {
+          reservationId: normalizedReservationId,
+        }),
       );
       setEventData(extractData(res) as EventData);
     } catch {
@@ -126,7 +140,11 @@ const EventLivePage: React.FC = () => {
   const loadLiveCode = async () => {
     if (!normalizedReservationId || !isOwnerOrAdmin) return;
     try {
-      const res = await api.get(buildUrl(API_ENDPOINTS.CHECKIN_QR.GET_LIVE_CODE, { reservationId: normalizedReservationId }));
+      const res = await api.get(
+        buildUrl(API_ENDPOINTS.CHECKIN_QR.GET_LIVE_CODE, {
+          reservationId: normalizedReservationId,
+        }),
+      );
       const data = extractData(res);
       setLiveCode(data.token);
       const expiresAt = new Date(data.expiresAt).getTime();
@@ -156,7 +174,9 @@ const EventLivePage: React.FC = () => {
   }, [codeCountdown, isOwnerOrAdmin]);
 
   const loadServiceItems = async () => {
-    const res = await api.get(API_ENDPOINTS.SERVICE_ITEMS.LIST, { params: { activeOnly: true } });
+    const res = await api.get(API_ENDPOINTS.SERVICE_ITEMS.LIST, {
+      params: { activeOnly: true },
+    });
     const raw = extractData(res);
     const list = Array.isArray(raw) ? (raw as any[]) : [];
     setServiceItems(
@@ -165,7 +185,12 @@ const EventLivePage: React.FC = () => {
           id: String(row?.id ?? ""),
           name: String(row?.name ?? ""),
           unit: row?.unit == null ? null : String(row.unit),
-          price: typeof row?.price === "number" ? row.price : row?.price == null ? null : Number(row.price),
+          price:
+            typeof row?.price === "number"
+              ? row.price
+              : row?.price == null
+                ? null
+                : Number(row.price),
         }))
         .filter((i) => i.id && i.name),
     );
@@ -180,7 +205,10 @@ const EventLivePage: React.FC = () => {
   }, [normalizedReservationId]);
 
   const currentServiceLines: ServiceLine[] = useMemo(() => {
-    const raw = (detail as any)?.serviceItems ?? (detail as any)?.reservation?.serviceItems ?? [];
+    const raw =
+      (detail as any)?.serviceItems ??
+      (detail as any)?.reservation?.serviceItems ??
+      [];
     return Array.isArray(raw) ? (raw as ServiceLine[]) : [];
   }, [detail]);
 
@@ -188,7 +216,10 @@ const EventLivePage: React.FC = () => {
     if (!normalizedReservationId) return;
     setLoading(true);
     try {
-      const existing = new Map<string, { quantity: number; note: string | null }>();
+      const existing = new Map<
+        string,
+        { quantity: number; note: string | null }
+      >();
       for (const line of currentServiceLines) {
         existing.set(String(line.serviceItemId), {
           quantity: Number(line.quantity || 0),
@@ -214,15 +245,23 @@ const EventLivePage: React.FC = () => {
         }))
         .filter((x) => x.serviceItemId && x.quantity > 0);
 
-      await api.put(buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEMS, { id: normalizedReservationId }), {
-        serviceItems: payload,
-      });
+      await api.put(
+        buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEMS, {
+          id: normalizedReservationId,
+        }),
+        {
+          serviceItems: payload,
+        },
+      );
 
       setAddDraft({});
       setToast({ type: "success", message: "Services updated" });
       await loadReservationDetail();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Update services failed";
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Update services failed";
       setToast({ type: "error", message: String(msg) });
     } finally {
       setLoading(false);
@@ -234,15 +273,18 @@ const EventLivePage: React.FC = () => {
     setLoading(true);
     try {
       await api.post(
-        buildUrl(API_ENDPOINTS.CHECKIN_QR.CHECK_IN_CODE, { reservationId: normalizedReservationId }),
+        buildUrl(API_ENDPOINTS.CHECKIN_QR.CHECK_IN_CODE, {
+          reservationId: normalizedReservationId,
+        }),
         null,
-        { params: { code: checkInInput } }
+        { params: { code: checkInInput } },
       );
       setToast({ type: "success", message: "Check-in successful!" });
       setCheckInInput("");
       await loadEvent();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Check-in failed";
+      const msg =
+        err?.response?.data?.message || err?.message || "Check-in failed";
       setToast({ type: "error", message: String(msg) });
     } finally {
       setLoading(false);
@@ -258,7 +300,36 @@ const EventLivePage: React.FC = () => {
       await loadReservationDetail();
       await loadLiveCode();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Check-in failed";
+      const msg =
+        err?.response?.data?.message || err?.message || "Check-in failed";
+      setToast({ type: "error", message: String(msg) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const respondInvitation = async (
+    participantId: string,
+    response: "ACCEPT" | "DECLINE",
+  ) => {
+    if (!participantId) return;
+    setLoading(true);
+    try {
+      await api.put(
+        buildUrl(API_ENDPOINTS.EVENTS.RESPOND_INVITATION, { participantId }),
+        { response },
+      );
+      setToast({
+        type: "success",
+        message:
+          response === "ACCEPT" ? "Accepted invitation" : "Declined invitation",
+      });
+      await loadEvent();
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Unable to respond invitation";
       setToast({ type: "error", message: String(msg) });
     } finally {
       setLoading(false);
@@ -266,11 +337,13 @@ const EventLivePage: React.FC = () => {
   };
 
   const { code: roomCode, amenities } = getRoomInfo(detail);
-  const building = (detail as any)?.building ?? (detail as any)?.reservation?.building ?? null;
+  const building =
+    (detail as any)?.building ?? (detail as any)?.reservation?.building ?? null;
   const address = building?.address || building?.name || "";
 
   const reservationNode: any = (detail as any)?.reservation ?? detail;
-  const startTime = reservationNode?.startTime ?? reservationNode?.start_time ?? "";
+  const startTime =
+    reservationNode?.startTime ?? reservationNode?.start_time ?? "";
   const endTime = reservationNode?.endTime ?? reservationNode?.end_time ?? "";
 
   return (
@@ -278,10 +351,15 @@ const EventLivePage: React.FC = () => {
       {/* ── Header ── */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Event Live</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Event Live
+          </h1>
           <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
             <MapPinIcon className="h-4 w-4 text-orange-400" />
-            Room: <span className="font-semibold text-slate-700">{roomCode || "—"}</span>
+            Room:{" "}
+            <span className="font-semibold text-slate-700">
+              {roomCode || "—"}
+            </span>
           </p>
         </div>
 
@@ -290,7 +368,9 @@ const EventLivePage: React.FC = () => {
             <button
               type="button"
               disabled={loading}
-              onClick={() => navigate(`/events/setup/${normalizedReservationId}`)}
+              onClick={() =>
+                navigate(`/events/setup/${normalizedReservationId}`)
+              }
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
             >
               <Cog6ToothIcon className="h-4 w-4" />
@@ -315,7 +395,9 @@ const EventLivePage: React.FC = () => {
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
             <SparklesIcon className="h-5 w-5 text-orange-500" />
-            <p className="text-base font-semibold text-slate-900">Event Information</p>
+            <p className="text-base font-semibold text-slate-900">
+              Event Information
+            </p>
           </div>
 
           <div className="p-5">
@@ -323,21 +405,33 @@ const EventLivePage: React.FC = () => {
               <div className="space-y-4 text-sm">
                 {/* Title */}
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Title</p>
-                  <p className="mt-1 font-semibold text-slate-800">{eventData.title}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Title
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-800">
+                    {eventData.title}
+                  </p>
                 </div>
 
                 {/* Visibility */}
                 <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Visibility</p>
-                  <p className="mt-1 font-semibold text-slate-800">{eventData.visibility}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Visibility
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-800">
+                    {eventData.visibility}
+                  </p>
                 </div>
 
                 {/* Description */}
                 {eventData.description && (
                   <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Description</p>
-                    <p className="mt-1 text-slate-700 leading-relaxed">{eventData.description}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Description
+                    </p>
+                    <p className="mt-1 text-slate-700 leading-relaxed">
+                      {eventData.description}
+                    </p>
                   </div>
                 )}
 
@@ -358,14 +452,20 @@ const EventLivePage: React.FC = () => {
                     <MapPinIcon className="h-3.5 w-3.5" />
                     Room
                   </p>
-                  <p className="mt-1 font-semibold text-slate-800">{roomCode || "—"}</p>
+                  <p className="mt-1 font-semibold text-slate-800">
+                    {roomCode || "—"}
+                  </p>
                 </div>
 
                 {/* Address */}
                 {address && (
                   <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Address</p>
-                    <p className="mt-1 font-semibold text-slate-800">{address}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      Address
+                    </p>
+                    <p className="mt-1 font-semibold text-slate-800">
+                      {address}
+                    </p>
                   </div>
                 )}
 
@@ -374,13 +474,19 @@ const EventLivePage: React.FC = () => {
                   <div className="rounded-xl border border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 px-4 py-4">
                     <div className="flex items-center gap-2 mb-3">
                       <KeyIcon className="h-4 w-4 text-green-600" />
-                      <p className="text-xs font-semibold uppercase tracking-wide text-green-700">Live Check-in Code</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-green-700">
+                        Live Check-in Code
+                      </p>
                     </div>
                     <div className="text-3xl font-mono font-bold text-orange-600 tracking-[0.3em] text-center py-2">
                       {liveCode || "------"}
                     </div>
                     <p className="text-center text-xs text-slate-500 mt-2">
-                      Refreshes in <span className="font-bold text-orange-500">{codeCountdown}s</span> · Share this code with participants
+                      Refreshes in{" "}
+                      <span className="font-bold text-orange-500">
+                        {codeCountdown}s
+                      </span>{" "}
+                      · Share this code with participants
                     </p>
                   </div>
                 )}
@@ -391,8 +497,13 @@ const EventLivePage: React.FC = () => {
                     <div className="flex items-start gap-3">
                       <ExclamationCircleIcon className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
                       <div className="flex-1">
-                        <p className="text-sm font-semibold text-amber-800">Check-in Required</p>
-                        <p className="text-xs text-amber-600 mt-0.5">Please check-in to this booking first to see the event code.</p>
+                        <p className="text-sm font-semibold text-amber-800">
+                          Check-in Required
+                        </p>
+                        <p className="text-xs text-amber-600 mt-0.5">
+                          Please check-in to this booking first to see the event
+                          code.
+                        </p>
                         <button
                           type="button"
                           disabled={loading}
@@ -420,7 +531,9 @@ const EventLivePage: React.FC = () => {
             <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
                 <SparklesIcon className="h-5 w-5 text-orange-500" />
-                <p className="text-base font-semibold text-slate-900">Room Amenities</p>
+                <p className="text-base font-semibold text-slate-900">
+                  Room Amenities
+                </p>
               </div>
               <div className="p-5">
                 {amenities.length ? (
@@ -435,7 +548,9 @@ const EventLivePage: React.FC = () => {
                     ))}
                   </div>
                 ) : (
-                  <span className="text-sm text-slate-400">No amenities listed for this room.</span>
+                  <span className="text-sm text-slate-400">
+                    No amenities listed for this room.
+                  </span>
                 )}
               </div>
             </div>
@@ -446,7 +561,9 @@ const EventLivePage: React.FC = () => {
             <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
               <UserGroupIcon className="h-5 w-5 text-orange-500" />
               <p className="text-base font-semibold text-slate-900">
-                {isOwnerOrAdmin ? "Participants (Check-in List)" : "My Check-in Status"}
+                {isOwnerOrAdmin
+                  ? "Participants (Check-in List)"
+                  : "My Check-in Status"}
               </p>
             </div>
 
@@ -454,64 +571,125 @@ const EventLivePage: React.FC = () => {
               <Table<Participant>
                 rowKey={(record) => record.id}
                 dataSource={
-                  eventData?.participants?.filter((p: any) =>
-                    isOwnerOrAdmin || (user?.email && p.email === user.email)
+                  eventData?.participants?.filter(
+                    (p: any) =>
+                      isOwnerOrAdmin || (user?.email && p.email === user.email),
                   ) || []
                 }
                 pagination={false}
-                columns={[
-                  {
-                    title: "EMAIL",
-                    dataIndex: "email",
-                    key: "email",
-                    render: (value: string | undefined) => value || "—",
-                  },
-                  {
-                    title: "NAME",
-                    dataIndex: "fullName",
-                    key: "fullName",
-                    render: (value: string | undefined) => value || "—",
-                  },
-                  {
-                    title: "CHECK-IN",
-                    dataIndex: "checkInStatus",
-                    key: "checkInStatus",
-                    render: (value: string | undefined, record: Participant) => {
-                      const normalized = String(value || "NOT_CHECKED_IN").toUpperCase();
-                      const isCheckedIn = normalized === "CHECKED_IN";
-                      const label = isCheckedIn ? "Checked In" : "Not Checked In";
-                      return (
-                        <div>
-                          <span
-                            className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
-                              isCheckedIn
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            {label}
-                          </span>
-                          {record.checkInTime && (
-                            <div className="text-xs text-slate-400 mt-1">
-                              {new Date(record.checkInTime).toLocaleTimeString()}
-                            </div>
-                          )}
-                        </div>
-                      );
+                columns={
+                  [
+                    {
+                      title: "EMAIL",
+                      dataIndex: "email",
+                      key: "email",
+                      render: (value: string | undefined) => value || "—",
                     },
-                  },
-                  ...(isOwnerOrAdmin
-                    ? [
-                        {
-                          title: "ACTION",
-                          key: "action",
-                          render: () => (
-                            <span className="text-xs text-slate-400">Owner View</span>
-                          ),
-                        },
-                      ]
-                    : []),
-                ] as ColumnsType<Participant>}
+                    {
+                      title: "NAME",
+                      dataIndex: "fullName",
+                      key: "fullName",
+                      render: (value: string | undefined) => value || "—",
+                    },
+                    {
+                      title: "CHECK-IN",
+                      dataIndex: "checkInStatus",
+                      key: "checkInStatus",
+                      render: (
+                        value: string | undefined,
+                        record: Participant,
+                      ) => {
+                        const normalized = String(
+                          value || "NOT_CHECKED_IN",
+                        ).toUpperCase();
+                        const isCheckedIn = normalized === "CHECKED_IN";
+                        const label = isCheckedIn
+                          ? "Checked In"
+                          : "Not Checked In";
+                        return (
+                          <div>
+                            <span
+                              className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                isCheckedIn
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {label}
+                            </span>
+                            {record.checkInTime && (
+                              <div className="text-xs text-slate-400 mt-1">
+                                {new Date(
+                                  record.checkInTime,
+                                ).toLocaleTimeString()}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      },
+                    },
+                    ...(isOwnerOrAdmin
+                      ? [
+                          {
+                            title: "ACTION",
+                            key: "action",
+                            render: () => (
+                              <span className="text-xs text-slate-400">
+                                Owner View
+                              </span>
+                            ),
+                          },
+                        ]
+                      : [
+                          {
+                            title: "ACTION",
+                            key: "action",
+                            render: (_: any, record: Participant) => (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {String(
+                                  record.inviteStatus || "",
+                                ).toUpperCase() === "INVITED" ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={loading}
+                                      onClick={() =>
+                                        respondInvitation(record.id, "ACCEPT")
+                                      }
+                                      className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+                                    >
+                                      Accept
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={loading}
+                                      onClick={() =>
+                                        respondInvitation(record.id, "DECLINE")
+                                      }
+                                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                                    >
+                                      Decline
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span className="text-xs text-slate-400">
+                                    {String(
+                                      record.inviteStatus || "",
+                                    ).toUpperCase() === "ACCEPTED"
+                                      ? "Accepted"
+                                      : String(
+                                            record.inviteStatus || "",
+                                          ).toUpperCase() === "DECLINED"
+                                        ? "Declined"
+                                        : "—"}
+                                  </span>
+                                )}
+                              </div>
+                            ),
+                          },
+                        ]),
+                  ] as ColumnsType<Participant>
+                }
                 locale={{ emptyText: "No participants." }}
               />
 
@@ -519,35 +697,49 @@ const EventLivePage: React.FC = () => {
               {!isOwnerOrAdmin &&
                 eventData?.participants?.some(
                   (p: any) =>
-                    user?.email && p.email === user.email && p.checkInStatus !== "CHECKED_IN"
+                    user?.email &&
+                    p.email === user.email &&
+                    p.checkInStatus !== "CHECKED_IN",
                 ) &&
                 isOwnerCheckedIn && (
-                  <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-4">
-                    <div className="flex items-start gap-3">
-                      <KeyIcon className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-blue-800">Enter Check-in Code</p>
-                        <p className="text-xs text-blue-600 mt-0.5">Enter the 6-digit code provided by the host.</p>
-                        <div className="mt-3 flex items-center gap-2">
-                          <Input
-                            size="small"
-                            value={checkInInput}
-                            onChange={(e) =>
-                              setCheckInInput(e.target.value.replace(/\D/g, "").slice(0, 6))
-                            }
-                            placeholder="6-digit code"
-                            style={{ width: 130 }}
-                          />
-                          <button
-                            type="button"
-                            disabled={loading || checkInInput.length !== 6}
-                            onClick={handleCodeCheckIn}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
-                          >
-                            <CheckCircleIcon className="h-4 w-4" />
-                            Check-in
-                          </button>
+                  <div className="mt-4 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-sky-50 px-4 py-4 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                          <KeyIcon className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            Enter Check-in Code
+                          </p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Use the 6-digit code provided by the host.
+                          </p>
                         </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-100 bg-white px-3 py-2 shadow-sm">
+                        <Input
+                          size="small"
+                          value={checkInInput}
+                          onChange={(e) =>
+                            setCheckInInput(
+                              e.target.value.replace(/\D/g, "").slice(0, 6),
+                            )
+                          }
+                          placeholder="6-digit code"
+                          className="!h-9 !rounded-lg !border-slate-200 !bg-slate-50 !text-sm !font-semibold !text-slate-700"
+                          style={{ width: 140 }}
+                        />
+                        <button
+                          type="button"
+                          disabled={loading || checkInInput.length !== 6}
+                          onClick={handleCodeCheckIn}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-orange-500 px-4 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50"
+                        >
+                          <CheckCircleIcon className="h-4 w-4" />
+                          Check-in
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -564,7 +756,9 @@ const EventLivePage: React.FC = () => {
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
               <CheckCircleIcon className="h-5 w-5 text-orange-500" />
-              <p className="text-base font-semibold text-slate-900">Current Services</p>
+              <p className="text-base font-semibold text-slate-900">
+                Current Services
+              </p>
             </div>
             <div className="p-4">
               <Table<ServiceLine>
@@ -599,7 +793,9 @@ const EventLivePage: React.FC = () => {
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
               <PlusCircleIcon className="h-5 w-5 text-orange-500" />
-              <p className="text-base font-semibold text-slate-900">Call Additional Services</p>
+              <p className="text-base font-semibold text-slate-900">
+                Call Additional Services
+              </p>
             </div>
             <div className="p-5">
               <p className="mb-4 text-sm text-slate-500">
@@ -611,21 +807,32 @@ const EventLivePage: React.FC = () => {
                   {serviceItems.map((s) => {
                     const draft = addDraft[s.id] || { quantity: "", note: "" };
                     return (
-                      <div key={s.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                      <div
+                        key={s.id}
+                        className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5"
+                      >
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm text-slate-800 truncate">{s.name}</div>
+                          <div className="font-medium text-sm text-slate-800 truncate">
+                            {s.name}
+                          </div>
                           <div className="text-xs text-slate-400">
-                            {s.price != null ? formatPriceVN(s.price) : "—"}{s.unit ? ` / ${s.unit}` : ""}
+                            {s.price != null ? formatPriceVN(s.price) : "—"}
+                            {s.unit ? ` / ${s.unit}` : ""}
                           </div>
                         </div>
                         <InputNumber
                           size="small"
                           min={0}
-                          value={draft.quantity ? Number(draft.quantity) : undefined}
+                          value={
+                            draft.quantity ? Number(draft.quantity) : undefined
+                          }
                           onChange={(value) =>
                             setAddDraft((prev) => ({
                               ...prev,
-                              [s.id]: { ...draft, quantity: value ? String(value) : "" },
+                              [s.id]: {
+                                ...draft,
+                                quantity: value ? String(value) : "",
+                              },
                             }))
                           }
                           placeholder="Qty"
@@ -662,8 +869,6 @@ const EventLivePage: React.FC = () => {
           </div>
         </div>
       )}
-
-
 
       {toast ? (
         <CustomMessage

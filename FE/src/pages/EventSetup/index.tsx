@@ -6,13 +6,14 @@ import { api } from "../../services/api";
 import { reservationService } from "../../services/reservationService";
 import { API_CONFIG, ROUTES } from "../../constants";
 import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
-import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
-import AnimatedDropdown from "../../components/common/AnimatedDropdown";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
+import { ConfirmDialog } from "../../components/common";
 import { selectAuthUser, useAppSelector } from "../../store";
 import { formatDateTime24, formatPriceVN } from "../../utils/helpers";
 import {
   ArrowLeftIcon,
-  CheckCircleIcon,
   SparklesIcon,
   UserGroupIcon,
   ClockIcon,
@@ -66,7 +67,9 @@ const extractData = (res: any) => (res?.data?.data ?? res?.data) as any;
 const getRoomInfo = (detail: any) => {
   const room = detail?.room ?? detail?.reservation?.room ?? null;
   const code = room?.locationCode ?? room?.roomCode ?? room?.code ?? "";
-  const amenities = Array.isArray(room?.amenities) ? (room.amenities as Amenity[]) : [];
+  const amenities = Array.isArray(room?.amenities)
+    ? (room.amenities as Amenity[])
+    : [];
   return { room, code, amenities };
 };
 
@@ -83,6 +86,9 @@ const normalizeSockJsUrl = () => {
   }
 };
 
+const formatHistoryTime = (value?: string | null) =>
+  value ? formatDateTime24(value) : "-";
+
 // start+ chức năng đặt phòng theo sự kiện (trang setup tiện ích/dịch vụ + participants)
 const EventSetupPage: React.FC = () => {
   const navigate = useNavigate();
@@ -93,9 +99,9 @@ const EventSetupPage: React.FC = () => {
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
   const [eventData, setEventData] = useState<EventData | null>(null);
   const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
-  const [serviceDraft, setServiceDraft] = useState<Record<string, { quantity: string; note: string }>>(
-    {},
-  );
+  const [serviceDraft, setServiceDraft] = useState<
+    Record<string, { quantity: string; note: string }>
+  >({});
   // start+ chức năng lịch sử dịch vụ: chỉ load ACTIVE vào draft, DONE/CANCELLED vào history
   type ServiceHistoryLine = {
     id: string;
@@ -107,12 +113,16 @@ const EventSetupPage: React.FC = () => {
     priceSnapshot?: number | null;
     unit?: string | null;
   };
-  const [serviceHistory, setServiceHistory] = useState<ServiceHistoryLine[]>([]);
+  const [serviceHistory, setServiceHistory] = useState<ServiceHistoryLine[]>(
+    [],
+  );
   // end+ chức năng lịch sử dịch vụ
 
   const [title, setTitle] = useState("Meeting Event");
   const [description, setDescription] = useState("");
-  const [visibility, setVisibility] = useState<"INVITE_ONLY" | "PUBLIC">("INVITE_ONLY");
+  const [visibility, setVisibility] = useState<"INVITE_ONLY" | "PUBLIC">(
+    "INVITE_ONLY",
+  );
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [participantHistoryModal, setParticipantHistoryModal] = useState<{
@@ -121,7 +131,13 @@ const EventSetupPage: React.FC = () => {
     items: ParticipantHistoryItem[];
     loading: boolean;
     error: string | null;
-  }>({ open: false, participant: null, items: [], loading: false, error: null });
+  }>({
+    open: false,
+    participant: null,
+    items: [],
+    loading: false,
+    error: null,
+  });
 
   const [otpModal, setOtpModal] = useState<{
     open: boolean;
@@ -130,7 +146,14 @@ const EventSetupPage: React.FC = () => {
     expiresAt: string | null;
     loading: boolean;
     error: string | null;
-  }>({ open: false, participant: null, token: null, expiresAt: null, loading: false, error: null });
+  }>({
+    open: false,
+    participant: null,
+    token: null,
+    expiresAt: null,
+    loading: false,
+    error: null,
+  });
 
   const [checkInModal, setCheckInModal] = useState<{
     open: boolean;
@@ -139,22 +162,34 @@ const EventSetupPage: React.FC = () => {
     loading: boolean;
     error: string | null;
   }>({ open: false, participant: null, otp: "", loading: false, error: null });
+  const [pendingRemoveParticipant, setPendingRemoveParticipant] =
+    useState<Participant | null>(null);
 
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{ type: MessageType; message: string } | null>(null);
+  const [toast, setToast] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
   const [liveCode, setLiveCode] = useState<string>("");
   const [codeCountdown, setCodeCountdown] = useState<number>(0);
 
-  const normalizedReservationId = useMemo(() => String(reservationId || "").trim(), [reservationId]);
+  const normalizedReservationId = useMemo(
+    () => String(reservationId || "").trim(),
+    [reservationId],
+  );
 
   const loadReservationDetail = async () => {
     if (!normalizedReservationId) return;
-    const res = await reservationService.getBookingDetail(normalizedReservationId);
+    const res = await reservationService.getBookingDetail(
+      normalizedReservationId,
+    );
     setDetail(res);
   };
 
   const loadServiceItems = async () => {
-    const res = await api.get(API_ENDPOINTS.SERVICE_ITEMS.LIST, { params: { activeOnly: true } });
+    const res = await api.get(API_ENDPOINTS.SERVICE_ITEMS.LIST, {
+      params: { activeOnly: true },
+    });
     const raw = extractData(res);
     const list = Array.isArray(raw) ? (raw as any[]) : [];
     setServiceItems(
@@ -163,7 +198,12 @@ const EventSetupPage: React.FC = () => {
           id: String(row?.id ?? ""),
           name: String(row?.name ?? ""),
           unit: row?.unit == null ? null : String(row.unit),
-          price: typeof row?.price === "number" ? row.price : row?.price == null ? null : Number(row.price),
+          price:
+            typeof row?.price === "number"
+              ? row.price
+              : row?.price == null
+                ? null
+                : Number(row.price),
         }))
         .filter((i) => i.id && i.name),
     );
@@ -173,7 +213,9 @@ const EventSetupPage: React.FC = () => {
     if (!normalizedReservationId) return;
     try {
       const res = await api.get(
-        buildUrl(API_ENDPOINTS.EVENTS.BY_RESERVATION, { reservationId: normalizedReservationId }),
+        buildUrl(API_ENDPOINTS.EVENTS.BY_RESERVATION, {
+          reservationId: normalizedReservationId,
+        }),
       );
       const data = extractData(res) as EventData;
       setEventData(data);
@@ -191,7 +233,9 @@ const EventSetupPage: React.FC = () => {
     if (!normalizedReservationId) return;
     try {
       const res = await api.get(
-        buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEMS, { id: normalizedReservationId }),
+        buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEMS, {
+          id: normalizedReservationId,
+        }),
       );
       const lines = extractData(res);
       // start+ chức năng lịch sử dịch vụ: tách ACTIVE vs DONE/CANCELLED
@@ -255,12 +299,18 @@ const EventSetupPage: React.FC = () => {
       reconnectDelay: 5000,
       onConnect: () => {
         console.log("[EventSetupWS] Connected to participants topic");
-        client.subscribe(`/topic/reservations/${normalizedReservationId}/participants`, (frame: IMessage) => {
-          if (frame.body === "UPDATED") {
-            setToast({ type: "info", message: "A participant checked in! Refreshing list..." });
-            loadEvent();
-          }
-        });
+        client.subscribe(
+          `/topic/reservations/${normalizedReservationId}/participants`,
+          (frame: IMessage) => {
+            if (frame.body === "UPDATED") {
+              setToast({
+                type: "info",
+                message: "A participant checked in! Refreshing list...",
+              });
+              loadEvent();
+            }
+          },
+        );
       },
     });
 
@@ -288,7 +338,8 @@ const EventSetupPage: React.FC = () => {
       }
       await loadEvent();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Create event failed";
+      const msg =
+        err?.response?.data?.message || err?.message || "Create event failed";
       setToast({ type: "error", message: String(msg) });
     } finally {
       setLoading(false);
@@ -305,17 +356,26 @@ const EventSetupPage: React.FC = () => {
           quantity: Number(v.quantity),
           note: v.note?.trim() || null,
         }))
-        .filter((x) => x.serviceItemId && Number.isFinite(x.quantity) && x.quantity > 0);
+        .filter(
+          (x) =>
+            x.serviceItemId && Number.isFinite(x.quantity) && x.quantity > 0,
+        );
 
-      await api.put(buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEMS, { id: normalizedReservationId }), {
-        serviceItems: serviceItemsPayload,
-      });
+      await api.put(
+        buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEMS, {
+          id: normalizedReservationId,
+        }),
+        {
+          serviceItems: serviceItemsPayload,
+        },
+      );
 
       setToast({ type: "success", message: "Services saved" });
       await loadReservationServiceItems();
       await loadReservationDetail();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Save services failed";
+      const msg =
+        err?.response?.data?.message || err?.message || "Save services failed";
       setToast({ type: "error", message: String(msg) });
     } finally {
       setLoading(false);
@@ -330,7 +390,10 @@ const EventSetupPage: React.FC = () => {
     setLoading(true);
     try {
       const email = inviteEmail.trim();
-      await api.post(API_ENDPOINTS.EVENTS.INVITE_PARTICIPANT, { eventId: eventData.id, email });
+      await api.post(API_ENDPOINTS.EVENTS.INVITE_PARTICIPANT, {
+        eventId: eventData.id,
+        email,
+      });
       setInviteEmail("");
       setToast({ type: "success", message: "Đã mời người tham gia" });
       await loadEvent();
@@ -343,10 +406,14 @@ const EventSetupPage: React.FC = () => {
         raw?.meta?.errorCode ||
         raw?.data?.code ||
         raw?.data?.errorCode;
-      const msg = raw?.message || raw?.meta?.message || err?.message || "Invite failed";
+      const msg =
+        raw?.message || raw?.meta?.message || err?.message || "Invite failed";
       const normalizedMessage = String(msg || "").toLowerCase();
       const normalizedCode = String(code || "").toUpperCase();
-      if (normalizedCode.includes("USER_NOT_FOUND") || normalizedMessage.includes("user not found")) {
+      if (
+        normalizedCode.includes("USER_NOT_FOUND") ||
+        normalizedMessage.includes("user not found")
+      ) {
         setToast({ type: "error", message: "Người dùng không tồn tại" });
       } else {
         setToast({ type: "error", message: String(msg) });
@@ -368,7 +435,9 @@ const EventSetupPage: React.FC = () => {
 
     try {
       const res = await api.get(
-        buildUrl(API_ENDPOINTS.EVENTS.PARTICIPANT_HISTORY, { participantId: participant.id }),
+        buildUrl(API_ENDPOINTS.EVENTS.PARTICIPANT_HISTORY, {
+          participantId: participant.id,
+        }),
       );
       const items = extractData(res);
       setParticipantHistoryModal({
@@ -379,7 +448,8 @@ const EventSetupPage: React.FC = () => {
         error: null,
       });
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Load history failed";
+      const msg =
+        err?.response?.data?.message || err?.message || "Load history failed";
       setParticipantHistoryModal({
         open: true,
         participant,
@@ -392,10 +462,19 @@ const EventSetupPage: React.FC = () => {
 
   const createOtp = async (participant: Participant) => {
     if (!participant?.id) return;
-    setOtpModal({ open: true, participant, token: null, expiresAt: null, loading: true, error: null });
+    setOtpModal({
+      open: true,
+      participant,
+      token: null,
+      expiresAt: null,
+      loading: true,
+      error: null,
+    });
     try {
       const res = await api.post(
-        buildUrl(API_ENDPOINTS.CHECKIN_QR.GENERATE_PARTICIPANT_OTP, { participantId: participant.id }),
+        buildUrl(API_ENDPOINTS.CHECKIN_QR.GENERATE_PARTICIPANT_OTP, {
+          participantId: participant.id,
+        }),
       );
       const data = extractData(res) as { token?: string; expiresAt?: string };
       setOtpModal({
@@ -407,25 +486,45 @@ const EventSetupPage: React.FC = () => {
         error: null,
       });
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Generate OTP failed";
-      setOtpModal({ open: true, participant, token: null, expiresAt: null, loading: false, error: String(msg) });
+      const msg =
+        err?.response?.data?.message || err?.message || "Generate OTP failed";
+      setOtpModal({
+        open: true,
+        participant,
+        token: null,
+        expiresAt: null,
+        loading: false,
+        error: String(msg),
+      });
     }
   };
 
-  const respondInvitation = async (participant: Participant, response: "ACCEPT" | "DECLINE") => {
+  const respondInvitation = async (
+    participant: Participant,
+    response: "ACCEPT" | "DECLINE",
+  ) => {
     if (!participant?.id) return;
     setLoading(true);
     try {
-      await api.put(buildUrl(API_ENDPOINTS.EVENTS.RESPOND_INVITATION, { participantId: participant.id }), {
-        response,
-      });
+      await api.put(
+        buildUrl(API_ENDPOINTS.EVENTS.RESPOND_INVITATION, {
+          participantId: participant.id,
+        }),
+        {
+          response,
+        },
+      );
       setToast({
         type: "success",
-        message: response === "ACCEPT" ? "Đã chấp nhận tham gia" : "Đã từ chối tham gia",
+        message:
+          response === "ACCEPT"
+            ? "Đã chấp nhận tham gia"
+            : "Đã từ chối tham gia",
       });
       await loadEvent();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Respond failed";
+      const msg =
+        err?.response?.data?.message || err?.message || "Respond failed";
       setToast({ type: "error", message: String(msg) });
     } finally {
       setLoading(false);
@@ -433,7 +532,13 @@ const EventSetupPage: React.FC = () => {
   };
 
   const openCheckInModal = (participant: Participant) => {
-    setCheckInModal({ open: true, participant, otp: "", loading: false, error: null });
+    setCheckInModal({
+      open: true,
+      participant,
+      otp: "",
+      loading: false,
+      error: null,
+    });
   };
 
   const submitCheckIn = async () => {
@@ -446,29 +551,52 @@ const EventSetupPage: React.FC = () => {
     setCheckInModal((prev) => ({ ...prev, loading: true, error: null }));
     try {
       await api.post(API_ENDPOINTS.CHECKIN_QR.CONSUME, { token: otp });
-      setCheckInModal({ open: false, participant: null, otp: "", loading: false, error: null });
+      setCheckInModal({
+        open: false,
+        participant: null,
+        otp: "",
+        loading: false,
+        error: null,
+      });
       setToast({ type: "success", message: "Check-in thành công" });
       await loadEvent();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Check-in failed";
-      setCheckInModal((prev) => ({ ...prev, loading: false, error: String(msg) }));
+      const msg =
+        err?.response?.data?.message || err?.message || "Check-in failed";
+      setCheckInModal((prev) => ({
+        ...prev,
+        loading: false,
+        error: String(msg),
+      }));
     }
+  };
+
+  const requestRemoveParticipant = (participant: Participant) => {
+    setPendingRemoveParticipant(participant);
   };
 
   const removeParticipant = async (participantId: string) => {
     if (!eventData?.id) return;
-    if (!window.confirm("Remove this participant?")) return;
     setLoading(true);
     try {
-      await api.delete(buildUrl(API_ENDPOINTS.EVENTS.REMOVE_PARTICIPANT, { participantId }));
+      await api.delete(
+        buildUrl(API_ENDPOINTS.EVENTS.REMOVE_PARTICIPANT, { participantId }),
+      );
       setToast({ type: "success", message: "Participant removed" });
       await loadEvent();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Remove failed";
+      const msg =
+        err?.response?.data?.message || err?.message || "Remove failed";
       setToast({ type: "error", message: String(msg) });
     } finally {
       setLoading(false);
+      setPendingRemoveParticipant(null);
     }
+  };
+
+  const confirmRemoveParticipant = async () => {
+    if (!pendingRemoveParticipant?.id) return;
+    await removeParticipant(pendingRemoveParticipant.id);
   };
 
   const goLive = () => {
@@ -484,7 +612,8 @@ const EventSetupPage: React.FC = () => {
       await loadReservationDetail();
       await loadLiveCode();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Check-in failed";
+      const msg =
+        err?.response?.data?.message || err?.message || "Check-in failed";
       setToast({ type: "error", message: String(msg) });
     } finally {
       setLoading(false);
@@ -500,32 +629,45 @@ const EventSetupPage: React.FC = () => {
     (detail?.endTime as string | undefined) ||
     (detail?.reservation as any)?.endTime ||
     "";
-  const buildingNode: any = (detail as any)?.building ?? (detail as any)?.reservation?.building ?? null;
-  const floorNode: any = (detail as any)?.floor ?? (detail as any)?.reservation?.floor ?? null;
+  const buildingNode: any =
+    (detail as any)?.building ?? (detail as any)?.reservation?.building ?? null;
+  const floorNode: any =
+    (detail as any)?.floor ?? (detail as any)?.reservation?.floor ?? null;
   const buildingName = buildingNode?.name ?? buildingNode?.buildingName ?? "";
   const buildingAddress = buildingNode?.address ?? buildingNode?.location ?? "";
   const floorName = floorNode?.name ?? floorNode?.floorName ?? "";
-  const roomAddressText = [buildingAddress || buildingName, floorName, roomCode].filter(Boolean).join(" • ");
-  const reservationStatus =
-    String((detail?.status as any) || (detail?.reservation as any)?.status || "").toUpperCase();
-  // start+ chức năng lock form sau khi check-in
-  const isEventInfoLocked = reservationStatus === "IN_USE" || reservationStatus === "COMPLETED";
-  // end+ chức năng lock form sau khi check-in
+  const roomAddressText = [buildingAddress || buildingName, floorName, roomCode]
+    .filter(Boolean)
+    .join(" • ");
+  const reservationStatus = String(
+    (detail?.status as any) || (detail?.reservation as any)?.status || "",
+  ).toUpperCase();
   const participants = eventData?.participants || [];
-  const hasAnyCheckIn = participants.some((p) => String(p.checkInStatus || "").toUpperCase() === "CHECKED_IN");
-  const canInvite = !hasAnyCheckIn && reservationStatus !== "IN_USE" && reservationStatus !== "CHECKED_IN";
+  const hasAnyCheckIn = participants.some(
+    (p) => String(p.checkInStatus || "").toUpperCase() === "CHECKED_IN",
+  );
+  const canInvite =
+    !hasAnyCheckIn &&
+    reservationStatus !== "IN_USE" &&
+    reservationStatus !== "CHECKED_IN";
   const selfParticipant = participants.find(
-    (p) => (p.email || "").trim().toLowerCase() && (p.email || "").trim().toLowerCase() === currentUserEmail,
+    (p) =>
+      (p.email || "").trim().toLowerCase() &&
+      (p.email || "").trim().toLowerCase() === currentUserEmail,
   );
   const canManageEvent = !selfParticipant;
 
   const loadLiveCode = async () => {
     if (!normalizedReservationId || !canManageEvent) return;
     try {
-      const res = await api.get(buildUrl(API_ENDPOINTS.CHECKIN_QR.GET_LIVE_CODE, { reservationId: normalizedReservationId }));
+      const res = await api.get(
+        buildUrl(API_ENDPOINTS.CHECKIN_QR.GET_LIVE_CODE, {
+          reservationId: normalizedReservationId,
+        }),
+      );
       const data = extractData(res);
       setLiveCode(data.token);
-      
+
       const expiresAt = new Date(data.expiresAt).getTime();
       const now = new Date().getTime();
       const diff = Math.max(0, Math.floor((expiresAt - now) / 1000));
@@ -536,7 +678,11 @@ const EventSetupPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (canManageEvent && normalizedReservationId && reservationStatus === "IN_USE") {
+    if (
+      canManageEvent &&
+      normalizedReservationId &&
+      reservationStatus === "IN_USE"
+    ) {
       loadLiveCode();
       const timer = setInterval(loadLiveCode, 30000); // Refresh every 30s
       return () => clearInterval(timer);
@@ -559,31 +705,46 @@ const EventSetupPage: React.FC = () => {
         <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
             <div className="min-w-0 flex-1">
-              <h1 className="text-3xl font-bold text-slate-900">Manage Event</h1>
-              <p className="mt-1 text-sm text-slate-500">Set up your event details, services, and invite participants</p>
+              <h1 className="text-3xl font-bold text-slate-900">
+                Manage Event
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Set up your event details, services, and invite participants
+              </p>
 
               {/* Info Cards */}
               <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
                   <MapPinIcon className="h-5 w-5 shrink-0 text-orange-400" />
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Room</p>
-                    <p className="truncate text-sm font-bold text-slate-900">{roomCode || "—"}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Room
+                    </p>
+                    <p className="truncate text-sm font-bold text-slate-900">
+                      {roomCode || "—"}
+                    </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
                   <MapPinIcon className="h-5 w-5 shrink-0 text-slate-400" />
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</p>
-                    <p className="truncate text-sm font-bold text-slate-900">{roomAddressText || "—"}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Address
+                    </p>
+                    <p className="text-sm font-bold text-slate-900 break-words whitespace-normal">
+                      {roomAddressText || "—"}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-xl border border-orange-100 bg-orange-50 p-3 sm:col-span-2">
                   <ClockIcon className="h-5 w-5 shrink-0 text-orange-500" />
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-orange-500">Time</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-orange-500">
+                      Time
+                    </p>
                     <p className="text-sm font-bold text-slate-900">
-                      {formatDateTime24(reservationStart)} → {formatDateTime24(reservationEnd)}
+                      {formatDateTime24(reservationStart)} →{" "}
+                      {formatDateTime24(reservationEnd)}
                     </p>
                   </div>
                 </div>
@@ -609,15 +770,21 @@ const EventSetupPage: React.FC = () => {
           <div className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-6 shadow-sm">
             <div className="mb-5 flex items-center gap-2">
               <SparklesIcon className="h-6 w-6 text-orange-600" />
-              <h2 className="text-lg font-bold text-slate-900">Event Information</h2>
+              <h2 className="text-lg font-bold text-slate-900">
+                Event Information
+              </h2>
             </div>
-            
-            <p className="mb-4 text-sm text-slate-600">Configure your event details and settings</p>
+
+            <p className="mb-4 text-sm text-slate-600">
+              Configure your event details and settings
+            </p>
 
             <div className="space-y-4">
               {/* Event Title */}
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Event Title</label>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Event Title
+                </label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -628,7 +795,9 @@ const EventSetupPage: React.FC = () => {
 
               {/* Description */}
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Description <span className="text-slate-400">(Optional)</span></label>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Description <span className="text-slate-400">(Optional)</span>
+                </label>
                 <input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -637,46 +806,43 @@ const EventSetupPage: React.FC = () => {
                 />
               </div>
 
-              {/* Visibility */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Visibility</label>
-                <AnimatedDropdown<"INVITE_ONLY" | "PUBLIC">
-                  value={visibility}
-                  onChange={(val) => setVisibility(val)}
-                  disabled={loading || isEventInfoLocked}
-                  buttonClassName="h-10 px-3.5"
-                  options={[
-                    { value: "INVITE_ONLY", label: "Invite Only" },
-                    { value: "PUBLIC",      label: "Public" },
-                  ]}
-                  ariaLabel="Event visibility"
-                />
-              </div>
-
               {/* Live Code Section */}
               {canManageEvent && reservationStatus === "IN_USE" && (
                 <div className="mt-5 rounded-lg bg-orange-50 p-4 ring-1 ring-orange-200">
-                  <p className="text-xs font-bold uppercase text-orange-600">Live Check-in Code</p>
+                  <p className="text-xs font-bold uppercase text-orange-600">
+                    Live Check-in Code
+                  </p>
                   <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-3xl font-mono font-bold text-orange-700">{liveCode || "------"}</span>
-                    <span className="text-xs font-medium text-orange-500">({codeCountdown}s)</span>
+                    <span className="text-3xl font-mono font-bold text-orange-700">
+                      {liveCode || "------"}
+                    </span>
+                    <span className="text-xs font-medium text-orange-500">
+                      ({codeCountdown}s)
+                    </span>
                   </div>
-                  <p className="mt-2 text-xs text-orange-600">Share this 6-digit code with participants for check-in. Refreshes every minute.</p>
+                  <p className="mt-2 text-xs text-orange-600">
+                    Share this 6-digit code with participants for check-in.
+                    Refreshes every minute.
+                  </p>
                 </div>
               )}
-              
-              {canManageEvent && reservationStatus !== "IN_USE" && reservationStatus !== "COMPLETED" && (
-                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
-                  <p className="mb-3 text-sm text-slate-600">Check-in to this booking first to generate the event code.</p>
-                  <button
-                    disabled={loading}
-                    onClick={handleOwnerCheckIn}
-                    className="w-full rounded-lg bg-orange-600 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700 disabled:opacity-50"
-                  >
-                    Check-in Now
-                  </button>
-                </div>
-              )}
+
+              {canManageEvent &&
+                reservationStatus !== "IN_USE" &&
+                reservationStatus !== "COMPLETED" && (
+                  <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-center">
+                    <p className="mb-3 text-sm text-slate-600">
+                      Check-in to this booking first to generate the event code.
+                    </p>
+                    <button
+                      disabled={loading}
+                      onClick={handleOwnerCheckIn}
+                      className="w-full rounded-lg bg-orange-600 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700 disabled:opacity-50"
+                    >
+                      Check-in Now
+                    </button>
+                  </div>
+                )}
 
               {/* Action Button */}
               <button
@@ -693,22 +859,35 @@ const EventSetupPage: React.FC = () => {
           <div className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-6 shadow-sm">
             <div className="mb-5 flex items-center gap-2">
               <CogIcon className="h-6 w-6 text-orange-600" />
-              <h2 className="text-lg font-bold text-slate-900">Services & Amenities</h2>
+              <h2 className="text-lg font-bold text-slate-900">
+                Services & Amenities
+              </h2>
             </div>
 
-            <p className="mb-4 text-sm text-slate-600">Add services for your event (microphone, desk, chairs, etc.)</p>
+            <p className="mb-4 text-sm text-slate-600">
+              Add services for your event (microphone, desk, chairs, etc.)
+            </p>
 
             <div className="space-y-3">
               {serviceItems.length ? (
                 serviceItems.map((s) => {
-                  const draft = serviceDraft[s.id] || { quantity: "", note: "" };
+                  const draft = serviceDraft[s.id] || {
+                    quantity: "",
+                    note: "",
+                  };
                   return (
-                    <div key={s.id} className="rounded-lg border border-slate-200 bg-white p-3.5 ring-1 ring-inset ring-slate-100">
+                    <div
+                      key={s.id}
+                      className="rounded-lg border border-slate-200 bg-white p-3.5 ring-1 ring-inset ring-slate-100"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
-                          <p className="text-sm font-semibold text-slate-900">{s.name}</p>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {s.name}
+                          </p>
                           <p className="mt-0.5 text-xs font-medium text-slate-500">
-                            {s.price != null ? formatPriceVN(s.price) : "-"} {s.unit ? `/${s.unit}` : ""}
+                            {s.price != null ? formatPriceVN(s.price) : "-"}{" "}
+                            {s.unit ? `/${s.unit}` : ""}
                           </p>
                         </div>
                       </div>
@@ -764,14 +943,18 @@ const EventSetupPage: React.FC = () => {
             <h2 className="text-lg font-bold text-slate-900">Participants</h2>
           </div>
 
-          <p className="mb-6 text-sm text-slate-600">Invite people by email and manage check-ins</p>
+          <p className="mb-6 text-sm text-slate-600">
+            Invite people by email and manage check-ins
+          </p>
 
           {/* Invite Section */}
           {canManageEvent ? (
             <div className="mb-6 rounded-lg border border-orange-200 bg-orange-50/50 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="flex-1">
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">Participant Email</label>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Participant Email
+                  </label>
                   <input
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
@@ -781,7 +964,12 @@ const EventSetupPage: React.FC = () => {
                   />
                 </div>
                 <button
-                  disabled={loading || !eventData?.id || !inviteEmail.trim() || !canInvite}
+                  disabled={
+                    loading ||
+                    !eventData?.id ||
+                    !inviteEmail.trim() ||
+                    !canInvite
+                  }
                   onClick={invite}
                   className="flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-orange-700 disabled:opacity-60"
                 >
@@ -790,7 +978,9 @@ const EventSetupPage: React.FC = () => {
                 </button>
               </div>
               {!canInvite && (
-                <p className="mt-2 text-xs text-slate-500">Cannot add participants after check-in has started.</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Cannot add participants after check-in has started.
+                </p>
               )}
             </div>
           ) : null}
@@ -798,21 +988,33 @@ const EventSetupPage: React.FC = () => {
           {/* Self Participant Response */}
           {selfParticipant ? (
             <div className="mb-6 rounded-lg border border-orange-200 bg-orange-50 p-4">
-              <p className="text-sm font-bold text-slate-900">Your Invitation Response</p>
-              <p className="mt-1 text-sm text-slate-600">Status: <span className="font-semibold text-slate-900">{selfParticipant.inviteStatus || "-"}</span></p>
+              <p className="text-sm font-bold text-slate-900">
+                Your Invitation Response
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Status:{" "}
+                <span className="font-semibold text-slate-900">
+                  {selfParticipant.inviteStatus || "-"}
+                </span>
+              </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {String(selfParticipant.inviteStatus || "").toUpperCase() === "INVITED" ? (
+                {String(selfParticipant.inviteStatus || "").toUpperCase() ===
+                "INVITED" ? (
                   <>
                     <button
                       disabled={loading}
-                      onClick={() => respondInvitation(selfParticipant, "ACCEPT")}
+                      onClick={() =>
+                        respondInvitation(selfParticipant, "ACCEPT")
+                      }
                       className="flex-1 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60 sm:flex-none"
                     >
                       Accept
                     </button>
                     <button
                       disabled={loading}
-                      onClick={() => respondInvitation(selfParticipant, "DECLINE")}
+                      onClick={() =>
+                        respondInvitation(selfParticipant, "DECLINE")
+                      }
                       className="flex-1 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-60 sm:flex-none"
                     >
                       Decline
@@ -820,8 +1022,10 @@ const EventSetupPage: React.FC = () => {
                   </>
                 ) : null}
 
-                {String(selfParticipant.inviteStatus || "").toUpperCase() === "ACCEPTED" &&
-                String(selfParticipant.checkInStatus || "").toUpperCase() !== "CHECKED_IN" ? (
+                {String(selfParticipant.inviteStatus || "").toUpperCase() ===
+                  "ACCEPTED" &&
+                String(selfParticipant.checkInStatus || "").toUpperCase() !==
+                  "CHECKED_IN" ? (
                   <button
                     disabled={loading}
                     onClick={() => openCheckInModal(selfParticipant)}
@@ -839,27 +1043,45 @@ const EventSetupPage: React.FC = () => {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50/50">
                 <tr>
-                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-600">Email</th>
-                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-600">Name</th>
-                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-600">Invite</th>
-                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-600">Check-in</th>
-                  <th className="px-4 py-3 text-center text-xs font-bold uppercase text-slate-600">Action</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-600">
+                    Email
+                  </th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-600">
+                    Name
+                  </th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-600">
+                    Invite
+                  </th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-600">
+                    Check-in
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-bold uppercase text-slate-600">
+                    Action
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {eventData?.participants?.length ? (
                   eventData.participants.map((p) => (
                     <tr key={p.id} className="transition hover:bg-slate-50/50">
-                      <td className="px-4 py-3 text-sm text-slate-700">{p.email || "-"}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-slate-900">{p.fullName || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        {p.email || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-slate-900">
+                        {p.fullName || "-"}
+                      </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                          String(p.inviteStatus || "").toUpperCase() === "ACCEPTED"
-                            ? "bg-orange-50 text-orange-700"
-                            : String(p.inviteStatus || "").toUpperCase() === "DECLINED"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-slate-100 text-slate-600"
-                        }`}>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                            String(p.inviteStatus || "").toUpperCase() ===
+                            "ACCEPTED"
+                              ? "bg-orange-50 text-orange-700"
+                              : String(p.inviteStatus || "").toUpperCase() ===
+                                  "DECLINED"
+                                ? "bg-red-50 text-red-700"
+                                : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
                           {p.inviteStatus || "-"}
                         </span>
                       </td>
@@ -867,14 +1089,17 @@ const EventSetupPage: React.FC = () => {
                         <div className="flex flex-col gap-0.5">
                           <span
                             className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${
-                              String(p.checkInStatus || "").toUpperCase() === "CHECKED_IN"
+                              String(p.checkInStatus || "").toUpperCase() ===
+                              "CHECKED_IN"
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-slate-100 text-slate-500"
                             }`}
                           >
-                            {String(p.checkInStatus || "").toUpperCase() === "CHECKED_IN"
+                            {String(p.checkInStatus || "").toUpperCase() ===
+                            "CHECKED_IN"
                               ? "Checked In"
-                              : String(p.checkInStatus || "").toUpperCase() === "NOT_CHECKED_IN"
+                              : String(p.checkInStatus || "").toUpperCase() ===
+                                  "NOT_CHECKED_IN"
                                 ? "Not Checked In"
                                 : p.checkInStatus || "—"}
                           </span>
@@ -890,7 +1115,7 @@ const EventSetupPage: React.FC = () => {
                           <button
                             disabled={loading}
                             onClick={() => openHistory(p)}
-                            className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-900/10 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60"
                           >
                             History
                           </button>
@@ -898,8 +1123,8 @@ const EventSetupPage: React.FC = () => {
                           {canManageEvent ? (
                             <button
                               disabled={loading}
-                              onClick={() => removeParticipant(p.id)}
-                              className="rounded-md border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                              onClick={() => requestRemoveParticipant(p)}
+                              className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 disabled:opacity-60"
                             >
                               Remove
                             </button>
@@ -910,7 +1135,10 @@ const EventSetupPage: React.FC = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">
+                    <td
+                      colSpan={5}
+                      className="px-4 py-8 text-center text-sm text-slate-500"
+                    >
                       No participants added yet
                     </td>
                   </tr>
@@ -926,7 +1154,9 @@ const EventSetupPage: React.FC = () => {
           <div className="w-full max-w-3xl rounded-2xl bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-lg font-bold text-slate-900">Lịch sử trạng thái</div>
+                <div className="text-lg font-bold text-slate-900">
+                  Status History
+                </div>
                 <div className="mt-1 text-sm text-slate-600">
                   {participantHistoryModal.participant?.email || "-"}
                 </div>
@@ -952,35 +1182,74 @@ const EventSetupPage: React.FC = () => {
               {participantHistoryModal.loading ? (
                 <div className="text-sm text-slate-500">Loading...</div>
               ) : participantHistoryModal.error ? (
-                <div className="text-sm text-red-600">{participantHistoryModal.error}</div>
+                <div className="text-sm text-red-600">
+                  {participantHistoryModal.error}
+                </div>
               ) : participantHistoryModal.items.length ? (
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">At</th>
-                        <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">Action</th>
-                        <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">Invite</th>
-                        <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">Check-in</th>
-                        <th className="px-3 py-2 text-xs font-bold uppercase text-slate-500">By</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {participantHistoryModal.items.map((h) => (
-                        <tr key={h.id}>
-                          <td className="px-3 py-2">{h.changedAt || "-"}</td>
-                          <td className="px-3 py-2">{h.action || "-"}</td>
-                          <td className="px-3 py-2">
-                            {(h.fromInviteStatus || "-") + " → " + (h.toInviteStatus || "-")}
-                          </td>
-                          <td className="px-3 py-2">
-                            {(h.fromCheckInStatus || "-") + " → " + (h.toCheckInStatus || "-")}
-                          </td>
-                          <td className="px-3 py-2">{h.changedByEmail || "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="space-y-3">
+                  {participantHistoryModal.items.map((h) => {
+                    const inviteFrom = h.fromInviteStatus || "-";
+                    const inviteTo = h.toInviteStatus || "-";
+                    const checkFrom = h.fromCheckInStatus || "-";
+                    const checkTo = h.toCheckInStatus || "-";
+                    return (
+                      <div
+                        key={h.id}
+                        className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-slate-900">
+                            {h.action || "Update"}
+                          </div>
+                          <div className="text-xs font-medium text-slate-500">
+                            {formatHistoryTime(h.changedAt)}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="rounded-lg bg-slate-50 p-3">
+                            <p className="text-[11px] font-semibold uppercase text-slate-500">
+                              Invite Status
+                            </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5">
+                                {inviteFrom}
+                              </span>
+                              <span className="text-slate-400">→</span>
+                              <span className="rounded-full bg-orange-50 px-2 py-0.5 text-orange-700">
+                                {inviteTo}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="rounded-lg bg-slate-50 p-3">
+                            <p className="text-[11px] font-semibold uppercase text-slate-500">
+                              Check-in Status
+                            </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5">
+                                {checkFrom}
+                              </span>
+                              <span className="text-slate-400">→</span>
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
+                                {checkTo}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
+                            By {h.changedByEmail || "System"}
+                          </span>
+                          {h.note ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
+                              Note: {h.note}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-sm text-slate-500">No history.</div>
@@ -995,12 +1264,25 @@ const EventSetupPage: React.FC = () => {
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-lg font-bold text-slate-900">OTP Check-in</div>
-                <div className="mt-1 text-sm text-slate-600">{otpModal.participant?.email || "-"}</div>
+                <div className="text-lg font-bold text-slate-900">
+                  OTP Check-in
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {otpModal.participant?.email || "-"}
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setOtpModal({ open: false, participant: null, token: null, expiresAt: null, loading: false, error: null })}
+                onClick={() =>
+                  setOtpModal({
+                    open: false,
+                    participant: null,
+                    token: null,
+                    expiresAt: null,
+                    loading: false,
+                    error: null,
+                  })
+                }
                 className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
               >
                 Close
@@ -1014,12 +1296,17 @@ const EventSetupPage: React.FC = () => {
                 <div className="text-sm text-red-600">{otpModal.error}</div>
               ) : otpModal.token ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-xs font-bold uppercase text-slate-500">OTP</div>
+                  <div className="text-xs font-bold uppercase text-slate-500">
+                    OTP
+                  </div>
                   <div className="mt-2 text-3xl font-black tracking-widest text-slate-900">
                     {otpModal.token}
                   </div>
                   <div className="mt-2 text-sm text-slate-600">
-                    Expires at: <span className="font-semibold">{otpModal.expiresAt || "-"}</span>
+                    Expires at:{" "}
+                    <span className="font-semibold">
+                      {otpModal.expiresAt || "-"}
+                    </span>
                   </div>
                 </div>
               ) : (
@@ -1036,11 +1323,21 @@ const EventSetupPage: React.FC = () => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-lg font-bold text-slate-900">Check-in</div>
-                <div className="mt-1 text-sm text-slate-600">{checkInModal.participant?.email || "-"}</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {checkInModal.participant?.email || "-"}
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setCheckInModal({ open: false, participant: null, otp: "", loading: false, error: null })}
+                onClick={() =>
+                  setCheckInModal({
+                    open: false,
+                    participant: null,
+                    otp: "",
+                    loading: false,
+                    error: null,
+                  })
+                }
                 className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
               >
                 Close
@@ -1050,8 +1347,10 @@ const EventSetupPage: React.FC = () => {
             <div className="mt-4 space-y-3">
               <input
                 value={checkInModal.otp}
-                onChange={(e) => setCheckInModal((prev) => ({ ...prev, otp: e.target.value }))}
-                placeholder="Nhập OTP..."
+                onChange={(e) =>
+                  setCheckInModal((prev) => ({ ...prev, otp: e.target.value }))
+                }
+                placeholder="Enter OTP..."
                 inputMode="numeric"
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-200"
                 disabled={checkInModal.loading}
@@ -1064,14 +1363,36 @@ const EventSetupPage: React.FC = () => {
                 onClick={submitCheckIn}
                 className="w-full rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60"
               >
-                Xác nhận CheckIn
+                Confirm Check-in
               </button>
             </div>
           </div>
         </div>
       ) : null}
 
-      {toast ? <CustomMessage type={toast.type} message={toast.message} onClose={() => setToast(null)} /> : null}
+      <ConfirmDialog
+        open={!!pendingRemoveParticipant}
+        tone="danger"
+        title="Remove participant"
+        description={
+          pendingRemoveParticipant
+            ? `Remove ${pendingRemoveParticipant.email || pendingRemoveParticipant.fullName || "this participant"} from the event?`
+            : "Remove this participant from the event?"
+        }
+        confirmText="Remove"
+        cancelText="Keep"
+        loading={loading}
+        onClose={() => setPendingRemoveParticipant(null)}
+        onConfirm={confirmRemoveParticipant}
+      />
+
+      {toast ? (
+        <CustomMessage
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      ) : null}
     </div>
   );
 };
