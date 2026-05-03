@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Bars3Icon } from "@heroicons/react/24/outline";
 import { ClockIcon, CalendarDaysIcon } from "@heroicons/react/24/solid";
 import { api } from "../../services/api";
 import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
@@ -72,6 +73,7 @@ const formatDateRange = (fromDate?: string | null, untilDate?: string | null): s
 // start+ chức năng admin quản lý recurring series
 const AdminRecurringSeriesManagement: React.FC = () => {
   const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [series, setSeries] = useState<Series[]>([]);
   const [loading, setLoading] = useState(false);
   const [adminName, setAdminName] = useState("Admin User");
@@ -156,8 +158,8 @@ const AdminRecurringSeriesManagement: React.FC = () => {
         adminName={adminName}
         adminEmail={adminEmail}
         onLogout={handleLogout}
-        mobileOpen={false}
-        onCloseMobile={() => {}}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
       />
 
       <main className="flex-1 lg:pl-72">
@@ -165,7 +167,17 @@ const AdminRecurringSeriesManagement: React.FC = () => {
           {/* Header */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Recurring Series Management</h1>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 lg:hidden"
+                  onClick={() => setMobileOpen(true)}
+                  aria-label="Open admin sidebar"
+                >
+                  <Bars3Icon className="h-5 w-5" />
+                </button>
+                <h1 className="text-2xl font-bold text-slate-900">Recurring Series Management</h1>
+              </div>
               <p className="mt-1 text-sm text-slate-500">
                 View and manage all recurring series from all users.
               </p>

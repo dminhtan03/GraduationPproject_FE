@@ -40,48 +40,48 @@ type StatCard = {
 const cardConfig: StatCard[] = [
   {
     key: "totalBookings",
-    title: "Booking tháng này",
-    hint: "Tổng booking tạo trong tháng",
+    title: "Bookings this month",
+    hint: "Total bookings created this month",
     icon: CalendarDaysIcon,
     accent: "from-sky-500 to-cyan-500",
     format: "number",
   },
   {
     key: "activeUsers",
-    title: "Người dùng hoạt động",
-    hint: "User có hoạt động booking tháng này",
+    title: "Active users",
+    hint: "Users with bookings this month",
     icon: UsersIcon,
     accent: "from-emerald-500 to-teal-500",
     format: "number",
   },
   {
     key: "completedBookings",
-    title: "Đã hoàn thành",
-    hint: "Booking kết thúc thành công tháng này",
+    title: "Completed",
+    hint: "Bookings completed this month",
     icon: CheckCircleIcon,
     accent: "from-violet-500 to-purple-500",
     format: "number",
   },
   {
     key: "cancellationRate",
-    title: "Tỷ lệ huỷ",
-    hint: "% booking bị huỷ trên tổng tháng này",
+    title: "Cancellation rate",
+    hint: "% of bookings cancelled this month",
     icon: NoSymbolIcon,
     accent: "from-rose-500 to-pink-500",
     format: "percent",
   },
   {
     key: "todaysBookings",
-    title: "Booking hôm nay",
-    hint: "Booking được tạo hôm nay",
+    title: "Bookings today",
+    hint: "Bookings created today",
     icon: ClockIcon,
     accent: "from-amber-500 to-orange-500",
     format: "number",
   },
   {
     key: "noShowBookings",
-    title: "No-Show tháng này",
-    hint: "Booking không check-in đúng giờ",
+    title: "No-shows this month",
+    hint: "Bookings with no check-in",
     icon: ExclamationTriangleIcon,
     accent: "from-slate-500 to-slate-600",
     format: "number",
@@ -89,7 +89,7 @@ const cardConfig: StatCard[] = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const numberFmt = new Intl.NumberFormat("vi-VN");
+const numberFmt = new Intl.NumberFormat("en-US");
 
 const formatChange = (value: number) => {
   const pct = Number.isFinite(value) ? value * 100 : 0;
@@ -111,20 +111,20 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  COMPLETED:      "Hoàn thành",
-  RESERVED:       "Đã đặt",
-  IN_USE:         "Đang dùng",
-  CANCELLED:      "Đã huỷ",
-  FORCE_CANCELLED:"Huỷ bắt buộc",
-  NO_SHOW:        "Không đến",
-  PENDING:        "Chờ xử lý",
-  FAILED:         "Thất bại",
+  COMPLETED:      "Completed",
+  RESERVED:       "Reserved",
+  IN_USE:         "In use",
+  CANCELLED:      "Cancelled",
+  FORCE_CANCELLED:"Force cancelled",
+  NO_SHOW:        "No show",
+  PENDING:        "Pending",
+  FAILED:         "Failed",
 };
 
 // ── Bar Chart (SVG) ───────────────────────────────────────────────────────────
 const BarChart: React.FC<{ data: DailyTrend[] }> = ({ data }) => {
   if (!data || data.length === 0) {
-    return <div className="flex h-48 items-center justify-center text-sm text-slate-400">Không có dữ liệu</div>;
+    return <div className="flex h-48 items-center justify-center text-sm text-slate-400">No data available</div>;
   }
 
   const maxVal = Math.max(...data.map((d) => d.count), 1);
@@ -191,7 +191,7 @@ const BarChart: React.FC<{ data: DailyTrend[] }> = ({ data }) => {
 // ── Pie Chart (SVG) ───────────────────────────────────────────────────────────
 const PieChart: React.FC<{ data: StatusCount[] }> = ({ data }) => {
   if (!data || data.length === 0) {
-    return <div className="flex h-48 items-center justify-center text-sm text-slate-400">Không có dữ liệu</div>;
+    return <div className="flex h-48 items-center justify-center text-sm text-slate-400">No data available</div>;
   }
 
   const R = 70;
@@ -199,7 +199,7 @@ const PieChart: React.FC<{ data: StatusCount[] }> = ({ data }) => {
   const CY = 90;
   const total = data.reduce((s, d) => s + d.count, 0);
   if (total === 0) {
-    return <div className="flex h-48 items-center justify-center text-sm text-slate-400">Không có dữ liệu</div>;
+    return <div className="flex h-48 items-center justify-center text-sm text-slate-400">No data available</div>;
   }
 
   let angle = -Math.PI / 2;
@@ -296,7 +296,7 @@ const AdminDashboardPage: React.FC = () => {
       const data = await adminService.getOverviewStats();
       setStats(data);
     } catch (e) {
-      setError(extractApiMessage(e, "Không thể tải dữ liệu thống kê"));
+      setError(extractApiMessage(e, "Unable to load analytics data"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -355,7 +355,7 @@ const AdminDashboardPage: React.FC = () => {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Admin Analytics</p>
                 <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">Dashboard Overview</h1>
                 <p className="mt-1 text-sm text-slate-600">
-                  Theo dõi booking, người dùng và xu hướng sử dụng phòng.
+                  Track bookings, users, and room usage trends.
                 </p>
               </div>
             </div>
@@ -366,7 +366,7 @@ const AdminDashboardPage: React.FC = () => {
               className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
               <ArrowPathIcon className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              Làm mới
+              Refresh
             </button>
           </div>
         </section>
@@ -422,7 +422,7 @@ const AdminDashboardPage: React.FC = () => {
                       ) : (
                         <ArrowPathIcon className="h-3.5 w-3.5" />
                       )}
-                      <span>{formatChange(stat.change)} vs tháng trước</span>
+                      <span>{formatChange(stat.change)} vs last month</span>
                     </div>
                   </article>
                 );
@@ -436,8 +436,8 @@ const AdminDashboardPage: React.FC = () => {
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Xu hướng booking 7 ngày</h2>
-                <p className="mt-0.5 text-sm text-slate-500">Số lượng booking tạo mỗi ngày</p>
+                <h2 className="text-lg font-semibold text-slate-900">7-day booking trend</h2>
+                <p className="mt-0.5 text-sm text-slate-500">Bookings created per day</p>
               </div>
             </div>
             {loading ? (
@@ -450,8 +450,8 @@ const AdminDashboardPage: React.FC = () => {
           {/* Pie Chart — Status Distribution */}
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-4">
-              <h2 className="text-lg font-semibold text-slate-900">Phân bố trạng thái</h2>
-              <p className="mt-0.5 text-sm text-slate-500">Tháng này theo từng trạng thái booking</p>
+              <h2 className="text-lg font-semibold text-slate-900">Status distribution</h2>
+              <p className="mt-0.5 text-sm text-slate-500">This month by booking status</p>
             </div>
             {loading ? (
               <div className="flex items-center gap-4">
@@ -471,36 +471,36 @@ const AdminDashboardPage: React.FC = () => {
         {/* ── Summary insight strip ── */}
         {!loading && stats && (
           <section className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">Tóm tắt tháng này</h2>
+            <h2 className="mb-4 text-lg font-semibold text-slate-900">This month summary</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
                 {
-                  label: "Tổng booking",
+                  label: "Total bookings",
                   value: numberFmt.format(stats.totalBookings?.value ?? 0),
-                  sub: "đã tạo",
+                  sub: "created",
                   color: "text-sky-700",
                   bg: "bg-sky-50",
                 },
                 {
-                  label: "Hoàn thành",
+                  label: "Completed",
                   value: (stats.totalBookings?.value ?? 0) > 0
                     ? `${Math.round(((stats.completedBookings?.value ?? 0) / stats.totalBookings.value) * 100)}%`
                     : "0%",
-                  sub: `${numberFmt.format(stats.completedBookings?.value ?? 0)} booking`,
+                  sub: `${numberFmt.format(stats.completedBookings?.value ?? 0)} bookings`,
                   color: "text-emerald-700",
                   bg: "bg-emerald-50",
                 },
                 {
-                  label: "Tỷ lệ huỷ",
+                  label: "Cancellation rate",
                   value: `${stats.cancellationRate?.value ?? 0}%`,
-                  sub: "của tổng booking",
+                  sub: "of total bookings",
                   color: "text-rose-700",
                   bg: "bg-rose-50",
                 },
                 {
-                  label: "No-Show",
+                  label: "No-show",
                   value: numberFmt.format(stats.noShowBookings?.value ?? 0),
-                  sub: "không check-in",
+                  sub: "no check-ins",
                   color: "text-amber-700",
                   bg: "bg-amber-50",
                 },

@@ -12,7 +12,11 @@ import {
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { EyeIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import {
+  Bars3Icon,
+  EyeIcon,
+  MagnifyingGlassIcon,
+} from "@heroicons/react/24/outline";
 import { StarIcon } from "@heroicons/react/24/solid";
 
 import AdminSidebar from "../../components/Layout/AdminSidebar";
@@ -42,6 +46,7 @@ interface AdminFeedback {
 
 const AdminFeedbackManagement: React.FC = () => {
   const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [feedbacks, setFeedbacks] = useState<AdminFeedback[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [total, setTotal] = useState<number>(0);
@@ -228,15 +233,25 @@ const AdminFeedbackManagement: React.FC = () => {
         adminName={adminName}
         adminEmail={adminEmail}
         onLogout={handleLogout}
-        mobileOpen={false}
-        onCloseMobile={() => {}}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
       />
 
       <main className="flex-1 lg:pl-72">
         <div className="px-4 py-8 sm:px-6 lg:px-8">
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Feedback Management</h1>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 lg:hidden"
+                  onClick={() => setMobileOpen(true)}
+                  aria-label="Open admin sidebar"
+                >
+                  <Bars3Icon className="h-5 w-5" />
+                </button>
+                <h1 className="text-2xl font-bold text-slate-900">Feedback Management</h1>
+              </div>
               <p className="mt-1 text-sm text-slate-500">
                 View user feedbacks across all buildings and rooms.
               </p>
@@ -246,7 +261,6 @@ const AdminFeedbackManagement: React.FC = () => {
           {/* Filters */}
           <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
             <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800">Filter & Search</h2>
               {(searchEmail || filterRating !== undefined) && (
                 <button
                   type="button"

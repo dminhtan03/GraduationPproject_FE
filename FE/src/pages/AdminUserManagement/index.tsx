@@ -754,8 +754,8 @@ const AdminUserManagementPage: React.FC = () => {
           importFile={importFile}
           setImportFile={setImportFile}
           title="Import Users"
-          description="Chỉ hỗ trợ file .xlsx"
-          structureInfo="Cấu trúc Excel: firstName, lastName, email, phoneNumber, gender, address, department, password, role."
+          description="Only .xlsx files are supported"
+          structureInfo="Excel columns: firstName, lastName, email, phoneNumber, gender, address, department, password, role."
           loading={importing}
           error={importError}
           templateDownloadLink="/template file add user.xlsx"

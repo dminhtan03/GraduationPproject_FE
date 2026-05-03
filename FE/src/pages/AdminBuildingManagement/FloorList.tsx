@@ -233,8 +233,8 @@ const AdminBuildingFloorsPage: React.FC = () => {
         importFile={importFile}
         setImportFile={setImportFile}
         title="Import Rooms"
-        description="Chỉ hỗ trợ file .xlsx"
-        structureInfo="Cấu trúc Excel: locationCode, capacity, status (AVAILABLE, BROKEN, etc.), score, amenityNames (ngăn cách bằng dấu phẩy)."
+        description="Only .xlsx files are supported"
+        structureInfo="Excel columns: locationCode, capacity, status (AVAILABLE, BROKEN, etc.), score, amenityNames (comma-separated)."
         loading={importingFloorId !== null}
         error={importError}
         templateDownloadLink="/template file add room.xlsx"

@@ -63,7 +63,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
             </div>
           </div>
           {error && (
-            <div className="rounded-xl bg-red-50 p-4 border border-red-100 max-h-40 overflow-y-auto shadow-inner shadow-red-100/50">
+            <div className="rounded-xl bg-red-50 p-4 border border-red-100 max-h-60 overflow-y-auto shadow-inner shadow-red-100/50">
               <div className="flex flex-col gap-1">
                 {error.split("\n").map((err, index) => (
                   <p

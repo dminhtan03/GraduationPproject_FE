@@ -10,7 +10,11 @@ import {
   Modal,
 } from "antd";
 import type { ColumnsType, TablePaginationConfig } from "antd/es/table";
-import { EyeIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import {
+  Bars3Icon,
+  EyeIcon,
+  ExclamationTriangleIcon,
+} from "@heroicons/react/24/outline";
 import { adminService } from "../../services/adminService";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
@@ -720,7 +724,7 @@ const AdminAllBookingListPage: React.FC = () => {
         onCloseMobile={() => setMobileOpen(false)}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden ml-72">
+      <div className="flex-1 flex flex-col overflow-hidden lg:ml-72">
         {/* Main Content */}
         <main className="flex-1 overflow-auto px-4 pb-8 pt-5 lg:px-8">
           <Modal
@@ -806,9 +810,19 @@ const AdminAllBookingListPage: React.FC = () => {
           {/* Header */}
           <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                All Bookings List
-              </h1>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 lg:hidden"
+                  onClick={() => setMobileOpen(true)}
+                  aria-label="Open admin sidebar"
+                >
+                  <Bars3Icon className="h-5 w-5" />
+                </button>
+                <h1 className="text-2xl font-bold text-slate-900">
+                  All Bookings List
+                </h1>
+              </div>
               <p className="text-sm text-slate-500">
                 Manage all booking reservations and requests
               </p>

@@ -37,6 +37,8 @@ const MyRecurringSeriesPage: React.FC = () => {
     type: MessageType;
     message: string;
   } | null>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rooms, setRooms] = useState<RoomOption[]>([]);
@@ -275,13 +277,17 @@ const MyRecurringSeriesPage: React.FC = () => {
     }
   };
 
+  const openCancelModal = (seriesId: string) => {
+    setCancelTargetId(seriesId);
+    setCancelModalOpen(true);
+  };
+
+  const closeCancelModal = () => {
+    setCancelModalOpen(false);
+    setCancelTargetId(null);
+  };
+
   const cancel = async (seriesId: string) => {
-    if (
-      !window.confirm(
-        "Cancel this recurring series? Future reservations will be cancelled.",
-      )
-    )
-      return;
     try {
       await api.delete(
         buildUrl(API_ENDPOINTS.RESERVATION_SERIES.CANCEL, { seriesId }),
@@ -294,6 +300,12 @@ const MyRecurringSeriesPage: React.FC = () => {
         message: extractApiMessage(err, "Cancel failed"),
       });
     }
+  };
+
+  const confirmCancel = async () => {
+    if (!cancelTargetId) return;
+    await cancel(cancelTargetId);
+    closeCancelModal();
   };
 
   return (
@@ -419,7 +431,7 @@ const MyRecurringSeriesPage: React.FC = () => {
                         Sync now
                       </button> */}
                       <button
-                        onClick={() => cancel(s.id)}
+                        onClick={() => openCancelModal(s.id)}
                         className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-100"
                       >
                         Cancel
@@ -709,6 +721,40 @@ const MyRecurringSeriesPage: React.FC = () => {
           </div>
         </div>
       ) : null}
+
+      {cancelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-2 text-rose-600">
+                <span className="text-sm font-bold">!</span>
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-slate-900">Cancel recurring series</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Future reservations will be cancelled. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={closeCancelModal}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Keep series
+              </button>
+              <button
+                type="button"
+                onClick={confirmCancel}
+                className="flex-1 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+              >
+                Cancel series
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast ? (
         <CustomMessage

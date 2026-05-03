@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Bars3Icon,
   PlusIcon,
   PencilSquareIcon,
   TrashIcon,
@@ -229,9 +230,19 @@ const AdminServiceItemManagementPage: React.FC = () => {
       <main className="min-h-screen px-4 pb-8 pt-5 lg:ml-72 lg:px-8">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Service Management
-            </h1>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 lg:hidden"
+                onClick={() => setMobileOpen(true)}
+                aria-label="Open admin sidebar"
+              >
+                <Bars3Icon className="h-5 w-5" />
+              </button>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Service Management
+              </h1>
+            </div>
             <p className="text-sm text-slate-500">
               Manage add-on services (catering, projector, etc.)
             </p>

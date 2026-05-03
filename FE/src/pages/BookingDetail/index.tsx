@@ -5,6 +5,8 @@ import { reservationService } from "../../services/reservationService";
 import { roomService } from "../../services/roomService";
 import { getProfile } from "../../services/authService";
 import { ROUTES } from "../../constants";
+import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
+import { api } from "../../services/api";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import type { Reservation } from "../../types";
 
@@ -112,6 +114,7 @@ const BookingDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
+  const [eventData, setEventData] = useState<Record<string, unknown> | null>(null);
   const [profileId, setProfileId] = useState<string>("");
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const [roomImageUrls, setRoomImageUrls] = useState<string[]>([]);
@@ -178,6 +181,28 @@ const BookingDetailPage: React.FC = () => {
 
     void loadDetail();
   }, [bookingFromState?.id, bookingFromState?.rawData, normalizedBookingId]);
+
+  useEffect(() => {
+    if (!normalizedBookingId) return;
+
+    const loadEventForReservation = async () => {
+      try {
+        const response = await api.get<Record<string, unknown>>(
+          buildUrl(API_ENDPOINTS.EVENTS.BY_RESERVATION, { reservationId: normalizedBookingId }),
+        );
+        const payload = response?.data?.data ?? response?.data ?? null;
+        if (payload && typeof payload === "object") {
+          setEventData(payload as Record<string, unknown>);
+        } else {
+          setEventData(null);
+        }
+      } catch {
+        setEventData(null);
+      }
+    };
+
+    void loadEventForReservation();
+  }, [normalizedBookingId]);
 
   const mergedDetail = useMemo(() => {
     const reservationNode =
@@ -384,6 +409,14 @@ const BookingDetailPage: React.FC = () => {
   const noteLabel = toDisplayText(mergedDetail.note);
   const cancelReasonLabel = toDisplayText(mergedDetail.cancelReason || mergedDetail.reason);
   const statusLabel = toDisplayText(mergedDetail.status);
+  const eventIdValue =
+    toNonEmptyString(mergedDetail.eventId) ||
+    toNonEmptyString(mergedDetail.rawData && typeof mergedDetail.rawData === "object"
+      ? (mergedDetail.rawData as Record<string, unknown>).eventId
+      : undefined) ||
+    toNonEmptyString(eventData?.eventId) ||
+    toNonEmptyString(eventData?.id);
+  const canManageEvent = Boolean(eventIdValue || eventData);
   
   // Extract feedback from detail.feedback
   const feedbackLabel = useMemo(() => {
@@ -681,20 +714,15 @@ const BookingDetailPage: React.FC = () => {
                 Book Another Room
               </button>
 
-              {/* // start+ chức năng đặt phòng theo sự kiện (nút vào setup/live từ booking detail) */}
-              {normalizedBookingId ? (
-                <>
-    
-                  <button
-                    type="button"
-                     onClick={() => navigate(`/events/setup/${normalizedBookingId}`)}
-                    className="w-full rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-                  >
-                      Event setup
-                  </button>
-                </>
+              {canManageEvent ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(ROUTES.EVENT_SETUP.replace(":reservationId", normalizedBookingId))}
+                  className="w-full rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                >
+                  Event setup
+                </button>
               ) : null}
-              {/* // end+ chức năng đặt phòng theo sự kiện (nút vào setup/live từ booking detail) */}
             </div>
           </div>
 

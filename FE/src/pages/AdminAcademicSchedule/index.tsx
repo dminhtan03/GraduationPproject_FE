@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Bars3Icon,
   PlusIcon,
   MagnifyingGlassIcon,
   PencilIcon,
@@ -540,9 +541,19 @@ const AdminAcademicSchedulePage: React.FC = () => {
       <main className="min-h-screen px-4 pb-8 pt-5 lg:ml-72 lg:px-8">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Academic Schedule
-            </h1>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 lg:hidden"
+                onClick={() => setMobileOpen(true)}
+                aria-label="Open admin sidebar"
+              >
+                <Bars3Icon className="h-5 w-5" />
+              </button>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Academic Schedule
+              </h1>
+            </div>
             <p className="text-sm text-slate-500">
               Manage fixed class schedules for rooms
             </p>
@@ -832,7 +843,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl overflow-visible max-h-[85vh] overflow-y-auto">
             <div className="mb-6 flex items-center justify-between border-b pb-4">
               <h2 className="text-xl font-bold text-slate-900">
                 Add Academic Schedule
@@ -1076,7 +1087,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
       {/* Edit Modal */}
       {showEditModal && editingSchedule && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl overflow-visible">
             <div className="mb-6 flex items-center justify-between border-b pb-4">
               <h2 className="text-xl font-bold text-slate-900">
                 Edit Academic Schedule
@@ -1240,8 +1251,8 @@ const AdminAcademicSchedulePage: React.FC = () => {
         importFile={importFile}
         setImportFile={setImportFile}
         title="Import Schedules"
-        description="Chỉ hỗ trợ file .xlsx"
-        structureInfo="Cấu trúc Excel: RoomCode, StartTime (HH:mm), EndTime (HH:mm), DaysOfWeek (NGĂN CÁCH BẰNG DẤU PHẨY), FromDate, ToDate, Description."
+        description="Only .xlsx files are supported"
+        structureInfo="Excel columns: RoomCode, StartTime (HH:mm), EndTime (HH:mm), DaysOfWeek (comma-separated), FromDate, ToDate, Description."
         loading={loading}
         error={importError}
         templateDownloadLink="/Import Academic Schedule.xlsx"
@@ -1251,7 +1262,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
       {/* Bulk Edit Modal */}
       {isBulkEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl overflow-visible">
             <div className="mb-6 flex items-center justify-between border-b pb-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">

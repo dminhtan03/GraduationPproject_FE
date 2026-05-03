@@ -1748,10 +1748,21 @@ const MyBookingsPage: React.FC = () => {
 
   return (
     <div className="fade-in">
-      <Title level={2}>My Bookings</Title>
-      <Paragraph className="text-gray-600 mb-6">
-        View and manage your room reservations.
-      </Paragraph>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <Title level={2}>My Bookings</Title>
+          <Paragraph className="text-gray-600">
+            View and manage your room reservations.
+          </Paragraph>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate(ROUTES.ROOM_LIST)}
+          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-orange-600"
+        >
+          Book a room
+        </button>
+      </div>
 
       <Tabs
         activeKey={activeTab}
@@ -1762,21 +1773,6 @@ const MyBookingsPage: React.FC = () => {
 
       {activeTab !== "invitations" ? (
         <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-slate-700">
-                Search Filters
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => navigate(ROUTES.ROOM_LIST)}
-              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-orange-600"
-            >
-              Book a room
-            </button>
-          </div>
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
             <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 xl:col-span-6">

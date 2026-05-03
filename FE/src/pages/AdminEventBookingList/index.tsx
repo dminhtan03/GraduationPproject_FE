@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Table, Space, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { EyeIcon } from "@heroicons/react/24/outline";
+import { Bars3Icon, EyeIcon } from "@heroicons/react/24/outline";
 import { ClockIcon } from "@heroicons/react/24/solid";
 import { adminService } from "../../services/adminService";
 import { useNavigate } from "react-router-dom";
@@ -256,10 +256,19 @@ const AdminEventBookingListPage: React.FC = () => {
         <div className="px-4 py-8 sm:px-6 lg:px-8">
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                {" "}
-                Event Booking Management
-              </h1>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 lg:hidden"
+                  onClick={() => setMobileOpen(true)}
+                  aria-label="Open admin sidebar"
+                >
+                  <Bars3Icon className="h-5 w-5" />
+                </button>
+                <h1 className="text-2xl font-bold text-slate-900">
+                  Event Booking Management
+                </h1>
+              </div>
               <p className="mt-1 text-sm text-slate-500">
                 View and manage all event-related room bookings.
               </p>

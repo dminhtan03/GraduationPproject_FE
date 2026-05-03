@@ -650,8 +650,8 @@ const AdminRoomManagementPage: React.FC = () => {
         importFile={importRoomFile}
         setImportFile={setImportRoomFile}
         title="Import Rooms"
-        description="Chỉ hỗ trợ file .xlsx"
-        structureInfo="Cấu trúc Excel: locationCode, capacity, status (AVAILABLE, BROKEN, etc.), score, amenityNames (ngăn cách bằng dấu phẩy)."
+        description="Only .xlsx files are supported"
+        structureInfo="Excel columns: locationCode, capacity, status (AVAILABLE, BROKEN, etc.), score, amenityNames (comma-separated)."
         loading={importing}
         error={importRoomError}
         templateDownloadLink="/template file add room.xlsx"
@@ -669,8 +669,8 @@ const AdminRoomManagementPage: React.FC = () => {
         importFile={importScheduleFile}
         setImportFile={setImportScheduleFile}
         title="Import Academic Schedule"
-        description="Chỉ hỗ trợ file .xlsx"
-        structureInfo="Cấu trúc Excel: RoomCode, StartTime (HH:mm), EndTime (HH:mm), DaysOfWeek (NGĂN CÁCH BẰNG DẤU PHẨY), FromDate, ToDate, Description."
+        description="Only .xlsx files are supported"
+        structureInfo="Excel columns: RoomCode, StartTime (HH:mm), EndTime (HH:mm), DaysOfWeek (comma-separated), FromDate, ToDate, Description."
         loading={importing}
         error={importScheduleError}
         templateDownloadLink="/Import Academic Schedule.xlsx"
