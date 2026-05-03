@@ -14,6 +14,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { Link, useLocation } from "react-router-dom";
 import { ROUTES } from "../../constants";
+import AdminNotificationBell from "../common/AdminNotificationBell";
 
 type AdminSidebarProps = {
   adminName: string;
@@ -98,6 +99,12 @@ const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
   return (
     <>
+      {/* start+ admin notification bell — fixed top-right */}
+      <div className="fixed right-5 top-4 z-50">
+        <AdminNotificationBell />
+      </div>
+      {/* end+ admin notification bell */}
+
       {mobileOpen && (
         <button
           type="button"

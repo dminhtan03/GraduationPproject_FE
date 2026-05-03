@@ -106,6 +106,9 @@ const AdminEventBookingDetailPage: React.FC = () => {
   const [adminEmail, setAdminEmail] = useState("");
   const [toast, setToast] = useState<{ type: MessageType; message: string } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  // start+ reason modal for CANCELLED
+  const [cancelModal, setCancelModal] = useState<{ item: ServiceLine; reason: string } | null>(null);
+  // end+ reason modal
 
   const loadAdminProfile = async () => {
     try {
@@ -166,7 +169,7 @@ const AdminEventBookingDetailPage: React.FC = () => {
     return () => { client.deactivate(); };
   }, [reservationId]);
 
-  const handleUpdateStatus = async (item: ServiceLine, newStatus: string) => {
+  const doUpdateStatus = async (item: ServiceLine, newStatus: string, reason?: string) => {
     if (!reservationId) return;
     setUpdatingStatus(item.id);
     try {
@@ -175,17 +178,37 @@ const AdminEventBookingDetailPage: React.FC = () => {
           reservationId,
           itemId: item.id,
         }),
-        { status: newStatus },
+        { status: newStatus, reason: reason?.trim() || null },
       );
-      setToast({ type: "success", message: `Cập nhật thành công → ${statusConfig[newStatus as ServiceStatus]?.label ?? newStatus}` });
+      setToast({ type: "success", message: `Status updated to "${statusConfig[newStatus as ServiceStatus]?.label ?? newStatus}"` });
       await loadReservationDetail();
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Cập nhật thất bại";
+      const msg = err?.response?.data?.message || err?.message || "Update failed";
       setToast({ type: "error", message: String(msg) });
     } finally {
       setUpdatingStatus(null);
     }
   };
+
+  // start+ intercept CANCELLED to collect reason first
+  const handleUpdateStatus = (item: ServiceLine, newStatus: string) => {
+    if (newStatus === "CANCELLED") {
+      setCancelModal({ item, reason: "" });
+    } else {
+      doUpdateStatus(item, newStatus);
+    }
+  };
+
+  const confirmCancel = async () => {
+    if (!cancelModal) return;
+    if (!cancelModal.reason.trim()) {
+      setToast({ type: "warning", message: "Please provide a reason for cancellation." });
+      return;
+    }
+    await doUpdateStatus(cancelModal.item, "CANCELLED", cancelModal.reason);
+    setCancelModal(null);
+  };
+  // end+ intercept CANCELLED
 
   const allServiceLines: ServiceLine[] = useMemo(() => {
     const raw = detail?.serviceItems ?? detail?.reservation?.serviceItems ?? [];
@@ -568,6 +591,46 @@ const AdminEventBookingDetailPage: React.FC = () => {
         </div>
 
         {toast && <CustomMessage type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
+        {/* start+ cancel reason modal */}
+        {cancelModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h3 className="text-lg font-bold text-slate-900">Cancel Service Request</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Service: <span className="font-semibold">{cancelModal.item.name}</span>
+              </p>
+              <p className="mt-3 text-sm font-semibold text-slate-700">
+                Reason <span className="text-red-500">*</span>
+              </p>
+              <textarea
+                value={cancelModal.reason}
+                onChange={(e) => setCancelModal((prev) => prev ? { ...prev, reason: e.target.value } : prev)}
+                rows={3}
+                placeholder="Explain why this service request is being cancelled..."
+                className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-200"
+              />
+              <div className="mt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCancelModal(null)}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Go back
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmCancel}
+                  disabled={updatingStatus !== null}
+                  className="rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-60"
+                >
+                  Confirm Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* end+ cancel reason modal */}
       </main>
     </div>
   );
