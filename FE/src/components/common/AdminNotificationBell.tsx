@@ -21,7 +21,9 @@ const normalizeSockJsUrl = () => {
   const input = (API_CONFIG.WEBSOCKET_URL || fallback).trim();
   try {
     return /^wss?:\/\//i.test(input) ? input.replace(/^ws/i, "http") : input;
-  } catch { return fallback; }
+  } catch {
+    return fallback;
+  }
 };
 
 const timeAgo = (iso: string) => {
@@ -45,10 +47,13 @@ const AdminNotificationBell: React.FC = () => {
   useEffect(() => {
     import("../../services/api").then(({ api }) => {
       import("../../constants/endpoints").then(({ API_ENDPOINTS }) => {
-        api.get<any>(API_ENDPOINTS.AUTH.PROFILE).then((res) => {
-          const data = res.data?.data || res.data;
-          if (data?.id) setAdminUserId(String(data.id));
-        }).catch(() => {});
+        api
+          .get<any>(API_ENDPOINTS.AUTH.PROFILE)
+          .then((res) => {
+            const data = res.data?.data || res.data;
+            if (data?.id) setAdminUserId(String(data.id));
+          })
+          .catch(() => {});
       });
     });
   }, []);
@@ -65,12 +70,16 @@ const AdminNotificationBell: React.FC = () => {
           isRead: Boolean(r.isRead ?? r.read ?? false),
           reservationId:
             r.reservationId != null ? String(r.reservationId) : null,
-        }))
+        })),
       );
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Poll every 15s while mounted
   useEffect(() => {
@@ -94,7 +103,9 @@ const AdminNotificationBell: React.FC = () => {
       },
     });
     client.activate();
-    return () => { client.deactivate(); };
+    return () => {
+      client.deactivate();
+    };
   }, [adminUserId, load]);
 
   // Close on outside click
@@ -114,24 +125,42 @@ const AdminNotificationBell: React.FC = () => {
   const handleClick = async (item: NotifItem) => {
     // Mark as read
     if (!item.isRead) {
-      try { await notificationService.markAsRead(item.id); } catch { /* ignore */ }
-      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, isRead: true } : i));
+      try {
+        await notificationService.markAsRead(item.id);
+      } catch {
+        /* ignore */
+      }
+      setItems((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, isRead: true } : i)),
+      );
     }
     setOpen(false);
 
     if (item.reservationId) {
       // Service request notifications → admin event booking detail
       if (item.title.toLowerCase().includes("service")) {
-        navigate(ROUTES.ADMIN_EVENT_BOOKING_DETAIL.replace(":reservationId", item.reservationId));
+        navigate(
+          ROUTES.ADMIN_EVENT_BOOKING_DETAIL.replace(
+            ":reservationId",
+            item.reservationId,
+          ),
+        );
       } else {
-        navigate(ROUTES.ADMIN_EVENT_BOOKING_DETAIL.replace(":reservationId", item.reservationId));
+        navigate(
+          ROUTES.ADMIN_EVENT_BOOKING_DETAIL.replace(
+            ":reservationId",
+            item.reservationId,
+          ),
+        );
       }
     }
   };
 
   const markAllRead = async () => {
     const unreadItems = items.filter((i) => !i.isRead);
-    await Promise.allSettled(unreadItems.map((i) => notificationService.markAsRead(i.id)));
+    await Promise.allSettled(
+      unreadItems.map((i) => notificationService.markAsRead(i.id)),
+    );
     setItems((prev) => prev.map((i) => ({ ...i, isRead: true })));
   };
 
@@ -140,26 +169,35 @@ const AdminNotificationBell: React.FC = () => {
       <button
         type="button"
         onClick={() => setOpen((p) => !p)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+        className="group relative flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/70 bg-white/90 text-slate-600 shadow-[0_10px_25px_-18px_rgba(15,23,42,0.55)] backdrop-blur transition hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50"
         aria-label="Notifications"
       >
-        <BellIcon className="h-5 w-5" />
+        <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-orange-100/70 via-white to-white opacity-0 transition group-hover:opacity-100" />
+        <BellIcon className="relative h-5 w-5 transition group-hover:scale-105" />
         {unread > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-            {unread > 99 ? "99+" : unread}
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm">
+            <span className="absolute inset-0 rounded-full bg-red-400/70 opacity-70 blur-[1px]" />
+            <span className="relative">{unread > 99 ? "99+" : unread}</span>
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 rounded-2xl border border-slate-200 bg-white shadow-xl">
+        <div className="absolute right-0 z-50 mt-3 w-[22rem] rounded-3xl border border-slate-200 bg-white/95 shadow-[0_25px_60px_-30px_rgba(15,23,42,0.6)] backdrop-blur">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <span className="text-sm font-semibold text-slate-900">Notifications</span>
+          <div className="flex items-center justify-between border-b border-slate-100/80 bg-gradient-to-r from-orange-50 via-white to-white px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Notifications
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {unread > 0 ? `${unread} unread` : "All caught up"}
+              </p>
+            </div>
             {unread > 0 && (
               <button
                 onClick={markAllRead}
-                className="text-xs font-semibold text-orange-600 hover:text-orange-700"
+                className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-orange-600 shadow-sm transition hover:-translate-y-0.5 hover:text-orange-700"
               >
                 Mark all read
               </button>
@@ -167,9 +205,11 @@ const AdminNotificationBell: React.FC = () => {
           </div>
 
           {/* List */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
+          <div className="max-h-80 overflow-y-auto p-3">
             {items.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-slate-400">No notifications</p>
+              <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400">
+                No notifications
+              </p>
             ) : (
               items.slice(0, 20).map((item) => (
                 <button
@@ -177,20 +217,30 @@ const AdminNotificationBell: React.FC = () => {
                   type="button"
                   onClick={() => handleClick(item)}
                   className={[
-                    "w-full px-4 py-3 text-left transition hover:bg-slate-50",
-                    !item.isRead ? "bg-orange-50/60" : "",
+                    "group w-full rounded-2xl border px-4 py-3 text-left transition",
+                    !item.isRead
+                      ? "border-orange-200/70 bg-orange-50/70 shadow-[0_12px_25px_-20px_rgba(249,115,22,0.6)]"
+                      : "border-transparent hover:border-slate-200 hover:bg-slate-50",
                   ].join(" ")}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className={`text-sm font-semibold ${!item.isRead ? "text-slate-900" : "text-slate-600"}`}>
+                    <span
+                      className={`text-sm font-semibold ${
+                        !item.isRead ? "text-slate-900" : "text-slate-600"
+                      }`}
+                    >
                       {item.title}
                     </span>
                     {!item.isRead && (
-                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-orange-500" />
+                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-orange-500 shadow-sm" />
                     )}
                   </div>
-                  <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{item.content}</p>
-                  <p className="mt-1 text-xs text-slate-400">{timeAgo(item.createdAt)}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                    {item.content}
+                  </p>
+                  <p className="mt-2 text-[11px] font-medium text-slate-400">
+                    {timeAgo(item.createdAt)}
+                  </p>
                 </button>
               ))
             )}

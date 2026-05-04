@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Bars3Icon,
   PlusIcon,
   PencilSquareIcon,
-  TrashIcon,
   XMarkIcon,
   WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
@@ -17,6 +16,7 @@ import { API_ENDPOINTS } from "../../constants/endpoints";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
+import { CustomPagination } from "../../components/common";
 
 type ProfilePayload = {
   firstName?: string;
@@ -56,6 +56,8 @@ const AdminAmenityManagementPage: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [toastPopup, setToastPopup] = useState<{
     type: MessageType;
     message: string;
@@ -119,6 +121,18 @@ const AdminAmenityManagementPage: React.FC = () => {
     loadAmenities();
   }, []);
 
+  const totalPages = Math.max(1, Math.ceil(amenities.length / pageSize));
+  const pagedAmenities = useMemo(
+    () => amenities.slice((page - 1) * pageSize, page * pageSize),
+    [amenities, page, pageSize],
+  );
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   const handleOpenModal = (amenity?: Amenity) => {
     if (amenity) {
       setEditingAmenity(amenity);
@@ -161,28 +175,6 @@ const AdminAmenityManagementPage: React.FC = () => {
       });
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this amenity?"))
-      return;
-
-    try {
-      await adminService.deleteAmenity(id);
-      setToastPopup({
-        type: "success",
-        message: "Amenity deleted successfully",
-      });
-      loadAmenities();
-    } catch (err: unknown) {
-      setToastPopup({
-        type: "error",
-        message: getErrorMessage(
-          err,
-          "Failed to delete amenity. It might be in use.",
-        ),
-      });
     }
   };
 
@@ -255,13 +247,13 @@ const AdminAmenityManagementPage: React.FC = () => {
                   </td>
                 </tr>
               ) : amenities.length > 0 ? (
-                amenities.map((amenity, index) => (
+                pagedAmenities.map((amenity, index) => (
                   <tr
                     key={amenity.id}
                     className="hover:bg-slate-50/50 transition-colors"
                   >
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {index + 1}
+                      {(page - 1) * pageSize + index + 1}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -289,13 +281,6 @@ const AdminAmenityManagementPage: React.FC = () => {
                         >
                           <PencilSquareIcon className="h-5 w-5" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(amenity.id)}
-                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                          title="Delete"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -318,6 +303,16 @@ const AdminAmenityManagementPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {amenities.length > 0 && totalPages > 1 && (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <CustomPagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={(nextPage) => setPage(nextPage)}
+            />
+          </div>
+        )}
       </main>
 
       {/* Amenity Modal */}

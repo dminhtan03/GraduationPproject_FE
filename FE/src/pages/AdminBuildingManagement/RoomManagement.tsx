@@ -4,7 +4,6 @@ import {
   ArrowUpTrayIcon,
   PlusIcon,
   XMarkIcon,
-  TrashIcon,
   PencilSquareIcon,
 } from "@heroicons/react/24/outline";
 import { useNavigate, useParams } from "react-router-dom";
@@ -15,24 +14,36 @@ import { ROUTES } from "../../constants";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
-import { ImportModal } from "../../components/common";
+import { CustomPagination, ImportModal } from "../../components/common";
 
 const AdminRoomManagementPage: React.FC = () => {
-  const { buildingId, floorId } = useParams<{ buildingId: string; floorId: string }>();
+  const { buildingId, floorId } = useParams<{
+    buildingId: string;
+    floorId: string;
+  }>();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [importing, setImporting] = useState(false);
   const [showImportRoomModal, setShowImportRoomModal] = useState(false);
   const [showImportScheduleModal, setShowImportScheduleModal] = useState(false);
   const [importRoomFile, setImportRoomFile] = useState<File | null>(null);
-  const [importScheduleFile, setImportScheduleFile] = useState<File | null>(null);
+  const [importScheduleFile, setImportScheduleFile] = useState<File | null>(
+    null,
+  );
   const [importRoomError, setImportRoomError] = useState<string | null>(null);
-  const [importScheduleError, setImportScheduleError] = useState<string | null>(null);
+  const [importScheduleError, setImportScheduleError] = useState<string | null>(
+    null,
+  );
   const [buildingName, setBuildingName] = useState<string>("");
   const [floorName, setFloorName] = useState<string>("");
-  const [toastPopup, setToastPopup] = useState<{ type: MessageType; message: string } | null>(null);
+  const [toastPopup, setToastPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
   const [amenities, setAmenities] = useState<any[]>([]);
 
   // Add Room Modal state
@@ -111,6 +122,15 @@ const AdminRoomManagementPage: React.FC = () => {
     loadAmenities();
   }, [buildingId, floorId]);
 
+  const totalPages = Math.max(1, Math.ceil(rooms.length / pageSize));
+  const pagedRooms = rooms.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -131,7 +151,10 @@ const AdminRoomManagementPage: React.FC = () => {
     setImportRoomError(null);
     try {
       await adminService.importRoomsExcel(importRoomFile, floorId);
-      setToastPopup({ type: "success", message: "Rooms imported successfully" });
+      setToastPopup({
+        type: "success",
+        message: "Rooms imported successfully",
+      });
       setShowImportRoomModal(false);
       setImportRoomFile(null);
       loadRooms();
@@ -156,7 +179,10 @@ const AdminRoomManagementPage: React.FC = () => {
     setImportScheduleError(null);
     try {
       await adminService.importAcademicSchedules(importScheduleFile);
-      setToastPopup({ type: "success", message: "Academic schedules imported successfully" });
+      setToastPopup({
+        type: "success",
+        message: "Academic schedules imported successfully",
+      });
       setShowImportScheduleModal(false);
       setImportScheduleFile(null);
     } catch (err: any) {
@@ -261,9 +287,14 @@ const AdminRoomManagementPage: React.FC = () => {
             </button>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">
-                Rooms Management {buildingName && floorName && `- ${buildingName} - ${floorName}`}
+                Rooms Management{" "}
+                {buildingName &&
+                  floorName &&
+                  `- ${buildingName} - ${floorName}`}
               </h1>
-              <p className="text-sm text-slate-500">Manage rooms, add new ones or import from Excel</p>
+              <p className="text-sm text-slate-500">
+                Manage rooms, add new ones or import from Excel
+              </p>
             </div>
           </div>
 
@@ -296,11 +327,21 @@ const AdminRoomManagementPage: React.FC = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Room Name</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Capacity</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Amenities</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-right">Actions</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Room Name
+                </th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Capacity
+                </th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Status
+                </th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Amenities
+                </th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-right">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y border-slate-100">
@@ -312,14 +353,20 @@ const AdminRoomManagementPage: React.FC = () => {
                   </td>
                 </tr>
               ) : rooms.length > 0 ? (
-                rooms.map((room) => (
-                  <tr key={room.id} className="hover:bg-slate-50/50 transition-colors">
+                pagedRooms.map((room) => (
+                  <tr
+                    key={room.id}
+                    className="hover:bg-slate-50/50 transition-colors"
+                  >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        {room.amenities && room.amenities.length > 0 && room.images && room.images[0] ? (
-                          <img 
-                            src={room.images[0].imageUrl} 
-                            alt={room.locationCode} 
+                        {room.amenities &&
+                        room.amenities.length > 0 &&
+                        room.images &&
+                        room.images[0] ? (
+                          <img
+                            src={room.images[0].imageUrl}
+                            alt={room.locationCode}
                             className="h-10 w-10 rounded-lg object-cover border border-slate-100 shadow-sm"
                           />
                         ) : (
@@ -327,22 +374,28 @@ const AdminRoomManagementPage: React.FC = () => {
                             <PlusIcon className="h-5 w-5" />
                           </div>
                         )}
-                        <span className="font-semibold text-slate-900">{room.locationCode}</span>
+                        <span className="font-semibold text-slate-900">
+                          {room.locationCode}
+                        </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-slate-600 font-medium">{room.capacity} slots</span>
+                      <span className="text-slate-600 font-medium">
+                        {room.capacity} slots
+                      </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                        room.status === "AVAILABLE" 
-                          ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
-                          : room.status === "BROKEN"
-                          ? "bg-red-50 text-red-700 ring-red-600/20"
-                          : room.status === "LEARNING"
-                          ? "bg-purple-50 text-purple-700 ring-purple-600/20"
-                          : "bg-slate-50 text-slate-700 ring-slate-600/20"
-                      }`}>
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                          room.status === "AVAILABLE"
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+                            : room.status === "BROKEN"
+                              ? "bg-red-50 text-red-700 ring-red-600/20"
+                              : room.status === "LEARNING"
+                                ? "bg-purple-50 text-purple-700 ring-purple-600/20"
+                                : "bg-slate-50 text-slate-700 ring-slate-600/20"
+                        }`}
+                      >
                         {room.status === "LEARNING" ? "LEARNING" : room.status}
                       </span>
                     </td>
@@ -350,26 +403,28 @@ const AdminRoomManagementPage: React.FC = () => {
                       <div className="flex flex-wrap gap-1 max-w-[200px]">
                         {room.amenities && room.amenities.length > 0 ? (
                           room.amenities.map((a: any) => (
-                            <span key={a.id} className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                            <span
+                              key={a.id}
+                              className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"
+                            >
                               {a.name}
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-slate-400 italic">None</span>
+                          <span className="text-xs text-slate-400 italic">
+                            None
+                          </span>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button 
+                        <button
                           onClick={() => handleOpenEditModal(room)}
-                          className="p-2 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-all" 
+                          className="p-2 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-all"
                           title="Edit"
                         >
                           <PencilSquareIcon className="h-5 w-5" />
-                        </button>
-                        <button className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Delete">
-                          <TrashIcon className="h-5 w-5" />
                         </button>
                       </div>
                     </td>
@@ -378,7 +433,9 @@ const AdminRoomManagementPage: React.FC = () => {
               ) : (
                 <tr>
                   <td colSpan={5} className="py-20 text-center bg-slate-50/50">
-                    <p className="text-slate-500 font-medium">No rooms found on this floor</p>
+                    <p className="text-slate-500 font-medium">
+                      No rooms found on this floor
+                    </p>
                     <button
                       onClick={handleOpenAddModal}
                       className="mt-4 text-orange-500 font-bold hover:text-orange-600 text-sm"
@@ -391,6 +448,16 @@ const AdminRoomManagementPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {rooms.length > 0 && totalPages > 1 && (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <CustomPagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={(nextPage) => setPage(nextPage)}
+            />
+          </div>
+        )}
       </main>
 
       {/* Add Room Modal */}
@@ -399,8 +466,12 @@ const AdminRoomManagementPage: React.FC = () => {
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
-                <h3 className="text-xl font-bold text-slate-900">Add New Room</h3>
-                <p className="text-sm text-slate-500">Create a single room manually</p>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Add New Room
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Create a single room manually
+                </p>
               </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}
@@ -411,11 +482,19 @@ const AdminRoomManagementPage: React.FC = () => {
             </div>
             <form onSubmit={handleAddRoomSubmit}>
               <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-                <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-4 hover:border-orange-500 transition-colors cursor-pointer group"
-                     onClick={() => document.getElementById("room-image-input")?.click()}>
+                <div
+                  className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-4 hover:border-orange-500 transition-colors cursor-pointer group"
+                  onClick={() =>
+                    document.getElementById("room-image-input")?.click()
+                  }
+                >
                   {imagePreview ? (
                     <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-md">
-                      <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <PlusIcon className="h-8 w-8 text-white" />
                       </div>
@@ -425,44 +504,64 @@ const AdminRoomManagementPage: React.FC = () => {
                       <div className="p-3 bg-orange-50 rounded-full text-orange-500">
                         <ArrowUpTrayIcon className="h-6 w-6" />
                       </div>
-                      <p className="text-sm font-bold text-slate-700">Click to upload room image</p>
-                      <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">JPG, PNG, WEBP up to 5MB</p>
+                      <p className="text-sm font-bold text-slate-700">
+                        Click to upload room image
+                      </p>
+                      <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">
+                        JPG, PNG, WEBP up to 5MB
+                      </p>
                     </div>
                   )}
-                  <input 
+                  <input
                     id="room-image-input"
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
                     onChange={handleImageChange}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1.5">Room Name / Location Code</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                    Room Name / Location Code
+                  </label>
                   <input
                     required
                     type="text"
                     value={addRoomForm.locationCode}
-                    onChange={(e) => setAddRoomForm({ ...addRoomForm, locationCode: e.target.value })}
+                    onChange={(e) =>
+                      setAddRoomForm({
+                        ...addRoomForm,
+                        locationCode: e.target.value,
+                      })
+                    }
                     className="w-full h-11 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all"
                     placeholder="e.g. Room 101"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1.5">Capacity</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                      Capacity
+                    </label>
                     <input
                       required
                       type="number"
                       min="1"
                       value={addRoomForm.capacity}
-                      onChange={(e) => setAddRoomForm({ ...addRoomForm, capacity: parseInt(e.target.value) })}
+                      onChange={(e) =>
+                        setAddRoomForm({
+                          ...addRoomForm,
+                          capacity: parseInt(e.target.value),
+                        })
+                      }
                       className="w-full h-11 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1.5">Initial Score</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                      Initial Score
+                    </label>
                     <input
                       required
                       type="number"
@@ -470,15 +569,27 @@ const AdminRoomManagementPage: React.FC = () => {
                       min="0"
                       max="5"
                       value={addRoomForm.score}
-                      onChange={(e) => setAddRoomForm({ ...addRoomForm, score: parseFloat(e.target.value) })}
+                      onChange={(e) =>
+                        setAddRoomForm({
+                          ...addRoomForm,
+                          score: parseFloat(e.target.value),
+                        })
+                      }
                       className="w-full h-11 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all"
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-sm font-bold text-slate-700 mb-1.5">Initial Status</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                      Initial Status
+                    </label>
                     <select
                       value={addRoomForm.status}
-                      onChange={(e) => setAddRoomForm({ ...addRoomForm, status: e.target.value })}
+                      onChange={(e) =>
+                        setAddRoomForm({
+                          ...addRoomForm,
+                          status: e.target.value,
+                        })
+                      }
                       className="w-full h-11 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all bg-white"
                     >
                       <option value="AVAILABLE">Available</option>
@@ -490,18 +601,28 @@ const AdminRoomManagementPage: React.FC = () => {
 
                 {/* Amenities Selection */}
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Amenities</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Amenities
+                  </label>
                   <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-3 rounded-xl border border-slate-100 bg-slate-50/50">
                     {amenities.map((amenity) => (
-                      <label key={amenity.id} className="flex items-center gap-2 cursor-pointer group">
+                      <label
+                        key={amenity.id}
+                        className="flex items-center gap-2 cursor-pointer group"
+                      >
                         <input
                           type="checkbox"
                           checked={addRoomForm.amenityIds.includes(amenity.id)}
                           onChange={(e) => {
                             const newIds = e.target.checked
                               ? [...addRoomForm.amenityIds, amenity.id]
-                              : addRoomForm.amenityIds.filter(id => id !== amenity.id);
-                            setAddRoomForm({ ...addRoomForm, amenityIds: newIds });
+                              : addRoomForm.amenityIds.filter(
+                                  (id) => id !== amenity.id,
+                                );
+                            setAddRoomForm({
+                              ...addRoomForm,
+                              amenityIds: newIds,
+                            });
                           }}
                           className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
                         />
@@ -548,7 +669,9 @@ const AdminRoomManagementPage: React.FC = () => {
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Edit Room</h3>
-                <p className="text-sm text-slate-500">Update information for {editRoomForm.locationCode}</p>
+                <p className="text-sm text-slate-500">
+                  Update information for {editRoomForm.locationCode}
+                </p>
               </div>
               <button
                 onClick={() => setIsEditModalOpen(false)}
@@ -561,21 +684,35 @@ const AdminRoomManagementPage: React.FC = () => {
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1.5">Capacity</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                      Capacity
+                    </label>
                     <input
                       required
                       type="number"
                       min="1"
                       value={editRoomForm.capacity}
-                      onChange={(e) => setEditRoomForm({ ...editRoomForm, capacity: parseInt(e.target.value) })}
+                      onChange={(e) =>
+                        setEditRoomForm({
+                          ...editRoomForm,
+                          capacity: parseInt(e.target.value),
+                        })
+                      }
                       className="w-full h-11 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1.5">Status</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                      Status
+                    </label>
                     <select
                       value={editRoomForm.status}
-                      onChange={(e) => setEditRoomForm({ ...editRoomForm, status: e.target.value })}
+                      onChange={(e) =>
+                        setEditRoomForm({
+                          ...editRoomForm,
+                          status: e.target.value,
+                        })
+                      }
                       className="w-full h-11 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all bg-white"
                     >
                       <option value="AVAILABLE">Available</option>
@@ -587,18 +724,28 @@ const AdminRoomManagementPage: React.FC = () => {
 
                 {/* Amenities Selection */}
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Amenities</label>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">
+                    Amenities
+                  </label>
                   <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-3 rounded-xl border border-slate-100 bg-slate-50/50">
                     {amenities.map((amenity) => (
-                      <label key={amenity.id} className="flex items-center gap-2 cursor-pointer group">
+                      <label
+                        key={amenity.id}
+                        className="flex items-center gap-2 cursor-pointer group"
+                      >
                         <input
                           type="checkbox"
                           checked={editRoomForm.amenityIds.includes(amenity.id)}
                           onChange={(e) => {
                             const newIds = e.target.checked
                               ? [...editRoomForm.amenityIds, amenity.id]
-                              : editRoomForm.amenityIds.filter(id => id !== amenity.id);
-                            setEditRoomForm({ ...editRoomForm, amenityIds: newIds });
+                              : editRoomForm.amenityIds.filter(
+                                  (id) => id !== amenity.id,
+                                );
+                            setEditRoomForm({
+                              ...editRoomForm,
+                              amenityIds: newIds,
+                            });
                           }}
                           className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
                         />
