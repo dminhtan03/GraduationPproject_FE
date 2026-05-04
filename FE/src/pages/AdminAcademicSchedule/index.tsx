@@ -82,8 +82,7 @@ const AdminAcademicSchedulePage: React.FC = () => {
     buildingId: "",
     floorId: "",
     fromDate: "",
-    toDate:
-      "",
+    toDate: "",
   });
   const [sortConfig, setSortConfig] = useState<{
     sortBy: string;
@@ -439,14 +438,14 @@ const AdminAcademicSchedulePage: React.FC = () => {
 
   const handleToggleSelect = (id: string) => {
     setSelectedSchedules((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
   };
 
   const handleBulkDelete = async () => {
     if (
       !window.confirm(
-        `Are you sure you want to delete ${selectedSchedules.length} selected schedules?`
+        `Are you sure you want to delete ${selectedSchedules.length} selected schedules?`,
       )
     )
       return;
@@ -640,21 +639,25 @@ const AdminAcademicSchedulePage: React.FC = () => {
                 ariaLabel="Filter schedules by floor"
               />
             </div>
-            <DatePickerField
-              value={searchParams.fromDate}
-              onChange={(nextDate) =>
-                setSearchParams({ ...searchParams, fromDate: nextDate })
-              }
-              label="From date"
-            />
-            <DatePickerField
-              value={searchParams.toDate}
-              minDate={searchParams.fromDate || undefined}
-              onChange={(nextDate) =>
-                setSearchParams({ ...searchParams, toDate: nextDate })
-              }
-              label="To date"
-            />
+            <div className="space-y-1 [&>div>button]:h-11 [&>div>button]:rounded-xl [&>div>button]:border-slate-200 [&>div>button]:bg-white">
+              <DatePickerField
+                value={searchParams.fromDate}
+                onChange={(nextDate) =>
+                  setSearchParams({ ...searchParams, fromDate: nextDate })
+                }
+                label="From date"
+              />
+            </div>
+            <div className="space-y-1 [&>div>button]:h-11 [&>div>button]:rounded-xl [&>div>button]:border-slate-200 [&>div>button]:bg-white">
+              <DatePickerField
+                value={searchParams.toDate}
+                minDate={searchParams.fromDate || undefined}
+                onChange={(nextDate) =>
+                  setSearchParams({ ...searchParams, toDate: nextDate })
+                }
+                label="To date"
+              />
+            </div>
             <div className="space-y-1">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-transparent select-none">
                 Filter
@@ -751,7 +754,10 @@ const AdminAcademicSchedulePage: React.FC = () => {
                   </tr>
                 ) : (
                   schedules.map((s) => (
-                    <tr key={s.id} className={`hover:bg-slate-50/50 transition-colors ${selectedSchedules.includes(s.id) ? 'bg-orange-50/30' : ''}`}>
+                    <tr
+                      key={s.id}
+                      className={`hover:bg-slate-50/50 transition-colors ${selectedSchedules.includes(s.id) ? "bg-orange-50/30" : ""}`}
+                    >
                       <td className="px-6 py-4">
                         <input
                           type="checkbox"

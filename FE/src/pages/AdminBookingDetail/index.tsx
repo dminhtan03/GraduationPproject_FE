@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "antd";
+import { Alert, Input, Modal } from "antd";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeftIcon,
@@ -12,9 +12,13 @@ import {
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
+import CustomMessage, {
+  MessageType,
+} from "../../components/common/CustomMessage";
 import { ROUTES } from "../../constants";
 import { API_ENDPOINTS } from "../../constants/endpoints";
 import { api } from "../../services/api";
+import { adminService } from "../../services/adminService";
 import { logout } from "../../services/authService";
 import { reservationService } from "../../services/reservationService";
 import { roomService } from "../../services/roomService";
@@ -153,6 +157,14 @@ const getStatusPillClass = (status?: string) => {
   return "border-slate-300 bg-slate-100 text-slate-700";
 };
 
+const canForceCancel = (status?: string) => {
+  const normalized = String(status || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[-\s]+/g, "_");
+  return normalized === "RESERVED" || normalized === "IN_USE";
+};
+
 const AdminBookingDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { bookingId } = useParams();
@@ -176,6 +188,7 @@ const AdminBookingDetailPage: React.FC = () => {
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [adminName, setAdminName] = useState("Admin User");
+  const [adminEmail, setAdminEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<UnknownRecord | null>(null);
@@ -183,6 +196,13 @@ const AdminBookingDetailPage: React.FC = () => {
   const [roomImageUrls, setRoomImageUrls] = useState<string[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
   const fetchedDetailIdRef = useRef<string>("");
+  const [toastPopup, setToastPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
+  const [forceCancelModalOpen, setForceCancelModalOpen] = useState(false);
+  const [forceCancelReason, setForceCancelReason] = useState("");
+  const [forceCancelLoading, setForceCancelLoading] = useState(false);
 
   const loadAdminProfile = async () => {
     try {
@@ -191,13 +211,16 @@ const AdminBookingDetailPage: React.FC = () => {
             data?: {
               firstName?: string;
               lastName?: string;
+              email?: string;
             };
             firstName?: string;
             lastName?: string;
+            email?: string;
           }
         | {
             firstName?: string;
             lastName?: string;
+            email?: string;
           }
       >(API_ENDPOINTS.AUTH.PROFILE);
 
@@ -205,17 +228,22 @@ const AdminBookingDetailPage: React.FC = () => {
         data?: {
           firstName?: string;
           lastName?: string;
+          email?: string;
         };
         firstName?: string;
         lastName?: string;
+        email?: string;
       };
 
       const firstName = payload.data?.firstName || payload.firstName || "";
       const lastName = payload.data?.lastName || payload.lastName || "";
+      const email = payload.data?.email || payload.email || "";
       const fullName = [firstName, lastName].filter(Boolean).join(" ");
       setAdminName(fullName || "Admin User");
+      setAdminEmail(email || "");
     } catch {
       setAdminName("Admin User");
+      setAdminEmail("");
     }
   };
 
@@ -551,6 +579,26 @@ const AdminBookingDetailPage: React.FC = () => {
     return collectImageUrls(mergedDetail);
   }, [mergedDetail, roomImageUrls]);
 
+  const cancelActorLabel = useMemo(
+    () =>
+      pickFirstText(
+        mergedDetail.cancelledBy,
+        mergedDetail.canceledBy,
+        mergedDetail.cancelBy,
+        mergedDetail.forceCancelledBy,
+        mergedDetail.forceCanceledBy,
+        mergedDetail.forceCancelBy,
+      ),
+    [
+      mergedDetail.cancelBy,
+      mergedDetail.canceledBy,
+      mergedDetail.cancelledBy,
+      mergedDetail.forceCancelBy,
+      mergedDetail.forceCanceledBy,
+      mergedDetail.forceCancelledBy,
+    ],
+  );
+
   const timelineItems = useMemo(() => {
     const items: TimelineItem[] = [];
 
@@ -619,11 +667,7 @@ const AdminBookingDetailPage: React.FC = () => {
         mergedDetail.cancelledTime ||
         mergedDetail.canceledAt,
       5,
-      toNonEmptyString(
-        mergedDetail.cancelledBy ||
-          mergedDetail.canceledBy ||
-          mergedDetail.cancelBy,
-      ),
+      cancelActorLabel,
     );
 
     const seen = new Set<string>();
@@ -643,7 +687,7 @@ const AdminBookingDetailPage: React.FC = () => {
         if (Number.isNaN(timeB)) return -1;
         return timeA - timeB;
       });
-  }, [mergedDetail]);
+  }, [cancelActorLabel, mergedDetail]);
 
   const firstImageUrl = imageUrls[0] || "";
   const roomLabel = toDisplayText(
@@ -661,19 +705,84 @@ const AdminBookingDetailPage: React.FC = () => {
   const endLabel = getDateTimeText(mergedDetail.endTime);
   const purposeLabel = toDisplayText(mergedDetail.purpose);
   const noteLabel = toDisplayText(mergedDetail.note);
-  const statusLabel = toDisplayText(mergedDetail.status);
+  const normalizedStatus = String(mergedDetail.status || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[-\s]+/g, "_");
+  const isForceCancelled = normalizedStatus === "FORCE_CANCELLED";
+  const statusLabel = isForceCancelled
+    ? "Force Cancelled (Admin)"
+    : toDisplayText(mergedDetail.status);
   const cancelReasonLabel = toDisplayText(
     mergedDetail.cancelReason || mergedDetail.reason,
   );
+  const isAdminActor =
+    !!cancelActorLabel &&
+    !!adminEmail &&
+    cancelActorLabel.toLowerCase() === adminEmail.toLowerCase();
+  const cancelActorText = isAdminActor
+    ? "Admin"
+    : cancelActorLabel || (isForceCancelled ? "Admin" : "");
   const feedbackNode =
     mergedDetail.feedback && typeof mergedDetail.feedback === "object"
       ? (mergedDetail.feedback as UnknownRecord)
       : null;
   const feedbackLabel = toDisplayText(feedbackNode?.description);
 
+  const showToast = (type: MessageType, message: string) => {
+    setToastPopup({ type, message });
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate(ROUTES.LOGIN);
+  };
+
+  const handleForceCancel = () => {
+    if (!normalizedBookingId) {
+      showToast("error", "Reservation id is required");
+      return;
+    }
+
+    if (!canForceCancel(mergedDetail.status as string)) {
+      showToast(
+        "warning",
+        `Cannot force cancel booking with status: ${String(mergedDetail.status || "UNKNOWN")}`,
+      );
+      return;
+    }
+
+    setForceCancelReason("");
+    setForceCancelModalOpen(true);
+  };
+
+  const submitForceCancel = async () => {
+    const reservationId = normalizedBookingId.trim();
+    if (!reservationId) {
+      showToast("error", "Reservation id is required");
+      return;
+    }
+
+    const reason = forceCancelReason.trim() || "Force cancel by admin";
+
+    try {
+      setForceCancelLoading(true);
+      const message = await adminService.forceCancelBooking(reservationId, {
+        reason,
+      });
+      showToast(
+        "success",
+        message ||
+          "Force cancel success. User will receive an email notification.",
+      );
+      setForceCancelModalOpen(false);
+      const response = await reservationService.getBookingDetail(reservationId);
+      setDetail(response);
+    } catch (err) {
+      showToast("error", extractApiMessage(err, "Force cancel failed"));
+    } finally {
+      setForceCancelLoading(false);
+    }
   };
 
   return (
@@ -687,6 +796,85 @@ const AdminBookingDetailPage: React.FC = () => {
 
       <div className="ml-72 flex-1 overflow-hidden">
         <main className="h-full overflow-auto px-4 pb-8 pt-5 lg:px-8">
+          <Modal
+            title={
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl border border-red-200 bg-red-50 p-2 text-red-600">
+                  <ExclamationTriangleIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-slate-900">
+                    Force Cancel Booking
+                  </p>
+                  <p className="mt-0.5 text-xs font-medium text-slate-500">
+                    Cancel an active reservation and notify the user via email.
+                  </p>
+                </div>
+              </div>
+            }
+            open={forceCancelModalOpen}
+            onCancel={() => {
+              if (!forceCancelLoading) {
+                setForceCancelModalOpen(false);
+              }
+            }}
+            footer={null}
+            width={700}
+            centered
+            maskClosable={!forceCancelLoading}
+            className="[&_.ant-modal-content]:rounded-3xl [&_.ant-modal-content]:border [&_.ant-modal-content]:border-slate-200 [&_.ant-modal-content]:p-0 [&_.ant-modal-header]:mb-0 [&_.ant-modal-header]:rounded-t-3xl [&_.ant-modal-header]:border-b [&_.ant-modal-header]:border-slate-200 [&_.ant-modal-header]:px-6 [&_.ant-modal-header]:py-5 [&_.ant-modal-body]:px-6 [&_.ant-modal-body]:pb-6 [&_.ant-modal-body]:pt-5 [&_.ant-modal-close]:right-5 [&_.ant-modal-close]:top-5 [&_.ant-modal-close]:text-slate-400"
+          >
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 to-orange-50 p-4">
+                <p className="text-sm font-semibold text-red-700">
+                  This action will force cancel the selected booking.
+                </p>
+                <p className="mt-1 text-sm text-red-700/90">
+                  A notification email will be sent to the user with the
+                  selected reason.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-5">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Reason
+                  </label>
+                  <Input.TextArea
+                    value={forceCancelReason}
+                    placeholder="Enter reason for force cancel (max 500 characters)"
+                    autoSize={{ minRows: 4, maxRows: 6 }}
+                    maxLength={500}
+                    showCount
+                    onChange={(event) =>
+                      setForceCancelReason(event.target.value)
+                    }
+                    className="rounded-xl border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-orange-400 focus:ring-orange-100"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-5">
+                  <button
+                    type="button"
+                    onClick={() => setForceCancelModalOpen(false)}
+                    disabled={forceCancelLoading}
+                    className="h-10 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitForceCancel}
+                    disabled={forceCancelLoading}
+                    className="h-10 min-w-44 rounded-xl bg-red-600 px-5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {forceCancelLoading
+                      ? "Processing..."
+                      : "Confirm Force Cancel"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Modal>
           <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -713,6 +901,14 @@ const AdminBookingDetailPage: React.FC = () => {
               showIcon
               message="Some booking data could not be refreshed"
               description="The screen is displaying available fallback data from list and cache."
+            />
+          )}
+
+          {toastPopup && (
+            <CustomMessage
+              type={toastPopup.type}
+              message={toastPopup.message}
+              onClose={() => setToastPopup(null)}
             />
           )}
 
@@ -828,14 +1024,21 @@ const AdminBookingDetailPage: React.FC = () => {
                   {feedbackLabel}
                 </p>
 
-                {cancelReasonLabel !== notFoundText && (
+                {(cancelReasonLabel !== notFoundText || cancelActorText) && (
                   <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-600">
                       Cancel Reason
                     </p>
                     <p className="mt-1 text-sm font-bold text-orange-800">
-                      {cancelReasonLabel}
+                      {cancelReasonLabel !== notFoundText
+                        ? cancelReasonLabel
+                        : "Not provided"}
                     </p>
+                    {cancelActorText ? (
+                      <p className="mt-1 text-xs font-medium text-orange-700">
+                        By: {cancelActorText}
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -974,6 +1177,19 @@ const AdminBookingDetailPage: React.FC = () => {
                   Verify purpose, timeline, and participant details before
                   executing force-cancel or any manual action.
                 </p>
+                {canForceCancel(mergedDetail.status as string) ? (
+                  <button
+                    type="button"
+                    onClick={handleForceCancel}
+                    className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+                  >
+                    Force Cancel Booking
+                  </button>
+                ) : (
+                  <p className="mt-3 text-xs font-medium text-orange-800/80">
+                    Force cancel is available for Reserved or In Use bookings.
+                  </p>
+                )}
               </div>
             </aside>
           </div>
