@@ -1,7 +1,12 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
+import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
 import { useNotifications } from "../../context/NotificationContext";
+import { api } from "../../services/api";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
 import {
   formatReservationStatusLabel,
   getReservationStatusClass,
@@ -27,12 +32,84 @@ const NotificationsPage: React.FC = () => {
   const navigate = useNavigate();
   const { notifications, markAllAsRead, unreadCount, markAsRead } =
     useNotifications();
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
+
+  const showToast = (type: MessageType, message: string) => {
+    setToast({ type, message });
+    window.setTimeout(() => {
+      setToast((current) =>
+        current && current.message === message ? null : current,
+      );
+    }, 3000);
+  };
+
+  const eventKeywords = useMemo(
+    () => ["event", "invitation", "invite", "participant"],
+    [],
+  );
+
+  const isEventNotification = (
+    title: string,
+    message: string,
+    category?: string,
+  ) => {
+    if (category === "event") return true;
+    const source = `${title} ${message}`.toLowerCase();
+    return eventKeywords.some((keyword) => source.includes(keyword));
+  };
+
+  const respondEventInvitation = async (
+    participantId: string,
+    response: "ACCEPT" | "DECLINE",
+    notificationId: string,
+  ) => {
+    if (!participantId) return;
+    setActionLoadingId(notificationId);
+    try {
+      await api.put(
+        buildUrl(API_ENDPOINTS.EVENTS.RESPOND_INVITATION, { participantId }),
+        { response },
+      );
+      showToast(
+        "success",
+        response === "ACCEPT" ? "Đã chấp nhận tham gia" : "Đã từ chối tham gia",
+      );
+      markAsRead(notificationId);
+    } catch {
+      showToast("error", "Unable to respond invitation");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   const handleNotificationItemClick = (notificationId: string) => {
     const notification = notifications.find(
       (item) => item.id === notificationId,
     );
     markAsRead(notificationId);
+
+    if (!notification) return;
+
+    const isEvent = isEventNotification(
+      notification.title,
+      notification.message,
+      notification.category,
+    );
+    const eventReservationId =
+      notification.eventReservationId || notification.reservationId;
+    if (isEvent && eventReservationId) {
+      navigate(
+        ROUTES.EVENT_LIVE.replace(
+          ":reservationId",
+          encodeURIComponent(eventReservationId),
+        ),
+      );
+      return;
+    }
 
     const bookingId = notification?.reservationId?.trim();
     if (!bookingId) {
@@ -63,6 +140,9 @@ const NotificationsPage: React.FC = () => {
     if (category === "booking") {
       return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
     }
+    if (category === "event") {
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+    }
     if (category === "ai") {
       return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
     }
@@ -72,6 +152,9 @@ const NotificationsPage: React.FC = () => {
   const getCategoryLabel = (category?: string) => {
     if (category === "booking") {
       return "Booking";
+    }
+    if (category === "event") {
+      return "Event";
     }
     if (category === "ai") {
       return "AI";
@@ -154,6 +237,54 @@ const NotificationsPage: React.FC = () => {
 
               <p className="text-sm text-slate-700">{n.message}</p>
 
+              {isEventNotification(n.title, n.message, n.category) && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  {(() => {
+                    const inviteStatus = String(
+                      n.inviteStatus || "",
+                    ).toUpperCase();
+                    const showInviteActions =
+                      Boolean(n.participantId) &&
+                      (inviteStatus === "INVITED" || !inviteStatus);
+                    if (!showInviteActions) return null;
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          disabled={actionLoadingId === n.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void respondEventInvitation(
+                              n.participantId || "",
+                              "ACCEPT",
+                              n.id,
+                            );
+                          }}
+                          className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:opacity-60"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionLoadingId === n.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void respondEventInvitation(
+                              n.participantId || "",
+                              "DECLINE",
+                              n.id,
+                            );
+                          }}
+                          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+                        >
+                          Decline
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
               {(n.reservationId || n.reservationStatusAtNow) && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                   {n.reservationStatusAtNow && (
@@ -189,6 +320,13 @@ const NotificationsPage: React.FC = () => {
             </button>
           ))}
         </div>
+      )}
+      {toast && (
+        <CustomMessage
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );

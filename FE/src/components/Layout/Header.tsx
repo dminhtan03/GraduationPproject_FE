@@ -171,6 +171,13 @@ const Header: React.FC = () => {
     }
 
     setIsNotificationOpen(false);
+
+    if (notification?.category === "event" || notification?.eventReservationId) {
+      const resId = notification.eventReservationId || bookingId;
+      navigate(ROUTES.EVENT_LIVE.replace(":reservationId", encodeURIComponent(resId)));
+      return;
+    }
+
     navigate(
       ROUTES.BOOKING_DETAIL.replace(
         ":bookingId",

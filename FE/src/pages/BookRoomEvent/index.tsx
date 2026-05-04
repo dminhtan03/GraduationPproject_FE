@@ -1,11 +1,19 @@
 import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeftIcon, CalendarDaysIcon, UserGroupIcon, SparklesIcon, ClockIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowLeftIcon,
+  CalendarDaysIcon,
+  UserGroupIcon,
+  SparklesIcon,
+  ClockIcon,
+} from "@heroicons/react/24/outline";
 import { api } from "../../services/api";
 import { reservationService } from "../../services/reservationService";
 import { ROUTES } from "../../constants";
 import { API_ENDPOINTS } from "../../constants/endpoints";
-import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
 import DatePickerField from "../../components/common/DatePickerField";
 import AnimatedDropdown from "../../components/common/AnimatedDropdown";
 import type { Room } from "../../types";
@@ -44,7 +52,10 @@ const BookRoomEventPage: React.FC = () => {
   const { state } = useLocation();
 
   const room = (state as LocationState | null)?.room;
-  const normalizedRoomId = useMemo(() => roomId || room?.id || "", [roomId, room]);
+  const normalizedRoomId = useMemo(
+    () => roomId || room?.id || "",
+    [roomId, room],
+  );
 
   // Initialize start/end time from real current hour
   const currentHour = (() => {
@@ -60,21 +71,37 @@ const BookRoomEventPage: React.FC = () => {
 
   const [eventTitle, setEventTitle] = useState("Meeting Event");
   const [eventDescription, setEventDescription] = useState("");
-  const [visibility, setVisibility] = useState<"INVITE_ONLY" | "PUBLIC">("INVITE_ONLY");
   const [participantEmails, setParticipantEmails] = useState<string[]>([]);
   const [newEmail, setNewEmail] = useState("");
 
   const [acceptedRules, setAcceptedRules] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [popup, setPopup] = useState<{ type: MessageType; message: string } | null>(null);
+  const [popup, setPopup] = useState<{
+    type: MessageType;
+    message: string;
+  } | null>(null);
   const [timeValidationError, setTimeValidationError] = useState("");
 
-  const validateDateTime = (sDate: string, sTime: string, eDate: string, eTime: string) => {
-    if (!sDate || !sTime || !eDate || !eTime) { setTimeValidationError(""); return true; }
+  const validateDateTime = (
+    sDate: string,
+    sTime: string,
+    eDate: string,
+    eTime: string,
+  ) => {
+    if (!sDate || !sTime || !eDate || !eTime) {
+      setTimeValidationError("");
+      return true;
+    }
     const start = new Date(`${sDate}T${sTime}:00`);
     const end = new Date(`${eDate}T${eTime}:00`);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) { setTimeValidationError(""); return true; }
-    if (end <= start) { setTimeValidationError("End time must be after start time"); return false; }
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      setTimeValidationError("");
+      return true;
+    }
+    if (end <= start) {
+      setTimeValidationError("End time must be after start time");
+      return false;
+    }
     setTimeValidationError("");
     return true;
   };
@@ -100,19 +127,43 @@ const BookRoomEventPage: React.FC = () => {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!normalizedRoomId) { showPopup("error", "Missing room id"); return; }
-    if (!acceptedRules) { showPopup("warning", "Please accept the room rules before confirming."); return; }
-    if (!purpose.trim()) { showPopup("warning", "Purpose is required."); return; }
-    if (!eventTitle.trim()) { showPopup("warning", "Event title is required."); return; }
-    if (timeValidationError) { showPopup("warning", timeValidationError); return; }
+    if (!normalizedRoomId) {
+      showPopup("error", "Missing room id");
+      return;
+    }
+    if (!acceptedRules) {
+      showPopup("warning", "Please accept the room rules before confirming.");
+      return;
+    }
+    if (!purpose.trim()) {
+      showPopup("warning", "Purpose is required.");
+      return;
+    }
+    if (!eventTitle.trim()) {
+      showPopup("warning", "Event title is required.");
+      return;
+    }
+    if (timeValidationError) {
+      showPopup("warning", timeValidationError);
+      return;
+    }
 
     const start = combine(startDate, startTime);
     const end = combine(endDate, endTime);
-    if (!start || !end) { showPopup("warning", "Please select valid start/end."); return; }
+    if (!start || !end) {
+      showPopup("warning", "Please select valid start/end.");
+      return;
+    }
     const startD = new Date(`${start}:00`);
     const endD = new Date(`${end}:00`);
-    if (Number.isNaN(startD.getTime()) || Number.isNaN(endD.getTime())) { showPopup("warning", "Invalid time format."); return; }
-    if (endD <= startD) { showPopup("warning", "End time must be after start time."); return; }
+    if (Number.isNaN(startD.getTime()) || Number.isNaN(endD.getTime())) {
+      showPopup("warning", "Invalid time format.");
+      return;
+    }
+    if (endD <= startD) {
+      showPopup("warning", "End time must be after start time.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -125,23 +176,32 @@ const BookRoomEventPage: React.FC = () => {
       });
 
       const payload = (response as any)?.data?.data ?? (response as any)?.data;
-      const reservationId = String(payload?.id ?? payload?.reservationId ?? payload?.reservationID ?? "");
-      if (!reservationId) { showPopup("error", "Missing reservationId from server response"); return; }
+      const reservationId = String(
+        payload?.id ?? payload?.reservationId ?? payload?.reservationID ?? "",
+      );
+      if (!reservationId) {
+        showPopup("error", "Missing reservationId from server response");
+        return;
+      }
 
       const eventRes = await api.post(API_ENDPOINTS.EVENTS.CREATE, {
         reservationId,
         title: eventTitle.trim(),
         description: eventDescription.trim() || null,
-        visibility,
+        visibility: "INVITE_ONLY",
       });
 
-      const eventData = (eventRes as any)?.data?.data ?? (eventRes as any)?.data;
+      const eventData =
+        (eventRes as any)?.data?.data ?? (eventRes as any)?.data;
       const eventId = eventData?.id;
 
       if (eventId && participantEmails.length > 0) {
         await Promise.all(
           participantEmails.map((email) =>
-            api.post(API_ENDPOINTS.EVENTS.INVITE_PARTICIPANT, { eventId, email }),
+            api.post(API_ENDPOINTS.EVENTS.INVITE_PARTICIPANT, {
+              eventId,
+              email,
+            }),
           ),
         );
       }
@@ -149,7 +209,10 @@ const BookRoomEventPage: React.FC = () => {
       showPopup("success", "Event booking created successfully!");
       window.setTimeout(() => navigate(ROUTES.MY_BOOKINGS), 1500);
     } catch (error: any) {
-      const msg = error?.response?.data?.message || error?.message || "Unable to create event booking";
+      const msg =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Unable to create event booking";
       showPopup("error", String(msg));
     } finally {
       setLoading(false);
@@ -160,7 +223,6 @@ const BookRoomEventPage: React.FC = () => {
     <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 sm:py-10">
       <div className="mx-auto max-w-3xl space-y-5">
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-
           {/* ── Header ── */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -168,13 +230,20 @@ const BookRoomEventPage: React.FC = () => {
                 Book Room — Event
               </h1>
               <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
-                <span className="font-semibold text-orange-600">{room?.roomName || normalizedRoomId}</span>
+                <span className="font-semibold text-orange-600">
+                  {room?.roomName || normalizedRoomId}
+                </span>
               </p>
             </div>
             {/* Back — orange, matches other screens */}
             <button
               type="button"
-              onClick={() => navigate(ROUTES.ROOM_DETAIL.replace(":roomId", normalizedRoomId), { state: { room } })}
+              onClick={() =>
+                navigate(
+                  ROUTES.ROOM_DETAIL.replace(":roomId", normalizedRoomId),
+                  { state: { room } },
+                )
+              }
               className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600"
             >
               <ArrowLeftIcon className="h-4 w-4" />
@@ -183,19 +252,22 @@ const BookRoomEventPage: React.FC = () => {
           </div>
 
           <form onSubmit={submit} className="mt-8 space-y-6">
-
             {/* ── Booking Time ── */}
             <div className="rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 to-white">
               <div className="flex items-center gap-2 border-b border-orange-100 px-5 py-4">
                 <ClockIcon className="h-5 w-5 text-orange-500" />
-                <p className="text-base font-bold text-slate-900">Booking Time</p>
+                <p className="text-base font-bold text-slate-900">
+                  Booking Time
+                </p>
               </div>
 
               <div className="p-5 space-y-4">
                 {/* Start row */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-semibold text-slate-700">Start Date</label>
+                    <label className="text-sm font-semibold text-slate-700">
+                      Start Date
+                    </label>
                     <DatePickerField
                       value={startDate}
                       onChange={(v) => {
@@ -207,7 +279,9 @@ const BookRoomEventPage: React.FC = () => {
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-semibold text-slate-700">Start Time</label>
+                    <label className="text-sm font-semibold text-slate-700">
+                      Start Time
+                    </label>
                     <AnimatedDropdown<string>
                       value={startTime}
                       options={HOUR_OPTIONS}
@@ -221,7 +295,9 @@ const BookRoomEventPage: React.FC = () => {
                 {/* End row */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
-                    <label className={`text-sm font-semibold ${timeValidationError ? "text-red-600" : "text-slate-700"}`}>
+                    <label
+                      className={`text-sm font-semibold ${timeValidationError ? "text-red-600" : "text-slate-700"}`}
+                    >
                       End Date
                     </label>
                     <DatePickerField
@@ -235,7 +311,9 @@ const BookRoomEventPage: React.FC = () => {
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className={`text-sm font-semibold ${timeValidationError ? "text-red-600" : "text-slate-700"}`}>
+                    <label
+                      className={`text-sm font-semibold ${timeValidationError ? "text-red-600" : "text-slate-700"}`}
+                    >
                       End Time
                     </label>
                     <AnimatedDropdown<string>
@@ -251,10 +329,20 @@ const BookRoomEventPage: React.FC = () => {
                 {/* Validation error */}
                 {timeValidationError && (
                   <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-                    <svg className="h-4 w-4 shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    <svg
+                      className="h-4 w-4 shrink-0 text-red-500"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                        clipRule="evenodd"
+                      />
                     </svg>
-                    <span className="text-sm font-medium text-red-700">{timeValidationError}</span>
+                    <span className="text-sm font-medium text-red-700">
+                      {timeValidationError}
+                    </span>
                   </div>
                 )}
               </div>
@@ -290,7 +378,9 @@ const BookRoomEventPage: React.FC = () => {
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
                 <SparklesIcon className="h-5 w-5 text-orange-500" />
-                <p className="text-base font-bold text-slate-900">Event Information</p>
+                <p className="text-base font-bold text-slate-900">
+                  Event Information
+                </p>
               </div>
 
               <div className="space-y-4 p-5">
@@ -308,27 +398,14 @@ const BookRoomEventPage: React.FC = () => {
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-semibold text-slate-700">
-                    Description <span className="text-slate-400">(Optional)</span>
+                    Description{" "}
+                    <span className="text-slate-400">(Optional)</span>
                   </label>
                   <input
                     value={eventDescription}
                     onChange={(e) => setEventDescription(e.target.value)}
                     placeholder="Event details..."
                     className="rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-semibold text-slate-700">Visibility</label>
-                  <AnimatedDropdown<"INVITE_ONLY" | "PUBLIC">
-                    value={visibility}
-                    onChange={(val) => setVisibility(val)}
-                    buttonClassName="h-10 px-3.5"
-                    options={[
-                      { value: "INVITE_ONLY", label: "Invite Only" },
-                      { value: "PUBLIC",      label: "Public" },
-                    ]}
-                    ariaLabel="Event visibility"
                   />
                 </div>
               </div>
@@ -338,8 +415,12 @@ const BookRoomEventPage: React.FC = () => {
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
                 <UserGroupIcon className="h-5 w-5 text-orange-500" />
-                <p className="text-base font-bold text-slate-900">Invite Participants</p>
-                <span className="ml-auto text-xs text-slate-400">(Optional)</span>
+                <p className="text-base font-bold text-slate-900">
+                  Invite Participants
+                </p>
+                <span className="ml-auto text-xs text-slate-400">
+                  (Optional)
+                </span>
               </div>
 
               <div className="space-y-3 p-5">
@@ -351,7 +432,9 @@ const BookRoomEventPage: React.FC = () => {
                       if (e.key === "Enter") {
                         e.preventDefault();
                         if (newEmail.trim()) {
-                          setParticipantEmails((prev) => [...new Set([...prev, newEmail.trim()])]);
+                          setParticipantEmails((prev) => [
+                            ...new Set([...prev, newEmail.trim()]),
+                          ]);
                           setNewEmail("");
                         }
                       }
@@ -363,7 +446,9 @@ const BookRoomEventPage: React.FC = () => {
                     type="button"
                     onClick={() => {
                       if (newEmail.trim()) {
-                        setParticipantEmails((prev) => [...new Set([...prev, newEmail.trim()])]);
+                        setParticipantEmails((prev) => [
+                          ...new Set([...prev, newEmail.trim()]),
+                        ]);
                         setNewEmail("");
                       }
                     }}
@@ -383,7 +468,11 @@ const BookRoomEventPage: React.FC = () => {
                         {email}
                         <button
                           type="button"
-                          onClick={() => setParticipantEmails((prev) => prev.filter((e) => e !== email))}
+                          onClick={() =>
+                            setParticipantEmails((prev) =>
+                              prev.filter((e) => e !== email),
+                            )
+                          }
                           className="font-bold text-orange-500 hover:text-orange-700"
                         >
                           ×
@@ -412,7 +501,12 @@ const BookRoomEventPage: React.FC = () => {
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => navigate(ROUTES.ROOM_DETAIL.replace(":roomId", normalizedRoomId), { state: { room } })}
+                onClick={() =>
+                  navigate(
+                    ROUTES.ROOM_DETAIL.replace(":roomId", normalizedRoomId),
+                    { state: { room } },
+                  )
+                }
                 disabled={loading}
                 className="rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
@@ -430,7 +524,13 @@ const BookRoomEventPage: React.FC = () => {
           </form>
         </div>
 
-        {popup ? <CustomMessage type={popup.type} message={popup.message} onClose={() => setPopup(null)} /> : null}
+        {popup ? (
+          <CustomMessage
+            type={popup.type}
+            message={popup.message}
+            onClose={() => setPopup(null)}
+          />
+        ) : null}
       </div>
     </div>
   );

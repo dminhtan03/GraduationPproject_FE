@@ -52,6 +52,15 @@ const inferCategory = (
   const source = `${title} ${message}`.toLowerCase();
 
   if (
+    source.includes("event") ||
+    source.includes("invitation") ||
+    source.includes("invite") ||
+    source.includes("participant")
+  ) {
+    return "event";
+  }
+
+  if (
     source.includes("reservation") ||
     source.includes("booking") ||
     source.includes("check-in") ||
@@ -88,6 +97,28 @@ const mapApiItemToNotification = (
   const title = String(item.title || "Notification");
   const message = String(item.content || "");
   const createdAt = String(item.createdAt || new Date().toISOString());
+  const eventId =
+    typeof item.eventId === "string"
+      ? item.eventId
+      : typeof item.eventId === "number"
+        ? String(item.eventId)
+        : undefined;
+  const eventReservationId =
+    typeof item.eventReservationId === "string"
+      ? item.eventReservationId
+      : typeof item.eventReservationId === "number"
+        ? String(item.eventReservationId)
+        : undefined;
+  const participantId =
+    typeof item.participantId === "string"
+      ? item.participantId
+      : typeof item.participantId === "number"
+        ? String(item.participantId)
+        : undefined;
+  const inviteStatus =
+    typeof item.inviteStatus === "string" ? item.inviteStatus : undefined;
+  const eventTitle =
+    typeof item.eventTitle === "string" ? item.eventTitle : undefined;
 
   return {
     id: String(item.id || reservationId || createId()),
@@ -102,6 +133,11 @@ const mapApiItemToNotification = (
       typeof item.reservationStatusAtNow === "string"
         ? item.reservationStatusAtNow
         : undefined,
+    eventId,
+    eventReservationId,
+    participantId,
+    inviteStatus,
+    eventTitle,
   };
 };
 
@@ -155,6 +191,53 @@ const mapMessageToNotification = (
         ? (raw.status as string)
         : undefined;
 
+  const eventId =
+    typeof raw.eventId === "string"
+      ? (raw.eventId as string)
+      : typeof raw.eventId === "number"
+        ? String(raw.eventId)
+        : typeof raw.eventID === "string"
+          ? (raw.eventID as string)
+          : typeof raw.eventID === "number"
+            ? String(raw.eventID)
+            : typeof raw.event_id === "string"
+              ? (raw.event_id as string)
+              : typeof raw.event_id === "number"
+                ? String(raw.event_id)
+                : undefined;
+  const eventReservationId =
+    typeof raw.eventReservationId === "string"
+      ? (raw.eventReservationId as string)
+      : typeof raw.eventReservationId === "number"
+        ? String(raw.eventReservationId)
+        : undefined;
+  const participantId =
+    typeof raw.participantId === "string"
+      ? (raw.participantId as string)
+      : typeof raw.participantId === "number"
+        ? String(raw.participantId)
+        : typeof raw.participantID === "string"
+          ? (raw.participantID as string)
+          : typeof raw.participantID === "number"
+            ? String(raw.participantID)
+            : typeof raw.participant_id === "string"
+              ? (raw.participant_id as string)
+              : typeof raw.participant_id === "number"
+                ? String(raw.participant_id)
+                : undefined;
+  const inviteStatus =
+    typeof raw.inviteStatus === "string"
+      ? (raw.inviteStatus as string)
+      : typeof raw.invitationStatus === "string"
+        ? (raw.invitationStatus as string)
+        : undefined;
+  const eventTitle =
+    typeof raw.eventTitle === "string"
+      ? (raw.eventTitle as string)
+      : typeof raw.eventName === "string"
+        ? (raw.eventName as string)
+        : undefined;
+
   return {
     id,
     backendId: typeof raw.id === "string" ? (raw.id as string) : undefined,
@@ -170,6 +253,11 @@ const mapMessageToNotification = (
       typeof raw.reservationStatusAtNow === "string"
         ? (raw.reservationStatusAtNow as string)
         : undefined,
+    eventId,
+    eventReservationId,
+    participantId,
+    inviteStatus,
+    eventTitle,
   };
 };
 

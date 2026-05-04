@@ -12,6 +12,11 @@ export interface NotificationApiItem {
   reservationId?: string | number;
   ReservationId?: string | number;
   reservationStatusAtNow?: string;
+  eventId?: string | number;
+  eventReservationId?: string | number;
+  participantId?: string | number;
+  inviteStatus?: string;
+  eventTitle?: string;
 }
 
 interface ApiEnvelope<T> {

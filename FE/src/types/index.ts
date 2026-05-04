@@ -80,6 +80,7 @@ export type NotificationCategory =
   | "system"
   | "ai"
   | "booking"
+  | "event"
   | "batch"
   | "other";
 
@@ -97,6 +98,11 @@ export interface AppNotification {
   statusText?: string;
   reservationId?: string;
   reservationStatusAtNow?: string;
+  eventId?: string;
+  eventReservationId?: string;
+  participantId?: string;
+  inviteStatus?: string;
+  eventTitle?: string;
 }
 
 // ===== ROOM (Campus Room Inventory) =====

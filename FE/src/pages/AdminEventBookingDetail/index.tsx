@@ -322,20 +322,65 @@ const AdminEventBookingDetailPage: React.FC = () => {
             {
               title: "Update",
               key: "action",
-              width: 150,
+              width: 220,
               align: "center" as const,
-              render: (_: unknown, record: ServiceLine) => (
-                <select
-                  disabled={updatingStatus === record.id}
-                  value={record.status || "PENDING"}
-                  onChange={(e) => handleUpdateStatus(record, e.target.value)}
-                  className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-orange-200 disabled:opacity-50"
-                >
-                  {SERVICE_STATUSES.map((s) => (
-                    <option key={s} value={s}>{statusConfig[s].label}</option>
-                  ))}
-                </select>
-              ),
+              render: (_: unknown, record: ServiceLine) => {
+                const st = (record.status || "PENDING").toUpperCase();
+                return (
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    {st === "PENDING" && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={updatingStatus === record.id}
+                          onClick={() => handleUpdateStatus(record, "CONFIRMED")}
+                          className="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-50"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          disabled={updatingStatus === record.id}
+                          onClick={() => handleUpdateStatus(record, "CANCELLED")}
+                          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                        >
+                          Cancelled
+                        </button>
+                      </>
+                    )}
+                    {st === "CONFIRMED" && (
+                      <button
+                        type="button"
+                        disabled={updatingStatus === record.id}
+                        onClick={() => handleUpdateStatus(record, "IN_PROGRESS")}
+                        className="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-50"
+                      >
+                        In Progress
+                      </button>
+                    )}
+                    {st === "IN_PROGRESS" && (
+                      <button
+                        type="button"
+                        disabled={updatingStatus === record.id}
+                        onClick={() => handleUpdateStatus(record, "DONE")}
+                        className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-50"
+                      >
+                        Done
+                      </button>
+                    )}
+                    {(st === "CONFIRMED" || st === "IN_PROGRESS") && (
+                      <button
+                        type="button"
+                        disabled={updatingStatus === record.id}
+                        onClick={() => handleUpdateStatus(record, "CANCELLED")}
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                      >
+                        Cancelled
+                      </button>
+                    )}
+                  </div>
+                );
+              },
             },
           ]
         : []),
