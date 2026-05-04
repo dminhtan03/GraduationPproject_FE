@@ -76,6 +76,9 @@ export const API_ENDPOINTS = {
     ADMIN_ADD: "/api/v1/user/admin/add",
     ADMIN_IMPORT_EXCEL: "/api/v1/user/admin/import-excel",
     // end add admin endpoints
+    // start+ check email exists
+    CHECK_EMAIL: "/api/v1/user/check-email",
+    // end+ check email exists
   },
   // Demo data endpoints (sử dụng JSONPlaceholder)
   DEMO: {

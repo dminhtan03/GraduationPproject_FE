@@ -383,38 +383,44 @@ const EventSetupPage: React.FC = () => {
   };
 
   const invite = async () => {
-    if (!eventData?.id) {
-      setToast({ type: "error", message: "Create event first" });
+    const email = inviteEmail.trim();
+    if (!email) {
+      setToast({ type: "error", message: "Please enter an email address" });
       return;
     }
     setLoading(true);
     try {
-      const email = inviteEmail.trim();
-      await api.post(API_ENDPOINTS.EVENTS.INVITE_PARTICIPANT, {
-        eventId: eventData.id,
-        email,
-      });
+      // Auto-create event if it doesn't exist yet — check email first by just attempting the invite
+      // If event not created → create it first, then invite
+      let eventId = eventData?.id;
+      if (!eventId) {
+        const res = await api.post(API_ENDPOINTS.EVENTS.CREATE, {
+          reservationId: normalizedReservationId,
+          title: title.trim(),
+          description: description.trim() || null,
+          visibility,
+        });
+        const newEvent = extractData(res) as EventData;
+        setEventData(newEvent);
+        eventId = newEvent?.id;
+        if (!eventId) {
+          setToast({ type: "error", message: "Failed to create event" });
+          return;
+        }
+      }
+
+      await api.post(API_ENDPOINTS.EVENTS.INVITE_PARTICIPANT, { eventId, email });
       setInviteEmail("");
-      setToast({ type: "success", message: "Đã mời người tham gia" });
+      setToast({ type: "success", message: "Participant invited successfully" });
       await loadEvent();
     } catch (err: any) {
       const raw = err?.response?.data;
-      const code =
-        raw?.code ||
-        raw?.errorCode ||
-        raw?.meta?.code ||
-        raw?.meta?.errorCode ||
-        raw?.data?.code ||
-        raw?.data?.errorCode;
-      const msg =
-        raw?.message || raw?.meta?.message || err?.message || "Invite failed";
-      const normalizedMessage = String(msg || "").toLowerCase();
+      const code = raw?.code || raw?.errorCode || raw?.meta?.code || raw?.meta?.errorCode || raw?.data?.code || raw?.data?.errorCode;
+      const msg = raw?.message || raw?.meta?.message || err?.message || "Invite failed";
       const normalizedCode = String(code || "").toUpperCase();
-      if (
-        normalizedCode.includes("USER_NOT_FOUND") ||
-        normalizedMessage.includes("user not found")
-      ) {
-        setToast({ type: "error", message: "Người dùng không tồn tại" });
+      const normalizedMessage = String(msg || "").toLowerCase();
+      if (normalizedCode.includes("USER_NOT_FOUND") || normalizedMessage.includes("user not found")) {
+        setToast({ type: "error", message: "User not found. Please check the email address and try again." });
       } else {
         setToast({ type: "error", message: String(msg) });
       }
@@ -966,7 +972,6 @@ const EventSetupPage: React.FC = () => {
                 <button
                   disabled={
                     loading ||
-                    !eventData?.id ||
                     !inviteEmail.trim() ||
                     !canInvite
                   }

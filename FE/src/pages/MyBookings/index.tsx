@@ -795,6 +795,14 @@ const MyBookingsPage: React.FC = () => {
             allItems = allItems.filter(isEventSetupBooking);
           }
 
+          // start+ exclude recurring bookings — they have their own page
+          allItems = allItems.filter(
+            (item) =>
+              item.bookingType !== "RECURRING" &&
+              !(item.rawData as any)?.seriesId,
+          );
+          // end+ exclude recurring
+
           const startIndex = Math.max(nextPage - 1, 0) * nextSize;
           const paged = allItems.slice(startIndex, startIndex + nextSize);
 
@@ -816,8 +824,17 @@ const MyBookingsPage: React.FC = () => {
             if (tabKey === "meeting-with-event") {
               items = items.filter(isEventSetupBooking);
             }
+            // start+ exclude recurring bookings from My Bookings page
+            items = items.filter(
+              (item) =>
+                item.bookingType !== "RECURRING" &&
+                !(item.rawData as any)?.seriesId,
+            );
+            // end+ exclude recurring
             setBookings(items);
-            setTotal(items.length);
+            // Tổng sau khi lọc: xấp xỉ bằng cách trừ đi recurring đã bị loại trên trang này
+            const recurringOnPage = result.items.length - items.length;
+            setTotal(Math.max(0, result.total - recurringOnPage));
           } catch {
             const fallbackResult = await reservationService.getMyBookings({
               page: Math.max(nextPage - 1, 0),
@@ -1515,6 +1532,37 @@ const MyBookingsPage: React.FC = () => {
   );
 
   const columns: ColumnsType<Reservation> = [
+    // start+ booking type badge column
+    {
+      title: "TYPE",
+      key: "bookingType",
+      width: "100px",
+      render: (_: unknown, record: Reservation) => {
+        const raw = record.rawData as Record<string, unknown> | undefined;
+        const type = record.bookingType
+          ?? (raw?.seriesId ? "RECURRING" : raw?.hasEvent ? "EVENT" : "NORMAL");
+        if (type === "RECURRING") {
+          return (
+            <Tag color="geekblue" style={{ fontSize: 10, padding: "0 6px" }}>
+              🔄 Recurring
+            </Tag>
+          );
+        }
+        if (type === "EVENT") {
+          return (
+            <Tag color="orange" style={{ fontSize: 10, padding: "0 6px" }}>
+              🎉 Event
+            </Tag>
+          );
+        }
+        return (
+          <Tag color="default" style={{ fontSize: 10, padding: "0 6px" }}>
+            📅 Normal
+          </Tag>
+        );
+      },
+    },
+    // end+ booking type badge column
     {
       title: "LOCATION CODE",
       dataIndex: "locationCode",
@@ -2052,7 +2100,16 @@ const MyBookingsPage: React.FC = () => {
                     : columns
                 }
                 dataSource={bookings}
-                pagination={false}
+                pagination={{
+                  current: page,
+                  pageSize,
+                  total,
+                  showSizeChanger: true,
+                  pageSizeOptions: ["5", "10", "20"],
+                  showTotal: (tot, range) =>
+                    `${range[0]}–${range[1]} of ${tot} bookings`,
+                  hideOnSinglePage: false,
+                }}
                 onChange={handleTableChange}
                 onRow={(record) => ({
                   onClick: (event) => {

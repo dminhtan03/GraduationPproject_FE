@@ -26,8 +26,32 @@ import {
   toTimeWithSeconds,
 } from "../../utils/recurringSeries";
 import { getCurrentTimeRange, toDateInputValue } from "../../utils";
+import { reservationService } from "../../services/reservationService";
+import type { Reservation } from "../../types";
+
 
 const { Title, Paragraph } = Typography;
+
+const parseOccurrenceDateTime = (value?: string) => {
+  if (!value) return null;
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const fmtDate = (value?: string) => {
+  const d = parseOccurrenceDateTime(value);
+  return d ? d.toLocaleDateString() : "-";
+};
+
+const fmtTime = (value?: string) => {
+  const d = parseOccurrenceDateTime(value);
+  return d
+    ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+    : "-";
+};
+
+const OCCURRENCE_PAGE_SIZE = 10;
 
 // start+ chức năng đặt phòng lặp lại (demo UI)
 const MyRecurringSeriesPage: React.FC = () => {
@@ -39,6 +63,12 @@ const MyRecurringSeriesPage: React.FC = () => {
   } | null>(null);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
+
+  const [occurrences, setOccurrences] = useState<Reservation[]>([]);
+  const [occurrencesAll, setOccurrencesAll] = useState<Reservation[]>([]);
+  const [occurrencesLoading, setOccurrencesLoading] = useState(false);
+  const [occurrencesPage, setOccurrencesPage] = useState(1);
+  const [occurrencesTotal, setOccurrencesTotal] = useState(0);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rooms, setRooms] = useState<RoomOption[]>([]);
@@ -294,6 +324,7 @@ const MyRecurringSeriesPage: React.FC = () => {
       );
       setToast({ type: "success", message: "Series cancelled" });
       load();
+      void loadOccurrences(1);
     } catch (err: unknown) {
       setToast({
         type: "error",
@@ -307,6 +338,58 @@ const MyRecurringSeriesPage: React.FC = () => {
     await cancel(cancelTargetId);
     closeCancelModal();
   };
+
+  const loadOccurrences = async (nextPage: number = 1) => {
+    setOccurrencesLoading(true);
+    try {
+      const allStatuses = [
+        "RESERVED", "IN_USE", "COMPLETED", "CANCELLED",
+        "FORCE_CANCELLED", "NO_SHOW", "FAILED",
+      ];
+      const result = await reservationService.getMyBookings({
+        page: 0,
+        size: 1000,
+        statuses: allStatuses,
+      });
+      const recurring = result.items.filter(
+        (item) =>
+          item.bookingType === "RECURRING" ||
+          !!(item.rawData as Record<string, unknown>)?.seriesId,
+      );
+      recurring.sort((a, b) => {
+        const ta = parseOccurrenceDateTime(a.startTime)?.getTime() ?? 0;
+        const tb = parseOccurrenceDateTime(b.startTime)?.getTime() ?? 0;
+        return tb - ta;
+      });
+      setOccurrencesAll(recurring);
+      setOccurrencesTotal(recurring.length);
+      const startIdx = (nextPage - 1) * OCCURRENCE_PAGE_SIZE;
+      setOccurrences(recurring.slice(startIdx, startIdx + OCCURRENCE_PAGE_SIZE));
+      setOccurrencesPage(nextPage);
+    } catch (err: unknown) {
+      setToast({
+        type: "error",
+        message: extractApiMessage(err, "Failed to load recurring occurrences"),
+      });
+    } finally {
+      setOccurrencesLoading(false);
+    }
+  };
+
+  const handleOccurrencesPageChange = (nextPage: number) => {
+    const startIdx = (nextPage - 1) * OCCURRENCE_PAGE_SIZE;
+    setOccurrences(occurrencesAll.slice(startIdx, startIdx + OCCURRENCE_PAGE_SIZE));
+    setOccurrencesPage(nextPage);
+  };
+
+  useEffect(() => {
+    void loadOccurrences();
+  }, []);
+
+  const occurrencesTotalPages = Math.max(
+    1,
+    Math.ceil(occurrencesTotal / OCCURRENCE_PAGE_SIZE),
+  );
 
   return (
     <div className="fade-in">
@@ -452,6 +535,162 @@ const MyRecurringSeriesPage: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Recurring Booking Occurrences Table */}
+      <div className="mt-8">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold text-slate-800">
+              Recurring Booking Occurrences
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Individual booking slots generated from your recurring series
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadOccurrences(1)}
+            disabled={occurrencesLoading}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {occurrencesLoading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                  Room
+                </th>
+                <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                  Date
+                </th>
+                <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                  Time
+                </th>
+                <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {occurrencesLoading ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-4 py-10 text-center text-sm text-slate-500"
+                  >
+                    Loading...
+                  </td>
+                </tr>
+              ) : occurrences.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-4 py-10 text-center text-sm text-slate-500"
+                  >
+                    No recurring booking occurrences found.
+                  </td>
+                </tr>
+              ) : (
+                occurrences.map((item, idx) => {
+                  const status = (item.status || "").toUpperCase();
+                  const statusCls =
+                    status === "RESERVED"
+                      ? "bg-emerald-50 text-emerald-700"
+                      : status === "IN_USE"
+                        ? "bg-blue-50 text-blue-700"
+                        : status === "COMPLETED"
+                          ? "bg-cyan-50 text-cyan-700"
+                          : status === "CANCELLED" || status === "FORCE_CANCELLED"
+                            ? "bg-red-50 text-red-600"
+                            : status === "NO_SHOW"
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-slate-100 text-slate-500";
+                  const statusLabel =
+                    status === "RESERVED"
+                      ? "Reserved"
+                      : status === "IN_USE"
+                        ? "In Use"
+                        : status === "COMPLETED"
+                          ? "Completed"
+                          : status === "CANCELLED"
+                            ? "Cancelled"
+                            : status === "FORCE_CANCELLED"
+                              ? "Force Cancelled"
+                              : status === "NO_SHOW"
+                                ? "No Show"
+                                : item.status || "—";
+                  return (
+                    <tr
+                      key={item.id ?? idx}
+                      className="hover:bg-slate-50/50 transition"
+                    >
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-700">
+                          {item.locationCode || "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="inline-flex items-center gap-1.5 text-sm text-slate-700">
+                          <CalendarDaysIcon className="h-4 w-4 text-amber-500" />
+                          <span className="font-medium">
+                            {fmtDate(item.startTime)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5">
+                          <ClockIcon className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm font-medium text-blue-900">
+                            {fmtTime(item.startTime)} – {fmtTime(item.endTime)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusCls}`}
+                        >
+                          {statusLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {occurrencesTotal > OCCURRENCE_PAGE_SIZE && (
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              disabled={occurrencesPage <= 1}
+              onClick={() => handleOccurrencesPageChange(occurrencesPage - 1)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              ← Prev
+            </button>
+            <span className="text-sm text-slate-600">
+              Page {occurrencesPage} / {occurrencesTotalPages}
+              <span className="ml-2 text-slate-400">
+                ({occurrencesTotal} occurrences)
+              </span>
+            </span>
+            <button
+              type="button"
+              disabled={occurrencesPage >= occurrencesTotalPages}
+              onClick={() => handleOccurrencesPageChange(occurrencesPage + 1)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
 
       {isModalOpen ? (

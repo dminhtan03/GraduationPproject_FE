@@ -163,6 +163,10 @@ export interface Reservation {
   status?: ReservationStatus;
   feedbackId?: string;
   feedbackSubmitted?: boolean;
+  // start+ booking type
+  seriesId?: string;
+  bookingType?: "NORMAL" | "RECURRING" | "EVENT" | string;
+  // end+ booking type
   rawData?: Record<string, unknown>;
 }
 

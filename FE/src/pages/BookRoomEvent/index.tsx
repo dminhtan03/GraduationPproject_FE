@@ -71,8 +71,14 @@ const BookRoomEventPage: React.FC = () => {
 
   const [eventTitle, setEventTitle] = useState("Meeting Event");
   const [eventDescription, setEventDescription] = useState("");
-  const [participantEmails, setParticipantEmails] = useState<string[]>([]);
+
+  // start+ verified participants with name
+  type VerifiedParticipant = { email: string; fullName: string };
+  const [participants, setParticipants] = useState<VerifiedParticipant[]>([]);
   const [newEmail, setNewEmail] = useState("");
+  const [emailError, setEmailError] = useState<string>("");
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  // end+ verified participants
 
   const [acceptedRules, setAcceptedRules] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -117,6 +123,44 @@ const BookRoomEventPage: React.FC = () => {
     setEndTime(value);
     validateDateTime(startDate, startTime, endDate, value);
   };
+
+  // start+ handle add email with BE check
+  const handleAddEmail = async () => {
+    const email = newEmail.trim();
+    if (!email) return;
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setEmailError("Invalid email format.");
+      return;
+    }
+    if (participants.some((p) => p.email.toLowerCase() === email.toLowerCase())) {
+      setEmailError("This email has already been added.");
+      return;
+    }
+
+    setCheckingEmail(true);
+    setEmailError("");
+    try {
+      const res = await api.get<any>(API_ENDPOINTS.USERS.CHECK_EMAIL, { params: { email } });
+      const data = res.data?.data ?? res.data;
+      const fullName = String(data?.fullName || "");
+      setParticipants((prev) => [...prev, { email: String(data?.email || email), fullName }]);
+      setNewEmail("");
+      setEmailError("");
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "";
+      const normalized = msg.toLowerCase();
+      if (normalized.includes("user not found") || normalized.includes("no account")) {
+        setEmailError("No account found with this email address.");
+      } else {
+        setEmailError("Could not verify email. Please try again.");
+      }
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+  // end+ handle add email
 
   const showPopup = (type: MessageType, nextMessage: string) => {
     setPopup({ type, message: nextMessage });
@@ -195,12 +239,12 @@ const BookRoomEventPage: React.FC = () => {
         (eventRes as any)?.data?.data ?? (eventRes as any)?.data;
       const eventId = eventData?.id;
 
-      if (eventId && participantEmails.length > 0) {
+      if (eventId && participants.length > 0) {
         await Promise.all(
-          participantEmails.map((email) =>
+          participants.map((p) =>
             api.post(API_ENDPOINTS.EVENTS.INVITE_PARTICIPANT, {
               eventId,
-              email,
+              email: p.email,
             }),
           ),
         );
@@ -424,56 +468,70 @@ const BookRoomEventPage: React.FC = () => {
               </div>
 
               <div className="space-y-3 p-5">
+                {/* Input row */}
                 <div className="flex gap-2">
                   <input
                     value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
+                    onChange={(e) => {
+                      setNewEmail(e.target.value);
+                      if (emailError) setEmailError("");
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        if (newEmail.trim()) {
-                          setParticipantEmails((prev) => [
-                            ...new Set([...prev, newEmail.trim()]),
-                          ]);
-                          setNewEmail("");
-                        }
-                      }
+                      if (e.key === "Enter") { e.preventDefault(); handleAddEmail(); }
                     }}
                     placeholder="Enter email and press Enter"
-                    className="flex-1 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                    disabled={checkingEmail}
+                    className={[
+                      "flex-1 rounded-xl border bg-white px-3.5 py-2.5 text-sm outline-none transition placeholder:text-slate-400",
+                      emailError
+                        ? "border-red-400 focus:border-red-400 focus:ring-2 focus:ring-red-200"
+                        : "border-slate-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-200",
+                    ].join(" ")}
                   />
                   <button
                     type="button"
-                    onClick={() => {
-                      if (newEmail.trim()) {
-                        setParticipantEmails((prev) => [
-                          ...new Set([...prev, newEmail.trim()]),
-                        ]);
-                        setNewEmail("");
-                      }
-                    }}
-                    className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600"
+                    onClick={handleAddEmail}
+                    disabled={checkingEmail || !newEmail.trim()}
+                    className="inline-flex min-w-[72px] items-center justify-center rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-60"
                   >
-                    Add
+                    {checkingEmail ? (
+                      <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                      </svg>
+                    ) : "Add"}
                   </button>
                 </div>
 
-                {participantEmails.length > 0 && (
+                {/* Inline error */}
+                {emailError && (
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-red-600">
+                    <svg className="h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    {emailError}
+                  </p>
+                )}
+
+                {/* Verified participant tags */}
+                {participants.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {participantEmails.map((email) => (
+                    {participants.map((p) => (
                       <span
-                        key={email}
-                        className="inline-flex items-center gap-2 rounded-full bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 ring-1 ring-inset ring-orange-200"
+                        key={p.email}
+                        className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200"
                       >
-                        {email}
+                        {/* Green checkmark — confirmed user exists */}
+                        <svg className="h-3 w-3 shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd" />
+                        </svg>
+                        <span className="max-w-[160px] truncate">
+                          {p.fullName ? `${p.fullName} (${p.email})` : p.email}
+                        </span>
                         <button
                           type="button"
-                          onClick={() =>
-                            setParticipantEmails((prev) =>
-                              prev.filter((e) => e !== email),
-                            )
-                          }
-                          className="font-bold text-orange-500 hover:text-orange-700"
+                          onClick={() => setParticipants((prev) => prev.filter((x) => x.email !== p.email))}
+                          className="font-bold text-emerald-500 hover:text-emerald-700"
                         >
                           ×
                         </button>

@@ -97,6 +97,13 @@ const normalizeReservation = (item: any): Reservation => {
       typeof rawFeedbackSubmitted === "boolean"
         ? rawFeedbackSubmitted
         : feedbackIdValue != null,
+    // start+ booking type
+    seriesId: item?.seriesId != null ? String(item.seriesId) : undefined,
+    bookingType:
+      item?.bookingType != null ? String(item.bookingType)
+      : item?.seriesId != null ? "RECURRING"
+      : undefined,
+    // end+ booking type
     rawData: item && typeof item === "object" ? (item as Record<string, unknown>) : undefined,
   };
 };
