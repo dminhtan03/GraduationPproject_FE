@@ -3,7 +3,6 @@ import {
   Bars3Icon,
   PlusIcon,
   PencilSquareIcon,
-  TrashIcon,
   XMarkIcon,
   ClipboardDocumentListIcon,
 } from "@heroicons/react/24/outline";
@@ -14,7 +13,10 @@ import { api } from "../../services/api";
 import { logout } from "../../services/authService";
 import { ROUTES } from "../../constants";
 import { API_ENDPOINTS } from "../../constants/endpoints";
-import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
+import CustomMessage, {
+  type MessageType,
+} from "../../components/common/CustomMessage";
+import { CustomPagination } from "../../components/common";
 
 type ProfilePayload = {
   firstName?: string;
@@ -59,6 +61,8 @@ const AdminServiceItemManagementPage: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [items, setItems] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const [toastPopup, setToastPopup] = useState<{
     type: MessageType;
     message: string;
@@ -93,7 +97,9 @@ const AdminServiceItemManagementPage: React.FC = () => {
       const raw = res.data;
       const nested = (raw as { data?: ProfilePayload }).data;
       const data = (nested || raw || {}) as ProfilePayload;
-      const fullName = [data.firstName, data.lastName].filter(Boolean).join(" ");
+      const fullName = [data.firstName, data.lastName]
+        .filter(Boolean)
+        .join(" ");
       setAdminName(fullName || "Admin User");
       setAdminEmail(data.email || "");
     } catch {
@@ -148,6 +154,18 @@ const AdminServiceItemManagementPage: React.FC = () => {
     loadItems();
   }, []);
 
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const pagedItems = useMemo(
+    () => items.slice((page - 1) * pageSize, page * pageSize),
+    [items, page, pageSize],
+  );
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   const openModal = (item?: ServiceItem) => {
     if (item) {
       setEditingItem(item);
@@ -200,20 +218,6 @@ const AdminServiceItemManagementPage: React.FC = () => {
       });
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const deactivate = async (id: string) => {
-    if (!window.confirm("Deactivate this service item?")) return;
-    try {
-      await adminService.deleteServiceItem(id);
-      setToastPopup({ type: "success", message: "Service item deactivated" });
-      loadItems();
-    } catch (err: unknown) {
-      setToastPopup({
-        type: "error",
-        message: getErrorMessage(err, "Failed to deactivate service item"),
-      });
     }
   };
 
@@ -292,13 +296,13 @@ const AdminServiceItemManagementPage: React.FC = () => {
                   </td>
                 </tr>
               ) : items.length > 0 ? (
-                items.map((item, index) => (
+                pagedItems.map((item, index) => (
                   <tr
                     key={item.id}
                     className="hover:bg-slate-50/50 transition-colors"
                   >
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {index + 1}
+                      {(page - 1) * pageSize + index + 1}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -346,13 +350,6 @@ const AdminServiceItemManagementPage: React.FC = () => {
                           <PencilSquareIcon className="h-4 w-4" />
                           Edit
                         </button>
-                        <button
-                          onClick={() => deactivate(item.id)}
-                          className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                          Deactivate
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -367,6 +364,16 @@ const AdminServiceItemManagementPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {items.length > 0 && totalPages > 1 && (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <CustomPagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={(nextPage) => setPage(nextPage)}
+            />
+          </div>
+        )}
 
         {isModalOpen ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -495,4 +502,3 @@ const AdminServiceItemManagementPage: React.FC = () => {
 
 export default AdminServiceItemManagementPage;
 // end+ chức năng CRUD dịch vụ đi kèm (UI admin)
-

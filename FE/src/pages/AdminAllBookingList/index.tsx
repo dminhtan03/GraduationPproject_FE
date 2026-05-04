@@ -119,12 +119,96 @@ const getTextFromUnknown = (value: unknown): string => {
   return "";
 };
 
+const getActorFromUnknown = (value: unknown): string => {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  return (
+    getTextFromUnknown(record.fullName) ||
+    getTextFromUnknown(record.name) ||
+    getTextFromUnknown(record.username) ||
+    getTextFromUnknown(record.email) ||
+    getTextFromUnknown(record.id)
+  );
+};
+
+const getBookingTimestamp = (record: BookingRow): number => {
+  const raw = record.rawData || {};
+  const reservation =
+    raw["reservation"] && typeof raw["reservation"] === "object"
+      ? (raw["reservation"] as Record<string, unknown>)
+      : undefined;
+
+  const candidates: unknown[] = [
+    raw["createdAt"],
+    raw["createAt"],
+    raw["createdDate"],
+    raw["createdTime"],
+    reservation?.createdAt,
+    reservation?.createAt,
+    reservation?.createdDate,
+    reservation?.createdTime,
+    record.startTime,
+    record.endTime,
+    record.date,
+    raw["startTime"],
+    raw["endTime"],
+    raw["date"],
+  ];
+
+  for (const value of candidates) {
+    const text = getTextFromUnknown(value);
+    if (!text) continue;
+    const parsed = parseDate(text);
+    if (parsed) return parsed.getTime();
+  }
+
+  return 0;
+};
+
+const getForceCancelActor = (record: BookingRow): string => {
+  const raw = record.rawData || {};
+  const reservation =
+    raw["reservation"] && typeof raw["reservation"] === "object"
+      ? (raw["reservation"] as Record<string, unknown>)
+      : undefined;
+
+  const candidates: unknown[] = [
+    raw["forceCancelledBy"],
+    raw["forceCanceledBy"],
+    raw["forceCancelBy"],
+    raw["cancelledBy"],
+    raw["canceledBy"],
+    raw["cancelBy"],
+    reservation?.forceCancelledBy,
+    reservation?.forceCanceledBy,
+    reservation?.forceCancelBy,
+    reservation?.cancelledBy,
+    reservation?.canceledBy,
+    reservation?.cancelBy,
+  ];
+
+  for (const value of candidates) {
+    const actor = getActorFromUnknown(value);
+    if (actor) return actor;
+  }
+
+  return "";
+};
+
 const parseFloorNumber = (text: string): number | null => {
   const matched = text.match(/(\d+)/);
   if (!matched) return null;
   const value = Number(matched[1]);
   return Number.isFinite(value) ? value : null;
 };
+
+const normalizeStatus = (value?: string) =>
+  String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[-\s]+/g, "_");
 
 const AdminAllBookingListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -318,7 +402,11 @@ const AdminAllBookingListPage: React.FC = () => {
         status: appliedStatus !== "All" ? appliedStatus : undefined,
       })
       .then((result) => {
-        setBookings(result.items);
+        const sorted = [...result.items].sort(
+          (left, right) =>
+            getBookingTimestamp(right) - getBookingTimestamp(left),
+        );
+        setBookings(sorted);
         setTotal(result.total);
         setLoading(false);
       })
@@ -450,10 +538,7 @@ const AdminAllBookingListPage: React.FC = () => {
     })();
 
   const canForceCancel = (status?: string) => {
-    const normalized = String(status || "")
-      .trim()
-      .toUpperCase()
-      .replace(/[-\s]+/g, "_");
+    const normalized = normalizeStatus(status);
     return normalized === "RESERVED" || normalized === "IN_USE";
   };
 
@@ -544,10 +629,6 @@ const AdminAllBookingListPage: React.FC = () => {
       dataIndex: "userName",
       key: "userName",
       width: "14%",
-      sorter: (a, b) =>
-        String(a.userName || a.user || "").localeCompare(
-          String(b.userName || b.user || ""),
-        ),
       filters: userNameColumnFilters,
       onFilter: (value, record) =>
         String(record.userName || record.user || "")
@@ -560,10 +641,6 @@ const AdminAllBookingListPage: React.FC = () => {
       dataIndex: "roomName",
       key: "roomName",
       width: "14%",
-      sorter: (a, b) =>
-        String(a.roomName || a.room || "").localeCompare(
-          String(b.roomName || b.room || ""),
-        ),
       filters: roomNameColumnFilters,
       onFilter: (value, record) =>
         String(record.roomName || record.room || "")
@@ -575,11 +652,6 @@ const AdminAllBookingListPage: React.FC = () => {
       title: "START TIME",
       key: "startTime",
       width: "15%",
-      sorter: (a, b) => {
-        const left = parseDate(a.startTime)?.getTime() || 0;
-        const right = parseDate(b.startTime)?.getTime() || 0;
-        return left - right;
-      },
       render: (_, record) => {
         const dateStr = record.startTime;
         return dateStr ? new Date(dateStr).toLocaleString() : "-";
@@ -589,11 +661,6 @@ const AdminAllBookingListPage: React.FC = () => {
       title: "END TIME",
       key: "endTime",
       width: "15%",
-      sorter: (a, b) => {
-        const left = parseDate(a.endTime || a.date)?.getTime() || 0;
-        const right = parseDate(b.endTime || b.date)?.getTime() || 0;
-        return left - right;
-      },
       render: (_, record) => {
         const dateStr = record.endTime || record.date;
         return dateStr ? new Date(dateStr).toLocaleString() : "-";
@@ -604,29 +671,39 @@ const AdminAllBookingListPage: React.FC = () => {
       dataIndex: "status",
       key: "status",
       width: "13%",
-      sorter: (a, b) =>
-        String(a.status || "").localeCompare(String(b.status || "")),
       filters: statusColumnFilters,
       onFilter: (value, record) =>
         String(record.status || "")
           .toLowerCase()
           .includes(String(value).toLowerCase()),
-      render: (status: string | undefined) => {
-        const normalized = String(status || "").toUpperCase();
+      render: (status: string | undefined, record) => {
+        const normalized = normalizeStatus(status);
+        const isForceCancelled = normalized === "FORCE_CANCELLED";
+        const forceCancelActor = isForceCancelled
+          ? getForceCancelActor(record)
+          : "";
+        const actorNormalized = forceCancelActor.toLowerCase();
+        const adminNormalized = adminEmail.toLowerCase();
+        const isAdminActor =
+          actorNormalized === "admin" ||
+          actorNormalized === "administrator" ||
+          (adminNormalized && actorNormalized === adminNormalized);
+        const showAdminNote =
+          isForceCancelled && (!forceCancelActor || isAdminActor);
         const label =
           normalized === "IN_USE" || normalized === "CHECKED_IN"
             ? "On-going"
-            : normalized === "APPROVED" || normalized === "RESERVED"
-              ? "In-coming"
-              : normalized === "COMPLETED"
-                ? "Completed"
-                : normalized === "CANCELLED" ||
-                    normalized === "NO_SHOW" ||
-                    normalized === "FORCE_CANCELLED"
-                  ? "Cancelled"
-                  : normalized === "PENDING"
-                    ? "Pending"
-                    : status || "—";
+            : normalized === "FORCE_CANCELLED"
+              ? "Force Cancelled"
+              : normalized === "APPROVED" || normalized === "RESERVED"
+                ? "In-coming"
+                : normalized === "COMPLETED"
+                  ? "Completed"
+                  : normalized === "CANCELLED" || normalized === "NO_SHOW"
+                    ? "Cancelled"
+                    : normalized === "PENDING"
+                      ? "Pending"
+                      : status || "—";
         const cls =
           normalized === "IN_USE" || normalized === "CHECKED_IN"
             ? "bg-emerald-50 text-emerald-700"
@@ -642,11 +719,22 @@ const AdminAllBookingListPage: React.FC = () => {
                     ? "bg-amber-50 text-amber-700"
                     : "bg-slate-100 text-slate-500";
         return (
-          <span
-            className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}
-          >
-            {label}
-          </span>
+          <div className="flex flex-col items-start gap-1">
+            <span
+              className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}
+            >
+              {label}
+            </span>
+            {isForceCancelled && forceCancelActor && !isAdminActor ? (
+              <span className="text-[11px] font-semibold text-slate-500">
+                By: {forceCancelActor}
+              </span>
+            ) : showAdminNote ? (
+              <span className="text-[11px] font-semibold text-slate-500">
+                By admin
+              </span>
+            ) : null}
+          </div>
         );
       },
     },
@@ -957,6 +1045,7 @@ const AdminAllBookingListPage: React.FC = () => {
                     { label: "In Use", value: "IN_USE" },
                     { label: "Completed", value: "COMPLETED" },
                     { label: "Cancelled", value: "CANCELLED" },
+                    { label: "Force Cancelled", value: "FORCE_CANCELLED" },
                     { label: "No Show", value: "NO_SHOW" },
                     { label: "Failed", value: "FAILED" },
                   ]}
