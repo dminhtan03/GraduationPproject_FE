@@ -48,7 +48,7 @@ import { buildDateTime } from "../../utils";
 
 const { Title, Paragraph } = Typography;
 
-type BookingTabKey = "history" | "ongoing" | "invitations";
+type BookingTabKey = "history" | "ongoing" | "invitations" | "meeting-with-event";
 type BookingActionType = "check-in" | "return-room" | "extend" | "cancel";
 
 interface BookingActionModalState {
@@ -192,13 +192,38 @@ const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
   ongoing: ["RESERVED", "IN_USE"],
   history: ["NO_SHOW", "CANCELLED", "COMPLETED", "FORCE_CANCELLED", "FAILED"],
   invitations: [],
+  "meeting-with-event": ["RESERVED", "IN_USE", "NO_SHOW", "CANCELLED", "COMPLETED", "FORCE_CANCELLED", "FAILED"],
 };
 
-const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey) => {
+const isEventSetupBooking = (item: Reservation, eventInvitations: EventInvitation[] = []): boolean => {
+  // Check if this reservation is linked to an event through invitations
+  const hasEventInvitation = eventInvitations.some(
+    (invitation) => invitation.reservationId === item.id
+  );
+  
+  if (hasEventInvitation) return true;
+  
+  // Fallback: check purpose field
+  const purpose = (item.purpose || "").toLowerCase().trim();
+  const hasEventSetup = purpose.includes("event set up") || purpose === "event set up";
+  
+  return hasEventSetup;
+};
+
+const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey, eventInvitations: EventInvitation[] = []) => {
   const allowedStatuses = [
     ...TAB_STATUS_FILTERS.ongoing,
     ...TAB_STATUS_FILTERS.history,
   ];
+
+  if (tabKey === "meeting-with-event") {
+    return items.filter((item) => {
+      const status = (item.status || "").toUpperCase();
+      const isEventSetup = isEventSetupBooking(item, eventInvitations);
+      const hasValidStatus = TAB_STATUS_FILTERS["meeting-with-event"].includes(status);
+      return isEventSetup && hasValidStatus;
+    });
+  }
 
   if (tabKey === "history") {
     return items.filter((item) => {
@@ -678,6 +703,7 @@ const MyBookingsPage: React.FC = () => {
       statusValue: string,
       startTimeValue: string,
       endTimeValue: string,
+      eventInvitations: EventInvitation[] = [],
     ) => {
       setLoading(true);
       setError(null);
@@ -728,7 +754,7 @@ const MyBookingsPage: React.FC = () => {
                     (item) =>
                       (item.status || "").toUpperCase() === normalizedStatus,
                   )
-                : filterItemsByTab(fallbackResult.items, tabKey);
+                : filterItemsByTab(fallbackResult.items, tabKey, eventInvitations);
           }
 
           if (selectedBuilding?.label) {
@@ -764,6 +790,11 @@ const MyBookingsPage: React.FC = () => {
             }
           }
 
+          // Apply event setup filter for meeting-with-event tab
+          if (tabKey === "meeting-with-event") {
+            allItems = allItems.filter(isEventSetupBooking);
+          }
+
           const startIndex = Math.max(nextPage - 1, 0) * nextSize;
           const paged = allItems.slice(startIndex, startIndex + nextSize);
 
@@ -780,8 +811,13 @@ const MyBookingsPage: React.FC = () => {
               startTime: startTimeValue || undefined,
               endTime: endTimeValue || undefined,
             });
-            setBookings(result.items);
-            setTotal(result.total);
+            let items = result.items;
+            // Apply event setup filter for meeting-with-event tab
+            if (tabKey === "meeting-with-event") {
+              items = items.filter(isEventSetupBooking);
+            }
+            setBookings(items);
+            setTotal(items.length);
           } catch {
             const fallbackResult = await reservationService.getMyBookings({
               page: Math.max(nextPage - 1, 0),
@@ -795,7 +831,7 @@ const MyBookingsPage: React.FC = () => {
                     (item) =>
                       (item.status || "").toUpperCase() === normalizedStatus,
                   )
-                : filterItemsByTab(fallbackResult.items, tabKey);
+                : filterItemsByTab(fallbackResult.items, tabKey, eventInvitations);
             if (selectedBuilding?.label) {
               filteredItems = filteredItems.filter((item) => {
                 const buildingName = (
@@ -823,7 +859,7 @@ const MyBookingsPage: React.FC = () => {
         setLoading(false);
       }
     },
-    [buildingOptions, floorOptions],
+    [buildingOptions, floorOptions, invitations],
   );
 
   useEffect(() => {
@@ -838,6 +874,7 @@ const MyBookingsPage: React.FC = () => {
       appliedStatusFilter,
       appliedStartTimeFilter,
       appliedEndTimeFilter,
+      invitations,
     );
   }, [
     loadBookings,
@@ -950,7 +987,7 @@ const MyBookingsPage: React.FC = () => {
         updatedItems,
       );
 
-      return filterItemsByTab(updatedItems, activeTab);
+      return filterItemsByTab(updatedItems, activeTab, invitations);
     });
 
     console.log(
@@ -966,6 +1003,7 @@ const MyBookingsPage: React.FC = () => {
       appliedStatusFilter,
       appliedStartTimeFilter,
       appliedEndTimeFilter,
+      invitations,
     );
   }, [
     activeTab,
@@ -979,6 +1017,7 @@ const MyBookingsPage: React.FC = () => {
     loadBookings,
     page,
     pageSize,
+    invitations,
   ]);
 
   const openActionModal = (type: BookingActionType, booking: Reservation) => {
@@ -1046,6 +1085,7 @@ const MyBookingsPage: React.FC = () => {
         appliedStatusFilter,
         appliedStartTimeFilter,
         appliedEndTimeFilter,
+        invitations,
       );
     } catch (err) {
       showToast("error", extractApiMessage(err, "Unable to submit feedback"));
@@ -1127,8 +1167,8 @@ const MyBookingsPage: React.FC = () => {
       return;
     }
 
-    if (currentAction.type === "cancel" && !cancelReason.trim()) {
-      showToast("warning", "Please provide a cancellation reason.");
+    if (currentAction.type === "cancel" && cancelReason.trim().length < 2) {
+      showToast("error", "Reason must be at least 2 characters");
       return;
     }
 
@@ -1168,9 +1208,14 @@ const MyBookingsPage: React.FC = () => {
               ? "Extend room completed successfully"
               : "Cancel booking completed successfully";
 
+      const successMessage =
+        currentAction.type === "check-in" || currentAction.type === "return-room"
+          ? actionSuccessFallback
+          : extractBackendSuccessMessage(actionResponse, actionSuccessFallback);
+
       showToast(
         "success",
-        extractBackendSuccessMessage(actionResponse, actionSuccessFallback),
+        successMessage,
       );
 
       // start update profile after cancellation
@@ -1193,6 +1238,7 @@ const MyBookingsPage: React.FC = () => {
         appliedStatusFilter,
         appliedStartTimeFilter,
         appliedEndTimeFilter,
+        invitations,
       );
     } catch (err) {
       const actionErrorMessage = extractApiMessage(
@@ -1224,7 +1270,7 @@ const MyBookingsPage: React.FC = () => {
         void loadInvitations();
         return;
       }
-      loadBookings(1, pageSize, nextTab, "all", "all", "", "all", "", "");
+      loadBookings(1, pageSize, nextTab, "all", "all", "", "all", "", "", invitations);
     }, 0);
   };
 
@@ -1252,6 +1298,7 @@ const MyBookingsPage: React.FC = () => {
       appliedStatusFilter,
       appliedStartTimeFilter,
       appliedEndTimeFilter,
+      invitations,
     );
   };
 
@@ -1293,6 +1340,7 @@ const MyBookingsPage: React.FC = () => {
         appliedStatusFilter,
         appliedStartTimeFilter,
         appliedEndTimeFilter,
+        invitations,
       );
     },
     [
@@ -1307,6 +1355,7 @@ const MyBookingsPage: React.FC = () => {
       page,
       pageSize,
       totalPages,
+      invitations,
     ],
   );
 
@@ -1391,6 +1440,12 @@ const MyBookingsPage: React.FC = () => {
           <span className="font-medium tracking-wide">
             On-going / In-coming Meeting
           </span>
+        ),
+      },
+      {
+        key: "meeting-with-event",
+        label: (
+          <span className="font-medium tracking-wide">Meeting with Event</span>
         ),
       },
       {
@@ -1954,6 +2009,7 @@ const MyBookingsPage: React.FC = () => {
                   appliedStatusFilter,
                   appliedStartTimeFilter,
                   appliedEndTimeFilter,
+                  invitations,
                 )
               }
               className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1977,7 +2033,9 @@ const MyBookingsPage: React.FC = () => {
               description={
                 activeTab === "history"
                   ? "No booking history yet."
-                  : "No on-going/in-coming meetings."
+                  : activeTab === "meeting-with-event"
+                    ? "No meetings with events."
+                    : "No on-going/in-coming meetings."
               }
             />
           ) : (

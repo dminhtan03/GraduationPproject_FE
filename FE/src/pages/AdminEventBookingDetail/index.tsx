@@ -201,8 +201,8 @@ const AdminEventBookingDetailPage: React.FC = () => {
 
   const confirmCancel = async () => {
     if (!cancelModal) return;
-    if (!cancelModal.reason.trim()) {
-      setToast({ type: "warning", message: "Please provide a reason for cancellation." });
+    if (cancelModal.reason.trim().length < 2) {
+      setToast({ type: "error", message: "Reason must be at least 2 characters" });
       return;
     }
     await doUpdateStatus(cancelModal.item, "CANCELLED", cancelModal.reason);

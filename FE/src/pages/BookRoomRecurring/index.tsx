@@ -41,6 +41,44 @@ const addOneHour = (time: string): string => {
   return `${String(next).padStart(2, "0")}:00`;
 };
 
+// Helper to get available days of week based on date range
+const getAvailableDaysOfWeek = (startDateStr: string, untilDateStr: string) => {
+  if (!startDateStr) return { available: new Set<number>(), totalDays: 0 };
+
+  const startDate = new Date(startDateStr + "T00:00:00");
+  if (isNaN(startDate.getTime())) return { available: new Set<number>(), totalDays: 0 };
+
+  let endDate: Date;
+  if (untilDateStr) {
+    endDate = new Date(untilDateStr + "T23:59:59");
+    if (isNaN(endDate.getTime())) endDate = new Date(startDateStr + "T23:59:59");
+  } else {
+    endDate = new Date(startDateStr + "T23:59:59");
+  }
+
+  const available = new Set<number>();
+  const current = new Date(startDate);
+  let totalDays = 0;
+
+  while (current <= endDate) {
+    // JavaScript: 0=Sunday, 1=Monday, ..., 6=Saturday
+    // We need to map to: 0=Monday, 1=Tuesday, ..., 5=Saturday, 6=Sunday
+    const jsDay = current.getDay(); // 0-6
+    const normalizedDay = (jsDay === 0 ? 6 : jsDay - 1); // 0-6 (0=Mon, 6=Sun)
+    available.add(normalizedDay);
+    totalDays++;
+    current.setDate(current.getDate() + 1);
+  }
+
+  return { available, totalDays };
+};
+
+// Map normalized day index to DAYS key
+const dayIndexToDayKey = (index: number): string => {
+  const keys = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+  return keys[index] || "MONDAY";
+};
+
 // start+ booking recurring room feature
 const BookRoomRecurringPage: React.FC = () => {
   const navigate = useNavigate();
@@ -67,7 +105,38 @@ const BookRoomRecurringPage: React.FC = () => {
   const [toast, setToast] = useState<{ type: MessageType; message: string } | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Calculate available days based on date range
+  const { available: availableDaysSet, totalDays } = useMemo(
+    () => getAvailableDaysOfWeek(startDate, untilDate),
+    [startDate, untilDate],
+  );
+
+  // Check if we can select all 7 days
+  const canSelectAllDays = totalDays >= 7;
+
+  // Auto-deselect days that are no longer available when date range changes
+  React.useEffect(() => {
+    if (canSelectAllDays) return; // Can select all days, no need to deselect
+
+    const validDays = daysOfWeek.filter((dayKey) => {
+      const dayIndex = DAYS.findIndex((d) => d.key === dayKey);
+      return dayIndex !== -1 && availableDaysSet.has(dayIndex);
+    });
+
+    if (validDays.length !== daysOfWeek.length) {
+      setDaysOfWeek(validDays.length > 0 ? validDays : ["MONDAY"]);
+    }
+  }, [availableDaysSet, canSelectAllDays]);
+
   const toggleDay = (day: string) => {
+    // Find the index of this day in DAYS array
+    const dayIndex = DAYS.findIndex((d) => d.key === day);
+    if (dayIndex === -1) return;
+
+    // Check if this day is available (canSelectAllDays OR dayIndex is in availableDaysSet)
+    const isDayAvailable = canSelectAllDays || availableDaysSet.has(dayIndex);
+    if (!isDayAvailable) return;
+
     setDaysOfWeek((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
     );
@@ -239,26 +308,42 @@ const BookRoomRecurringPage: React.FC = () => {
             </div>
 
             {/* ── Days of Week ── */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-semibold text-slate-700">
-                Days of Week <span className="text-red-500">*</span>
-              </label>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-sm font-semibold text-slate-700">
+                  Days of Week <span className="text-red-500">*</span>
+                </label>
+                {!canSelectAllDays && totalDays > 0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Only {totalDays} day{totalDays !== 1 ? "s" : ""} selected: you can only choose days that occur in this range.
+                    Select a date range with ≥7 days to choose all 7 days.
+                  </p>
+                )}
+              </div>
               <div className="flex flex-wrap gap-2">
-                {DAYS.map((d) => (
-                  <button
-                    key={d.key}
-                    type="button"
-                    onClick={() => toggleDay(d.key)}
-                    className={[
-                      "rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-colors",
-                      daysOfWeek.includes(d.key)
-                        ? "border-orange-300 bg-orange-500 text-white shadow-sm"
-                        : "border-slate-300 text-slate-600 hover:border-orange-200 hover:bg-orange-50",
-                    ].join(" ")}
-                  >
-                    {d.label}
-                  </button>
-                ))}
+                {DAYS.map((d, idx) => {
+                  const isAvailable = canSelectAllDays || availableDaysSet.has(idx);
+                  const isSelected = daysOfWeek.includes(d.key);
+                  return (
+                    <button
+                      key={d.key}
+                      type="button"
+                      disabled={!isAvailable}
+                      onClick={() => toggleDay(d.key)}
+                      className={[
+                        "rounded-lg border px-3.5 py-1.5 text-sm font-semibold transition-colors",
+                        isAvailable
+                          ? isSelected
+                            ? "border-orange-300 bg-orange-500 text-white shadow-sm cursor-pointer"
+                            : "border-slate-300 text-slate-600 hover:border-orange-200 hover:bg-orange-50 cursor-pointer"
+                          : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-50",
+                      ].join(" ")}
+                      title={!isAvailable ? `${d.label} is not available in this date range` : ""}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
               </div>
               {errors.daysOfWeek && <p className="text-xs text-red-500">{errors.daysOfWeek}</p>}
             </div>
@@ -297,6 +382,43 @@ const BookRoomRecurringPage: React.FC = () => {
               </div>
             </div>
 
+            {/* ── Room Usage Rules ── */}
+            <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5">
+              <h3 className="mb-4 text-base font-bold text-emerald-900">Room usage rules</h3>
+              <ul className="space-y-3 text-sm text-emerald-900">
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">1.</span>
+                  <div>
+                    <p className="font-medium">Sau khi book phòng nếu thay đổi kế hoạch và không có nhu cầu sử dụng cần thao tác hủy phòng trước thời gian đăng ký sử dụng / If plans change and the room is not needed, please cancel the booking before the scheduled time.</p>
+                  </div>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">2.</span>
+                  <div>
+                    <p className="font-medium">Chỉ được book phòng cho mục đích học tập, nếu sử dụng sai mục đích hoặc book nhưng không sử dụng sẽ bị cấm book phòng trong 1 kỳ / Rooms are only for study purposes. Misuse or booking without usage will result in a ban for one term.</p>
+                  </div>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">3.</span>
+                  <div>
+                    <p className="font-medium">Đảm bảo CSVC trong phòng, nếu hư phòng sẽ phải bồi theo quy định / Ensure the facilities in the room are intact. Damages will require compensation as per regulations.</p>
+                  </div>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">4.</span>
+                  <div>
+                    <p className="font-medium">Trả lại nguyên hiện trạng ban đầu của phòng sau khi sử dụng / Return the room to its original condition after use.</p>
+                  </div>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">5.</span>
+                  <div>
+                    <p className="font-medium">Trong quá trình sử dụng không tự ý mang CSVC ra khỏi phòng học / Do not remove any facilities from the room during usage.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
             {/* ── Rules Agreement ── */}
             <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-sm text-slate-700 transition hover:bg-emerald-100/60">
               <input
@@ -309,7 +431,7 @@ const BookRoomRecurringPage: React.FC = () => {
                 className="mt-0.5 h-4 w-4 accent-emerald-600"
               />
               <span className="leading-relaxed font-medium">
-                I have read and agree to comply with the room usage rules.
+                I have read and agree to follow all room usage rules.
               </span>
             </label>
             {errors.rules && <p className="text-xs text-red-500">{errors.rules}</p>}
