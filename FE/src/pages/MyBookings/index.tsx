@@ -469,15 +469,34 @@ const canExtend = (
 const canCancel = (
   status: string,
   startTime?: string,
+  endTime?: string,
   now: Date = new Date(),
 ) => {
   const normalized = status.toUpperCase();
-  if (["CANCELLED", "COMPLETED", "REJECTED"].includes(normalized)) return false;
+  if (
+    [
+      "IN_USE",
+      "CHECKED_IN",
+      "CANCELLED",
+      "COMPLETED",
+      "REJECTED",
+      "NO_SHOW",
+    ].includes(normalized)
+  ) {
+    return false;
+  }
+
+  if (!normalized || !["RESERVED", "APPROVED"].includes(normalized)) {
+    return false;
+  }
 
   const start = parseBookingDateTime(startTime);
   if (!start) return false;
 
-  return now < start;
+  const end = parseBookingDateTime(endTime);
+  if (end) return now <= end;
+
+  return true;
 };
 // end update helper functions
 
@@ -1094,7 +1113,12 @@ const MyBookingsPage: React.FC = () => {
 
     if (
       currentAction.type === "cancel" &&
-      !canCancel(status, currentAction.booking.startTime, now)
+      !canCancel(
+        status,
+        currentAction.booking.startTime,
+        currentAction.booking.endTime,
+        now,
+      )
     ) {
       showToast(
         "warning",
@@ -1628,7 +1652,12 @@ const MyBookingsPage: React.FC = () => {
           record.endTime,
           currentTime,
         );
-        const cancelEnabled = canCancel(status, record.startTime, currentTime);
+        const cancelEnabled = canCancel(
+          status,
+          record.startTime,
+          record.endTime,
+          currentTime,
+        );
         const canShowFeedback =
           activeTab === "ongoing" &&
           status?.toUpperCase() === "COMPLETED" &&
