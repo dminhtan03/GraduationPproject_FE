@@ -22,11 +22,16 @@ interface LocationState {
   room?: Room;
 }
 
-// Generate hour options 00:00 – 23:00
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+const TIME_HOURS = Array.from({ length: 24 }, (_, i) => {
   const hh = String(i).padStart(2, "0");
-  return { value: `${hh}:00`, label: `${hh}:00` };
+  return { value: hh, label: `${hh}h` };
 });
+const TIME_MINUTES = Array.from({ length: 60 }, (_, i) => {
+  const mm = String(i).padStart(2, "0");
+  return { value: mm, label: `${mm}m` };
+});
+const getHH = (t: string) => (t || "00:00").split(":")[0] ?? "00";
+const getMM = (t: string) => (t || "00:00").split(":")[1] ?? "00";
 
 const todayInput = () => {
   const d = new Date();
@@ -35,9 +40,9 @@ const todayInput = () => {
 };
 
 const addOneHour = (time: string): string => {
-  const [hh] = time.split(":");
+  const [hh, mm = "00"] = time.split(":");
   const next = (parseInt(hh, 10) + 1) % 24;
-  return `${String(next).padStart(2, "0")}:00`;
+  return `${String(next).padStart(2, "0")}:${mm}`;
 };
 
 const combine = (date: string, time: string) => {
@@ -66,6 +71,15 @@ const BookRoomEventPage: React.FC = () => {
   const [startTime, setStartTime] = useState(currentHour);
   const [endDate, setEndDate] = useState(todayInput());
   const [endTime, setEndTime] = useState(addOneHour(currentHour));
+
+  const durationExceeds8h = useMemo(() => {
+    if (!startDate || !startTime || !endDate || !endTime) return false;
+    const start = new Date(`${startDate}T${startTime}:00`);
+    const end = new Date(`${endDate}T${endTime}:00`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+    if (end <= start) return false;
+    return (end.getTime() - start.getTime()) / (1000 * 60 * 60) > 8;
+  }, [startDate, startTime, endDate, endTime]);
   const [purpose, setPurpose] = useState("");
   const [note, setNote] = useState("");
 
@@ -106,6 +120,11 @@ const BookRoomEventPage: React.FC = () => {
     }
     if (end <= start) {
       setTimeValidationError("End time must be after start time");
+      return false;
+    }
+    const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    if (durationHours > 8) {
+      setTimeValidationError("Maximum booking duration is 8 hours. Please adjust your end time.");
       return false;
     }
     setTimeValidationError("");
@@ -326,13 +345,22 @@ const BookRoomEventPage: React.FC = () => {
                     <label className="text-sm font-semibold text-slate-700">
                       Start Time
                     </label>
-                    <AnimatedDropdown<string>
-                      value={startTime}
-                      options={HOUR_OPTIONS}
-                      onChange={handleStartTimeChange}
-                      buttonClassName="h-[38px] px-3"
-                      ariaLabel="Start time"
-                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <AnimatedDropdown<string>
+                        value={getHH(startTime)}
+                        options={TIME_HOURS}
+                        onChange={(h) => handleStartTimeChange(`${h}:${getMM(startTime)}`)}
+                        buttonClassName="h-[38px] px-2.5 text-xs font-semibold tabular-nums"
+                        ariaLabel="Start hour"
+                      />
+                      <AnimatedDropdown<string>
+                        value={getMM(startTime)}
+                        options={TIME_MINUTES}
+                        onChange={(m) => handleStartTimeChange(`${getHH(startTime)}:${m}`)}
+                        buttonClassName="h-[38px] px-2.5 text-xs font-semibold tabular-nums"
+                        ariaLabel="Start minute"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -360,15 +388,34 @@ const BookRoomEventPage: React.FC = () => {
                     >
                       End Time
                     </label>
-                    <AnimatedDropdown<string>
-                      value={endTime}
-                      options={HOUR_OPTIONS}
-                      onChange={handleEndTimeChange}
-                      buttonClassName={`h-[38px] px-3 ${timeValidationError ? "!border-red-400" : ""}`}
-                      ariaLabel="End time"
-                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <AnimatedDropdown<string>
+                        value={getHH(endTime)}
+                        options={TIME_HOURS}
+                        onChange={(h) => handleEndTimeChange(`${h}:${getMM(endTime)}`)}
+                        buttonClassName={`h-[38px] px-2.5 text-xs font-semibold tabular-nums ${timeValidationError ? "!border-red-400" : ""}`}
+                        ariaLabel="End hour"
+                      />
+                      <AnimatedDropdown<string>
+                        value={getMM(endTime)}
+                        options={TIME_MINUTES}
+                        onChange={(m) => handleEndTimeChange(`${getHH(endTime)}:${m}`)}
+                        buttonClassName={`h-[38px] px-2.5 text-xs font-semibold tabular-nums ${timeValidationError ? "!border-red-400" : ""}`}
+                        ariaLabel="End minute"
+                      />
+                    </div>
                   </div>
                 </div>
+
+                {/* 8-hour duration warning */}
+                {durationExceeds8h && !timeValidationError && (
+                  <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-700">
+                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                    </svg>
+                    Maximum booking duration is 8 hours. Please adjust your end time.
+                  </div>
+                )}
 
                 {/* Validation error */}
                 {timeValidationError && (
@@ -540,6 +587,33 @@ const BookRoomEventPage: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* ── Room Usage Rules ── */}
+            <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-5">
+              <h3 className="mb-4 text-base font-bold text-emerald-900">Room usage rules</h3>
+              <ul className="space-y-3 text-sm text-emerald-900">
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">1.</span>
+                  <p className="font-medium">Sau khi book phòng nếu thay đổi kế hoạch và không có nhu cầu sử dụng cần thao tác hủy phòng trước thời gian đăng ký sử dụng / If plans change and the room is not needed, please cancel the booking before the scheduled time.</p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">2.</span>
+                  <p className="font-medium">Chỉ được book phòng cho mục đích học tập, nếu sử dụng sai mục đích hoặc book nhưng không sử dụng sẽ bị cấm book phòng trong 1 kỳ / Rooms are only for study purposes. Misuse or booking without usage will result in a ban for one term.</p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">3.</span>
+                  <p className="font-medium">Đảm bảo CSVC trong phòng, nếu hư phòng sẽ phải bồi theo quy định / Ensure the facilities in the room are intact. Damages will require compensation as per regulations.</p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">4.</span>
+                  <p className="font-medium">Trả lại nguyên hiện trạng ban đầu của phòng sau khi sử dụng / Return the room to its original condition after use.</p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="font-semibold text-emerald-700">5.</span>
+                  <p className="font-medium">Trong quá trình sử dụng không tự ý mang CSVC ra khỏi phòng học / Do not remove any facilities from the room during usage.</p>
+                </li>
+              </ul>
             </div>
 
             {/* ── Rules Agreement ── */}

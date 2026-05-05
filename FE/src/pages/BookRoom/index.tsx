@@ -38,7 +38,7 @@ type BookingStep = "form" | "review";
 
 const pad = (value: number) => value.toString().padStart(2, "0");
 const ALL_HOURS = Array.from({ length: 24 }, (_, index) => pad(index));
-const MINUTE_OPTIONS = ["00", "10", "20", "30", "40", "50"];
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
 
 const getScrollableHourOptions = (anchorHour: number) => {
   const safeAnchor = Math.min(23, Math.max(0, anchorHour));
@@ -146,36 +146,21 @@ const getMinStartSlot = (selectedDate: string) => {
   const today = formatDateInput(now);
   if (selectedDate !== today) return null;
 
-  const nextMinuteDate = new Date(now);
-  nextMinuteDate.setMinutes(nextMinuteDate.getMinutes() + 1, 0, 0);
-
-  const roundedMinute = Math.ceil(nextMinuteDate.getMinutes() / 10) * 10;
-  if (roundedMinute === 60) {
-    nextMinuteDate.setHours(nextMinuteDate.getHours() + 1, 0, 0, 0);
-  } else {
-    nextMinuteDate.setMinutes(roundedMinute, 0, 0);
-  }
+  // Allow next minute (1-minute granularity)
+  const next = new Date(now);
+  next.setMinutes(next.getMinutes() + 1, 0, 0);
 
   return {
-    minHour: nextMinuteDate.getHours(),
-    minMinute: nextMinuteDate.getMinutes(),
+    minHour: next.getHours(),
+    minMinute: next.getMinutes(),
   };
 };
 
 const getRoundedCurrentSlot = () => {
   const now = new Date();
-  const rounded = new Date(now);
-
-  const roundedMinute = Math.round(rounded.getMinutes() / 10) * 10;
-  if (roundedMinute === 60) {
-    rounded.setHours(rounded.getHours() + 1, 0, 0, 0);
-  } else {
-    rounded.setMinutes(roundedMinute, 0, 0);
-  }
-
   return {
-    hour: rounded.getHours(),
-    minute: rounded.getMinutes(),
+    hour: now.getHours(),
+    minute: now.getMinutes(),
   };
 };
 
@@ -308,6 +293,14 @@ const BookRoomPage: React.FC = () => {
     [endDate, endClock],
   );
 
+  const durationExceeds8h = useMemo(() => {
+    if (!startTime || !endTime) return false;
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+    return end.getTime() - start.getTime() > 8 * 60 * 60 * 1000;
+  }, [startTime, endTime]);
+
   const startHourOptions = useMemo(() => {
     const selectedHour = Number(getClockHour(startClock));
     const anchor =
@@ -427,6 +420,12 @@ const BookRoomPage: React.FC = () => {
 
     if (end <= start) {
       message.warning("End time must be later than start time.");
+      return false;
+    }
+
+    const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    if (durationHours > 8) {
+      message.warning("Maximum booking duration is 8 hours. Please adjust your end time.");
       return false;
     }
 
@@ -801,6 +800,15 @@ const BookRoomPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {durationExceeds8h && (
+                    <div className="col-span-2 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-700">
+                      <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                      </svg>
+                      Maximum booking duration is 8 hours. Please adjust your end time.
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">

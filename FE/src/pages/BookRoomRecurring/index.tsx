@@ -23,11 +23,16 @@ const DAYS: Array<{ key: string; label: string }> = [
   { key: "SUNDAY",    label: "Sun" },
 ];
 
-// Generate hour options 00:00 – 23:00
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+const TIME_HOURS = Array.from({ length: 24 }, (_, i) => {
   const hh = String(i).padStart(2, "0");
-  return { value: `${hh}:00`, label: `${hh}:00` };
+  return { value: hh, label: `${hh}h` };
 });
+const TIME_MINUTES = Array.from({ length: 60 }, (_, i) => {
+  const mm = String(i).padStart(2, "0");
+  return { value: mm, label: `${mm}m` };
+});
+const getHH = (t: string) => (t || "00:00").split(":")[0] ?? "00";
+const getMM = (t: string) => (t || "00:00").split(":")[1] ?? "00";
 
 const todayInput = () => {
   const d = new Date();
@@ -36,9 +41,9 @@ const todayInput = () => {
 };
 
 const addOneHour = (time: string): string => {
-  const [hh] = time.split(":");
+  const [hh, mm = "00"] = time.split(":");
   const next = (parseInt(hh, 10) + 1) % 24;
-  return `${String(next).padStart(2, "0")}:00`;
+  return `${String(next).padStart(2, "0")}:${mm}`;
 };
 
 // Helper to get available days of week based on date range
@@ -73,11 +78,6 @@ const getAvailableDaysOfWeek = (startDateStr: string, untilDateStr: string) => {
   return { available, totalDays };
 };
 
-// Map normalized day index to DAYS key
-const dayIndexToDayKey = (index: number): string => {
-  const keys = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
-  return keys[index] || "MONDAY";
-};
 
 // start+ booking recurring room feature
 const BookRoomRecurringPage: React.FC = () => {
@@ -93,6 +93,16 @@ const BookRoomRecurringPage: React.FC = () => {
 
   const [startTime, setStartTime] = useState(currentHour);
   const [endTime, setEndTime]     = useState(addOneHour(currentHour));
+
+  const durationExceeds8h = useMemo(() => {
+    if (!startTime || !endTime) return false;
+    const [sh, sm = "0"] = startTime.split(":");
+    const [eh, em = "0"] = endTime.split(":");
+    const startMins = parseInt(sh, 10) * 60 + parseInt(sm, 10);
+    const endMins   = parseInt(eh, 10) * 60 + parseInt(em, 10);
+    if (endMins <= startMins) return false;
+    return endMins - startMins > 8 * 60;
+  }, [startTime, endTime]);
   const [startDate, setStartDate] = useState(todayInput());
   const [untilDate, setUntilDate] = useState("");
 
@@ -161,6 +171,8 @@ const BookRoomRecurringPage: React.FC = () => {
     if (!endTime)   newErrors.endTime   = "End time is required";
     if (startTime && endTime && endTime <= startTime)
       newErrors.endTime = "End time must be after start time";
+    if (startTime && endTime && durationExceeds8h)
+      newErrors.endTime = "Maximum booking duration is 8 hours. Please adjust your end time.";
     if (!startDate) newErrors.fromDate = "Start date is required";
     if (startDate && startDate < todayInput()) newErrors.fromDate = "Start date cannot be in the past";
     if (daysOfWeek.length === 0) newErrors.daysOfWeek = "Please select at least one day";
@@ -241,13 +253,22 @@ const BookRoomRecurringPage: React.FC = () => {
                   <label className="text-sm font-semibold text-slate-700">
                     Start Time <span className="text-red-500">*</span>
                   </label>
-                  <AnimatedDropdown<string>
-                    value={startTime}
-                    options={HOUR_OPTIONS}
-                    onChange={handleStartTimeChange}
-                    buttonClassName={`h-[38px] px-3 ${errors.startTime ? "!border-red-400" : ""}`}
-                    ariaLabel="Start time"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <AnimatedDropdown<string>
+                      value={getHH(startTime)}
+                      options={TIME_HOURS}
+                      onChange={(h) => handleStartTimeChange(`${h}:${getMM(startTime)}`)}
+                      buttonClassName={`h-[38px] px-2.5 text-xs font-semibold tabular-nums ${errors.startTime ? "!border-red-400" : ""}`}
+                      ariaLabel="Start hour"
+                    />
+                    <AnimatedDropdown<string>
+                      value={getMM(startTime)}
+                      options={TIME_MINUTES}
+                      onChange={(m) => handleStartTimeChange(`${getHH(startTime)}:${m}`)}
+                      buttonClassName={`h-[38px] px-2.5 text-xs font-semibold tabular-nums ${errors.startTime ? "!border-red-400" : ""}`}
+                      ariaLabel="Start minute"
+                    />
+                  </div>
                   {errors.startTime && <p className="text-xs text-red-500">{errors.startTime}</p>}
                 </div>
 
@@ -256,15 +277,33 @@ const BookRoomRecurringPage: React.FC = () => {
                   <label className={`text-sm font-semibold ${errors.endTime ? "text-red-600" : "text-slate-700"}`}>
                     End Time <span className="text-red-500">*</span>
                   </label>
-                  <AnimatedDropdown<string>
-                    value={endTime}
-                    options={HOUR_OPTIONS}
-                    onChange={handleEndTimeChange}
-                    buttonClassName={`h-[38px] px-3 ${errors.endTime ? "!border-red-400" : ""}`}
-                    ariaLabel="End time"
-                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <AnimatedDropdown<string>
+                      value={getHH(endTime)}
+                      options={TIME_HOURS}
+                      onChange={(h) => handleEndTimeChange(`${h}:${getMM(endTime)}`)}
+                      buttonClassName={`h-[38px] px-2.5 text-xs font-semibold tabular-nums ${errors.endTime ? "!border-red-400" : ""}`}
+                      ariaLabel="End hour"
+                    />
+                    <AnimatedDropdown<string>
+                      value={getMM(endTime)}
+                      options={TIME_MINUTES}
+                      onChange={(m) => handleEndTimeChange(`${getHH(endTime)}:${m}`)}
+                      buttonClassName={`h-[38px] px-2.5 text-xs font-semibold tabular-nums ${errors.endTime ? "!border-red-400" : ""}`}
+                      ariaLabel="End minute"
+                    />
+                  </div>
                   {errors.endTime && <p className="text-xs text-red-500">{errors.endTime}</p>}
                 </div>
+
+                {durationExceeds8h && !errors.endTime && (
+                  <div className="col-span-2 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-700">
+                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                    </svg>
+                    Maximum booking duration is 8 hours. Please adjust your end time.
+                  </div>
+                )}
               </div>
             </div>
 

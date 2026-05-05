@@ -61,6 +61,7 @@ type ServiceLine = {
   quantity: number;
   note?: string | null;
   status?: string | null;
+  createdAt?: string | null;
 };
 
 // start+ chức năng service item status
@@ -125,6 +126,14 @@ const StatusBadge: React.FC<{ status?: string | null; showDot?: boolean }> = ({
 };
 // end+ chức năng service item status
 
+const fmtServiceTime = (value?: string | null) => {
+  if (!value) return "-";
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString([], { hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+};
+
 const normalizeSockJsUrl = () => {
   const fallback = "http://localhost:8080/websocket";
   const input = (API_CONFIG.WEBSOCKET_URL || fallback).trim();
@@ -170,6 +179,8 @@ const AdminEventBookingDetailPage: React.FC = () => {
   } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   // start+ reason modal for CANCELLED
+  const [historyOpen, setHistoryOpen] = useState(true);
+
   const [cancelModal, setCancelModal] = useState<{
     item: ServiceLine;
     reason: string;
@@ -325,11 +336,17 @@ const AdminEventBookingDetailPage: React.FC = () => {
   );
   const historyLines = useMemo(
     () =>
-      allServiceLines.filter((l) =>
-        HISTORY_STATUSES.includes(
-          (l.status || "PENDING").toUpperCase() as ServiceStatus,
-        ),
-      ),
+      allServiceLines
+        .filter((l) =>
+          HISTORY_STATUSES.includes(
+            (l.status || "PENDING").toUpperCase() as ServiceStatus,
+          ),
+        )
+        .sort((a, b) => {
+          const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return tb - ta;
+        }),
     [allServiceLines],
   );
 
@@ -421,6 +438,21 @@ const AdminEventBookingDetailPage: React.FC = () => {
         key: "note",
         render: (text: string | undefined) => text || "-",
       },
+      ...(!editable
+        ? [
+            {
+              title: "Created At",
+              dataIndex: "createdAt",
+              key: "createdAt",
+              width: 160,
+              render: (v: string | undefined) => (
+                <span className="whitespace-nowrap text-xs text-slate-500">
+                  {fmtServiceTime(v)}
+                </span>
+              ),
+            },
+          ]
+        : []),
       {
         title: "Status",
         dataIndex: "status",
@@ -667,32 +699,44 @@ const AdminEventBookingDetailPage: React.FC = () => {
 
           {/* ── HISTORY (DONE / CANCELLED) ── */}
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm mb-6">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((v) => !v)}
+              className="w-full flex items-center justify-between border-b border-slate-100 px-5 py-4 hover:bg-slate-50 transition"
+            >
               <div className="flex items-center gap-2">
                 <QueueListIcon className="h-5 w-5 text-slate-400" />
                 <p className="text-base font-semibold text-slate-900">
                   Completed / Cancelled History
                 </p>
+                {historyLines.length > 0 && (
+                  <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-bold text-white">
+                    {historyLines.length}
+                  </span>
+                )}
               </div>
-              {historyLines.length > 0 && (
-                <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-bold text-white">
-                  {historyLines.length}
-                </span>
-              )}
-            </div>
-            <div className="p-5">
-              <p className="mb-4 text-sm text-slate-500">
-                Processed orders. Status cannot be changed.
-              </p>
-              <div className="overflow-hidden rounded-xl border border-slate-200">
-                <ServiceTable
-                  lines={historyLines}
-                  editable={false}
-                  emptyText="No completed or cancelled orders yet."
-                  showDot={false}
-                />
+              <svg
+                className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${historyOpen ? "rotate-180" : ""}`}
+                viewBox="0 0 20 20" fill="currentColor"
+              >
+                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+            {historyOpen && (
+              <div className="p-5">
+                <p className="mb-4 text-sm text-slate-500">
+                  Processed orders. Status cannot be changed.
+                </p>
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <ServiceTable
+                    lines={historyLines}
+                    editable={false}
+                    emptyText="No completed or cancelled orders yet."
+                    showDot={false}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* ── SUMMARY TABLE ── */}

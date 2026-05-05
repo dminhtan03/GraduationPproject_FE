@@ -20,6 +20,7 @@ import {
   MapPinIcon,
   CogIcon,
   EnvelopeIcon,
+  QueueListIcon,
 } from "@heroicons/react/24/outline";
 
 type ServiceItem = {
@@ -112,10 +113,10 @@ const EventSetupPage: React.FC = () => {
     status: string;
     priceSnapshot?: number | null;
     unit?: string | null;
+    createdAt?: string | null;
   };
-  const [serviceHistory, setServiceHistory] = useState<ServiceHistoryLine[]>(
-    [],
-  );
+  const [serviceHistory, setServiceHistory] = useState<ServiceHistoryLine[]>([]);
+  const [trackingOpen, setTrackingOpen] = useState(true);
   // end+ chức năng lịch sử dịch vụ
 
   const [title, setTitle] = useState("Meeting Event");
@@ -239,36 +240,31 @@ const EventSetupPage: React.FC = () => {
       );
       const lines = extractData(res);
       // start+ chức năng lịch sử dịch vụ: tách ACTIVE vs DONE/CANCELLED
-      const ACTIVE_STATUSES = ["PENDING", "CONFIRMED", "IN_PROGRESS"];
-      const next: Record<string, { quantity: string; note: string }> = {};
       const history: ServiceHistoryLine[] = [];
       if (Array.isArray(lines)) {
         for (const line of lines as any[]) {
           const serviceItemId = String(line?.serviceItemId ?? "");
           if (!serviceItemId) continue;
           const lineStatus = String(line?.status ?? "PENDING").toUpperCase();
-          if (ACTIVE_STATUSES.includes(lineStatus)) {
-            // Chỉ load active items vào draft (tránh duplicate khi save lại)
-            next[serviceItemId] = {
-              quantity: String(line?.quantity ?? "1"),
-              note: typeof line?.note === "string" ? line.note : "",
-            };
-          } else {
-            // DONE / CANCELLED → lưu vào history để hiển thị read-only
-            history.push({
-              id: String(line?.id ?? ""),
-              serviceItemId,
-              name: String(line?.name ?? serviceItemId),
-              quantity: Number(line?.quantity ?? 0),
-              note: typeof line?.note === "string" ? line.note : null,
-              status: lineStatus,
-              priceSnapshot: line?.priceSnapshot ?? null,
-              unit: line?.unit ?? null,
-            });
-          }
+          history.push({
+            id: String(line?.id ?? ""),
+            serviceItemId,
+            name: String(line?.name ?? serviceItemId),
+            quantity: Number(line?.quantity ?? 0),
+            note: typeof line?.note === "string" ? line.note : null,
+            status: lineStatus,
+            priceSnapshot: line?.priceSnapshot ?? null,
+            unit: line?.unit ?? null,
+            createdAt: line?.createdAt ?? null,
+          });
         }
       }
-      setServiceDraft(next);
+      history.sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      });
+      setServiceDraft({});
       setServiceHistory(history);
       // end+ chức năng lịch sử dịch vụ
     } catch {
@@ -942,6 +938,97 @@ const EventSetupPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Service Order Tracking Section */}
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setTrackingOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition"
+          >
+            <div className="flex items-center gap-2">
+              <QueueListIcon className="h-5 w-5 text-slate-400" />
+              <h2 className="text-base font-semibold text-slate-900">
+                Service Order Tracking
+              </h2>
+              {serviceHistory.length > 0 && (
+                <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-bold text-white">
+                  {serviceHistory.length}
+                </span>
+              )}
+            </div>
+            <svg
+              className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${trackingOpen ? "rotate-180" : ""}`}
+              viewBox="0 0 20 20" fill="currentColor"
+            >
+              <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+
+          {trackingOpen && (
+          <div className="px-6 pb-6">
+          <p className="mb-4 text-sm text-slate-500">
+            All service requests and their current status.
+          </p>
+          <div className="overflow-hidden rounded-xl border border-slate-200">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">Service</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 text-center w-16">Qty</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">Note</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500 w-40">Created At</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {serviceHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-400">
+                      No service orders yet.
+                    </td>
+                  </tr>
+                ) : (
+                  serviceHistory.map((line) => {
+                    const st = (line.status || "").toUpperCase();
+                    const statusCls =
+                      st === "DONE" ? "bg-emerald-50 text-emerald-700"
+                      : st === "CANCELLED" ? "bg-red-50 text-red-600"
+                      : st === "IN_PROGRESS" ? "bg-blue-50 text-blue-700"
+                      : st === "CONFIRMED" ? "bg-indigo-50 text-indigo-700"
+                      : "bg-amber-50 text-amber-700";
+                    const statusLabel =
+                      st === "DONE" ? "Done"
+                      : st === "CANCELLED" ? "Cancelled"
+                      : st === "IN_PROGRESS" ? "In Progress"
+                      : st === "CONFIRMED" ? "Confirmed"
+                      : "Pending";
+                    const fmtTime = (v?: string | null) => {
+                      if (!v) return "-";
+                      const d = new Date(v.includes("T") ? v : v.replace(" ", "T"));
+                      return Number.isNaN(d.getTime()) ? v : d.toLocaleString([], { hour12: false });
+                    };
+                    return (
+                      <tr key={line.id} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3 font-medium text-slate-800">{line.name}</td>
+                        <td className="px-4 py-3 text-center text-slate-700">{line.quantity}</td>
+                        <td className="px-4 py-3 text-slate-500">{line.note || "-"}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">{fmtTime(line.createdAt)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusCls}`}>
+                            {statusLabel}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          </div>
+          )}
+        </div>
+
         {/* Participants Section */}
         <div className="mt-6 rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 to-white p-6 shadow-sm">
           <div className="mb-5 flex items-center gap-2">
@@ -1125,7 +1212,8 @@ const EventSetupPage: React.FC = () => {
                             History
                           </button>
 
-                          {canManageEvent ? (
+                          {canManageEvent &&
+                          (p.checkInStatus || "").toUpperCase() !== "CHECKED_IN" ? (
                             <button
                               disabled={loading}
                               onClick={() => requestRemoveParticipant(p)}

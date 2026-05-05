@@ -25,6 +25,7 @@ export const API_ENDPOINTS = {
     CHECK_IN: "/api/v1/reservations/check-in/:id",
     RETURN_ROOM: "/api/v1/reservations/return-room/:id",
     EXTEND_ROOM: "/api/v1/reservations/extend/:id",
+    MAX_EXTEND: "/api/v1/reservations/extend/:id/max",
     CANCEL_BOOKING: "/api/v1/reservations/cancel/:id",
     FORCE_CANCEL_BOOKING: "/api/v1/reservations/force-cancel/:id",
     // start+ chức năng sự kiện (gọi thêm dịch vụ/tiện ích trong lúc diễn ra)

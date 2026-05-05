@@ -68,7 +68,7 @@ const roomStatusFilterOptions: Array<AnimatedDropdownOption<FilterType>> = [
   { value: "available", label: "Available" },
   { value: "unavailable", label: "Unavailable" },
   { value: "broken", label: "Maintenance" },
-  { value: "learning", label: "Classroom" },
+  { value: "learning", label: "Learning" },
 ];
 
 const getStatusBadgeClass = (status: RoomListStatus) => {
