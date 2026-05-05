@@ -46,29 +46,127 @@ import {
   toRecord,
 } from "../../utils/chatHelpers";
 
+const AI_ASSISTANT_STORAGE_KEY = "ai_assistant_messages_v2";
+const EMPTY_MESSAGES_BY_SESSION: Record<string, ChatMessage[]> = {};
+
+interface StoredAssistantState {
+  messagesBySession: Record<string, ChatMessage[]>;
+  selectedSessionId: string | null;
+}
+
+const isMessageArrayRecord = (
+  value: unknown,
+): value is Record<string, ChatMessage[]> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.values(value as Record<string, unknown>).every((entry) =>
+    Array.isArray(entry),
+  );
+};
+
+const getStoredAssistantState = (): StoredAssistantState | null => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(AI_ASSISTANT_STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as unknown;
+    if (isMessageArrayRecord(parsed)) {
+      return {
+        messagesBySession: parsed,
+        selectedSessionId: null,
+      };
+    }
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+
+    const candidate = parsed as {
+      messagesBySession?: unknown;
+      selectedSessionId?: unknown;
+      messages?: unknown;
+    };
+
+    const messagesBySession = candidate.messagesBySession ?? candidate.messages;
+    if (!isMessageArrayRecord(messagesBySession)) {
+      return null;
+    }
+
+    return {
+      messagesBySession,
+      selectedSessionId:
+        typeof candidate.selectedSessionId === "string" &&
+        candidate.selectedSessionId.trim()
+          ? candidate.selectedSessionId.trim()
+          : null,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const deriveStoredSessions = (
+  messagesBySession: Record<string, ChatMessage[]>,
+): ChatSessionSummary[] =>
+  Object.entries(messagesBySession)
+    .filter(([, messages]) => Array.isArray(messages) && messages.length > 0)
+    .map(([sessionId, messages]) => {
+      const lastMessage = messages[messages.length - 1];
+      const lastText = toText(lastMessage?.text);
+
+      return {
+        id: sessionId,
+        title: toSessionTitle(lastText),
+        subtitle: toSessionSubtitle(lastText),
+        createdAt: messages[0]?.createdAt || new Date().toISOString(),
+        aiSessionId: sessionId,
+      };
+    })
+    .sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    );
+
+const mergeSessionsById = (
+  primarySessions: ChatSessionSummary[],
+  secondarySessions: ChatSessionSummary[],
+): ChatSessionSummary[] => {
+  const merged = [...primarySessions];
+  const knownIds = new Set(primarySessions.map((session) => session.id));
+
+  for (const session of secondarySessions) {
+    if (!knownIds.has(session.id)) {
+      merged.push(session);
+    }
+  }
+
+  return merged.sort(
+    (left, right) =>
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+  );
+};
+
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string>("");
+  const storedAssistantState = useMemo(() => getStoredAssistantState(), []);
+  const initialStoredMessagesBySession =
+    storedAssistantState?.messagesBySession ?? EMPTY_MESSAGES_BY_SESSION;
+  const initialStoredSessions = useMemo(
+    () => deriveStoredSessions(initialStoredMessagesBySession),
+    [initialStoredMessagesBySession],
+  );
 
-  // Lazy-init from localStorage so rich AI cards survive page reload
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>(
+    () => initialStoredSessions,
+  );
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(() =>
+    storedAssistantState?.selectedSessionId || initialStoredSessions[0]?.id || "",
+  );
   const [messagesBySession, setMessagesBySession] = useState<
     Record<string, ChatMessage[]>
-  >(() => {
-    try {
-      const raw = window.localStorage.getItem("ai_assistant_messages_v2");
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<string, ChatMessage[]>;
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          return parsed;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return {};
-  });
+  >(() => initialStoredMessagesBySession);
 
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -86,6 +184,9 @@ const AIAssistantPage: React.FC = () => {
     message: string;
   } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isHydrated, setIsHydrated] = useState(
+    Object.keys(initialStoredMessagesBySession).length > 0,
+  );
   const [collapsedSuggestionMessageId, setCollapsedSuggestionMessageId] =
     useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -93,7 +194,9 @@ const AIAssistantPage: React.FC = () => {
   const manualStopRef = useRef(false);
   const keepListeningRef = useRef(false);
   const transcriptRef = useRef("");
-  const loadedSessionDetailsRef = useRef<Set<string>>(new Set());
+  const loadedSessionDetailsRef = useRef<Set<string>>(
+    new Set(Object.keys(initialStoredMessagesBySession)),
+  );
 
   const createEmptySession = useCallback(async () => {
     const aiSessionId = await aiService.addChat();
@@ -117,10 +220,33 @@ const AIAssistantPage: React.FC = () => {
         const history = await aiService.getChatHistory();
         if (cancelled) return;
 
+        const storedSelectedSessionId =
+          storedAssistantState?.selectedSessionId || "";
+
         if (history.length > 0) {
           const mappedSessions = history.map(mapHistorySessionToSummary);
-          setSessions(mappedSessions);
-          setSelectedSessionId(mappedSessions[0].id);
+          const mergedSessions = mergeSessionsById(
+            mappedSessions,
+            initialStoredSessions,
+          );
+          const nextSelectedSessionId =
+            mergedSessions.find(
+              (session) => session.id === storedSelectedSessionId,
+            )?.id || mergedSessions[0]?.id || "";
+
+          setSessions(mergedSessions);
+          setSelectedSessionId(nextSelectedSessionId);
+          return;
+        }
+
+        if (initialStoredSessions.length > 0) {
+          const nextSelectedSessionId =
+            initialStoredSessions.find(
+              (session) => session.id === storedSelectedSessionId,
+            )?.id || initialStoredSessions[0]?.id || "";
+
+          setSessions(initialStoredSessions);
+          setSelectedSessionId(nextSelectedSessionId);
           return;
         }
 
@@ -135,6 +261,17 @@ const AIAssistantPage: React.FC = () => {
         });
       } catch {
         if (cancelled) return;
+
+        if (initialStoredSessions.length > 0) {
+          const nextSelectedSessionId =
+            initialStoredSessions.find(
+              (session) => session.id === storedAssistantState?.selectedSessionId,
+            )?.id || initialStoredSessions[0]?.id || "";
+
+          setSessions(initialStoredSessions);
+          setSelectedSessionId(nextSelectedSessionId);
+          return;
+        }
 
         const fallbackId = createId();
         loadedSessionDetailsRef.current.add(fallbackId);
@@ -153,6 +290,7 @@ const AIAssistantPage: React.FC = () => {
       } finally {
         if (!cancelled) {
           setIsLoadingHistory(false);
+          setIsHydrated(true);
         }
       }
     };
@@ -162,7 +300,7 @@ const AIAssistantPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [createEmptySession]);
+  }, [createEmptySession, initialStoredSessions, storedAssistantState]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -181,17 +319,22 @@ const AIAssistantPage: React.FC = () => {
     fetchProfile();
   }, []);
 
-  // Persist rich card data across reloads
+  // Persist AI conversation state across reloads and navigation.
   useEffect(() => {
+    if (!isHydrated) return;
+
     try {
       window.localStorage.setItem(
-        "ai_assistant_messages_v2",
-        JSON.stringify(messagesBySession),
+        AI_ASSISTANT_STORAGE_KEY,
+        JSON.stringify({
+          messagesBySession,
+          selectedSessionId: selectedSessionId || null,
+        }),
       );
     } catch {
       // Ignore storage quota errors
     }
-  }, [messagesBySession]);
+  }, [isHydrated, messagesBySession, selectedSessionId]);
 
   const selectedSession = useMemo(() => {
     return sessions.find((s) => s.id === selectedSessionId) ?? null;
