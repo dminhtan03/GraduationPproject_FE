@@ -195,19 +195,9 @@ const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
   "meeting-with-event": ["RESERVED", "IN_USE", "NO_SHOW", "CANCELLED", "COMPLETED", "FORCE_CANCELLED", "FAILED"],
 };
 
-const isEventSetupBooking = (item: Reservation, eventInvitations: EventInvitation[] = []): boolean => {
-  // Check if this reservation is linked to an event through invitations
-  const hasEventInvitation = eventInvitations.some(
-    (invitation) => invitation.reservationId === item.id
-  );
-  
-  if (hasEventInvitation) return true;
-  
-  // Fallback: check purpose field
-  const purpose = (item.purpose || "").toLowerCase().trim();
-  const hasEventSetup = purpose.includes("event set up") || purpose === "event set up";
-  
-  return hasEventSetup;
+const isEventBooking = (item: Reservation): boolean => {
+  // Check if booking type is EVENT from backend
+  return (item.bookingType || "").toUpperCase() === "EVENT";
 };
 
 const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey, eventInvitations: EventInvitation[] = []) => {
@@ -219,9 +209,9 @@ const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey, eventInvi
   if (tabKey === "meeting-with-event") {
     return items.filter((item) => {
       const status = (item.status || "").toUpperCase();
-      const isEventSetup = isEventSetupBooking(item, eventInvitations);
+      const isEvent = isEventBooking(item);
       const hasValidStatus = TAB_STATUS_FILTERS["meeting-with-event"].includes(status);
-      return isEventSetup && hasValidStatus;
+      return isEvent && hasValidStatus;
     });
   }
 
@@ -234,9 +224,13 @@ const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey, eventInvi
 
   return items.filter((item) => {
     const status = (item.status || "").toUpperCase();
+    // Only show Normal bookings in ongoing tab (exclude Event bookings)
+    const isNormalBooking = !isEventBooking(item);
     return (
-      TAB_STATUS_FILTERS.ongoing.includes(status) ||
-      !allowedStatuses.includes(status)
+      isNormalBooking && (
+        TAB_STATUS_FILTERS.ongoing.includes(status) ||
+        !allowedStatuses.includes(status)
+      )
     );
   });
 };
@@ -708,6 +702,13 @@ const MyBookingsPage: React.FC = () => {
       setLoading(true);
       setError(null);
       setBookings([]); // Clear old data immediately to prevent showing stale records
+      
+      // Invitations tab handled separately via loadInvitations()
+      if (tabKey === "invitations") {
+        setLoading(false);
+        return;
+      }
+      
       try {
         const selectedBuilding =
           buildingId !== "all"
@@ -724,150 +725,58 @@ const MyBookingsPage: React.FC = () => {
             ? [normalizedStatus]
             : TAB_STATUS_FILTERS[tabKey];
 
-        const hasTimeRange = Boolean(startTimeValue && endTimeValue);
-        const requiresClientFiltering = hasTimeRange || floorId !== "all";
-
-        if (requiresClientFiltering) {
-          // Fetch full data then apply FE filters for floor/time compatibility.
-          const largePageSize = 1000;
-          let allItems: Reservation[] = [];
-
+        // Use backend pagination
+        try {
+          const result = await reservationService.getMyBookings({
+            page: Math.max(nextPage - 1, 0),
+            size: nextSize,
+            statuses: requestedStatuses,
+            buildingId: buildingId !== "all" ? buildingId : undefined,
+            locationCode: locationCode.trim() || undefined,
+            startTime: startTimeValue || undefined,
+            endTime: endTimeValue || undefined,
+          });
+          
+          setBookings(result.items);
+          setTotal(result.total);
+        } catch (err) {
+          // Fallback: fetch all data for client-side filtering if needed
+          const fallbackPageSize = 9999;
           try {
-            const result = await reservationService.getMyBookings({
-              page: 0,
-              size: largePageSize,
-              statuses: requestedStatuses,
-              buildingId: buildingId !== "all" ? buildingId : undefined,
-              locationCode: locationCode.trim() || undefined,
-            });
-            allItems = result.items;
-          } catch {
             const fallbackResult = await reservationService.getMyBookings({
               page: 0,
-              size: largePageSize,
-              buildingId: buildingId !== "all" ? buildingId : undefined,
-              locationCode: locationCode.trim() || undefined,
-            });
-            allItems =
-              normalizedStatus && normalizedStatus !== "ALL"
-                ? fallbackResult.items.filter(
-                    (item) =>
-                      (item.status || "").toUpperCase() === normalizedStatus,
-                  )
-                : filterItemsByTab(fallbackResult.items, tabKey, eventInvitations);
-          }
-
-          if (selectedBuilding?.label) {
-            allItems = allItems.filter((item) => {
-              const buildingName = (
-                item.buildingName ||
-                item.address ||
-                ""
-              ).toLowerCase();
-              return buildingName.includes(
-                selectedBuilding.label.toLowerCase(),
-              );
-            });
-          }
-
-          if (selectedFloor?.label) {
-            allItems = allItems.filter((item) => {
-              const floorName = String(item.floor || "").toLowerCase();
-              return floorName.includes(selectedFloor.label.toLowerCase());
-            });
-          }
-
-          if (hasTimeRange) {
-            const start = parseBookingDateTime(startTimeValue);
-            const end = parseBookingDateTime(endTimeValue);
-
-            if (start && end) {
-              allItems = allItems.filter((item) => {
-                const itemStart = parseBookingDateTime(item.startTime);
-                if (!itemStart) return false;
-                return itemStart >= start && itemStart <= end;
-              });
-            }
-          }
-
-          // Apply event setup filter for meeting-with-event tab
-          if (tabKey === "meeting-with-event") {
-            allItems = allItems.filter(isEventSetupBooking);
-          }
-
-          // start+ exclude recurring bookings — they have their own page
-          allItems = allItems.filter(
-            (item) =>
-              item.bookingType !== "RECURRING" &&
-              !(item.rawData as any)?.seriesId,
-          );
-          // end+ exclude recurring
-
-          const startIndex = Math.max(nextPage - 1, 0) * nextSize;
-          const paged = allItems.slice(startIndex, startIndex + nextSize);
-
-          setBookings(paged);
-          setTotal(allItems.length);
-        } else {
-          try {
-            const result = await reservationService.getMyBookings({
-              page: Math.max(nextPage - 1, 0),
-              size: nextSize,
+              size: fallbackPageSize,
               statuses: requestedStatuses,
               buildingId: buildingId !== "all" ? buildingId : undefined,
               locationCode: locationCode.trim() || undefined,
               startTime: startTimeValue || undefined,
               endTime: endTimeValue || undefined,
             });
-            let items = result.items;
-            // Apply event setup filter for meeting-with-event tab
-            if (tabKey === "meeting-with-event") {
-              items = items.filter(isEventSetupBooking);
+            
+            let allItems = fallbackResult.items;
+            
+            // Apply time range filter if specified
+            if (startTimeValue && endTimeValue) {
+              const start = parseBookingDateTime(startTimeValue);
+              const end = parseBookingDateTime(endTimeValue);
+              if (start && end) {
+                allItems = allItems.filter((item) => {
+                  const itemStart = parseBookingDateTime(item.startTime);
+                  if (!itemStart) return false;
+                  return itemStart >= start && itemStart <= end;
+                });
+              }
             }
-            // start+ exclude recurring bookings from My Bookings page
-            items = items.filter(
-              (item) =>
-                item.bookingType !== "RECURRING" &&
-                !(item.rawData as any)?.seriesId,
-            );
-            // end+ exclude recurring
-            setBookings(items);
-            // Tổng sau khi lọc: xấp xỉ bằng cách trừ đi recurring đã bị loại trên trang này
-            const recurringOnPage = result.items.length - items.length;
-            setTotal(Math.max(0, result.total - recurringOnPage));
+            
+            // Manual pagination for fallback
+            const startIndex = (nextPage - 1) * nextSize;
+            const paged = allItems.slice(startIndex, startIndex + nextSize);
+            setBookings(paged);
+            setTotal(allItems.length);
           } catch {
-            const fallbackResult = await reservationService.getMyBookings({
-              page: Math.max(nextPage - 1, 0),
-              size: nextSize,
-              buildingId: buildingId !== "all" ? buildingId : undefined,
-              locationCode: locationCode.trim() || undefined,
-            });
-            let filteredItems =
-              normalizedStatus && normalizedStatus !== "ALL"
-                ? fallbackResult.items.filter(
-                    (item) =>
-                      (item.status || "").toUpperCase() === normalizedStatus,
-                  )
-                : filterItemsByTab(fallbackResult.items, tabKey, eventInvitations);
-            if (selectedBuilding?.label) {
-              filteredItems = filteredItems.filter((item) => {
-                const buildingName = (
-                  item.buildingName ||
-                  item.address ||
-                  ""
-                ).toLowerCase();
-                return buildingName.includes(
-                  selectedBuilding.label.toLowerCase(),
-                );
-              });
-            }
-            setBookings(filteredItems);
-            setTotal(filteredItems.length);
+            throw err;
           }
         }
-
-        setPage(nextPage);
-        setPageSize(nextSize);
       } catch (err) {
         setError(extractApiMessage(err, "Unable to load bookings"));
         setBookings([]);
@@ -882,7 +791,7 @@ const MyBookingsPage: React.FC = () => {
   useEffect(() => {
     if (activeTab === "invitations") return;
     loadBookings(
-      1,
+      page,
       pageSize,
       activeTab,
       appliedBuildingId,
@@ -895,6 +804,7 @@ const MyBookingsPage: React.FC = () => {
     );
   }, [
     loadBookings,
+    page,
     pageSize,
     activeTab,
     appliedBuildingId,
@@ -1298,13 +1208,32 @@ const MyBookingsPage: React.FC = () => {
     extra: { action?: string },
   ) => {
     if (activeTab === "invitations") return;
-    // Keep filter/sort on current page data in FE; only reload from API when paginating.
+
+    const nextPage = pagination.current || 1;
+    const nextSize = pagination.pageSize || pageSize;
+
+    // If pageSize changed, reset to page 1
+    if (nextSize !== pageSize) {
+      loadBookings(
+        1,
+        nextSize,
+        activeTab,
+        appliedBuildingId,
+        appliedFloorId,
+        appliedLocationCode,
+        appliedStatusFilter,
+        appliedStartTimeFilter,
+        appliedEndTimeFilter,
+        invitations,
+      );
+      return;
+    }
+
+    // Handle pagination (page change)
     if (extra?.action && extra.action !== "paginate") {
       return;
     }
 
-    const nextPage = pagination.current || 1;
-    const nextSize = pagination.pageSize || pageSize;
     loadBookings(
       nextPage,
       nextSize,
@@ -1532,37 +1461,6 @@ const MyBookingsPage: React.FC = () => {
   );
 
   const columns: ColumnsType<Reservation> = [
-    // start+ booking type badge column
-    {
-      title: "TYPE",
-      key: "bookingType",
-      width: "100px",
-      render: (_: unknown, record: Reservation) => {
-        const raw = record.rawData as Record<string, unknown> | undefined;
-        const type = record.bookingType
-          ?? (raw?.seriesId ? "RECURRING" : raw?.hasEvent ? "EVENT" : "NORMAL");
-        if (type === "RECURRING") {
-          return (
-            <Tag color="geekblue" style={{ fontSize: 10, padding: "0 6px" }}>
-              🔄 Recurring
-            </Tag>
-          );
-        }
-        if (type === "EVENT") {
-          return (
-            <Tag color="orange" style={{ fontSize: 10, padding: "0 6px" }}>
-              🎉 Event
-            </Tag>
-          );
-        }
-        return (
-          <Tag color="default" style={{ fontSize: 10, padding: "0 6px" }}>
-            📅 Normal
-          </Tag>
-        );
-      },
-    },
-    // end+ booking type badge column
     {
       title: "LOCATION CODE",
       dataIndex: "locationCode",
@@ -2100,16 +1998,7 @@ const MyBookingsPage: React.FC = () => {
                     : columns
                 }
                 dataSource={bookings}
-                pagination={{
-                  current: page,
-                  pageSize,
-                  total,
-                  showSizeChanger: true,
-                  pageSizeOptions: ["5", "10", "20"],
-                  showTotal: (tot, range) =>
-                    `${range[0]}–${range[1]} of ${tot} bookings`,
-                  hideOnSinglePage: false,
-                }}
+                pagination={false}
                 onChange={handleTableChange}
                 onRow={(record) => ({
                   onClick: (event) => {
@@ -2133,20 +2022,39 @@ const MyBookingsPage: React.FC = () => {
                 rowClassName={(record) => (record.id ? "cursor-pointer" : "")}
                 scroll={{ x: 980 }}
               />
+              
+              {/* Custom Pagination */}
+              {total > 0 && (
+                <div className="border-t border-slate-200 px-6 py-4 bg-slate-50">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <CustomPagination
+                      currentPage={page}
+                      totalPages={Math.ceil(total / pageSize)}
+                      onPageChange={(p) => setPage(p)}
+                      totalItems={total}
+                      pageSize={pageSize}
+                      className="w-full lg:flex-1"
+                    />
+
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setPage(1);
+                      }}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                    >
+                      <option value="5">5</option>
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {(total > 0 || loading) && (
-            <div className="mt-6 rounded-2xl border border-orange-100 bg-white/90 px-3 py-3 shadow-sm sm:px-4">
-              <CustomPagination
-                currentPage={page}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                totalItems={loading ? 0 : total}
-                pageSize={pageSize}
-              />
-            </div>
-          )}
+
         </>
       ) : (
         <>

@@ -30,11 +30,12 @@ const CustomPagination: React.FC<CustomPaginationProps> = ({
 
   if (!shouldShowControls && !shouldShowSummary) return null;
 
-  const maxVisible = 5;
+  // Dynamically calculate max visible pages based on total pages
+  const maxVisible = normalizedTotalPages <= 7 ? normalizedTotalPages : 7;
   const startPage =
     normalizedTotalPages <= maxVisible
       ? 1
-      : Math.max(1, Math.min(safeCurrentPage - 2, normalizedTotalPages - 4));
+      : Math.max(1, Math.min(safeCurrentPage - Math.floor(maxVisible / 2), normalizedTotalPages - maxVisible + 1));
   const visiblePages = Array.from(
     { length: Math.min(normalizedTotalPages, maxVisible) },
     (_, index) => startPage + index,
