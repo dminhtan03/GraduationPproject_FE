@@ -127,6 +127,8 @@ export interface AiRoomDetailDto {
 export interface AiChatResponseDto {
   sessionId?: string;
   reply: string;
+  intent?: string;
+  suggestionType?: "available" | "alternative" | "suggested";
   suggestions?: AiRoomSuggestion[];
   roomDetail?: AiRoomDetailDto | null;
   reservationCreated: boolean;

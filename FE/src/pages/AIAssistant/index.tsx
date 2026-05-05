@@ -361,6 +361,8 @@ const AIAssistantPage: React.FC = () => {
           sender: "bot",
           text: response.reply,
           createdAt: new Date().toISOString(),
+          intent: response.intent,
+          suggestionType: response.suggestionType,
           suggestions: response.suggestions,
           roomDetail: response.roomDetail,
           reservation: response.reservation,
@@ -385,11 +387,13 @@ const AIAssistantPage: React.FC = () => {
             };
           }),
         );
-      } catch {
+      } catch (error: unknown) {
+        const fallbackMessage =
+          "I cannot reach the AI service right now. Please try again in a moment.";
         const botMessage: ChatMessage = {
           id: createId(),
           sender: "bot",
-          text: "I cannot reach the AI service right now. Please try again in a moment.",
+          text: extractApiMessage(error, fallbackMessage),
           createdAt: new Date().toISOString(),
         };
         setMessagesBySession((prev) => ({
@@ -1010,6 +1014,10 @@ const AIAssistantPage: React.FC = () => {
 
   const renderSuggestionCard = (s: AiRoomSuggestion, isFeatured = false) => {
     const status = String(s.status || "").toUpperCase();
+    const hasBuilding = Boolean(s.building && s.building.trim());
+    const hasFloor = Boolean(s.floor && s.floor.trim());
+    const hasCapacity = typeof s.capacity === "number";
+    const showMetaGrid = hasBuilding || hasFloor || hasCapacity;
 
     return (
       <div
@@ -1049,11 +1057,6 @@ const AIAssistantPage: React.FC = () => {
               <h3 className="truncate text-sm font-bold text-slate-900">
                 {s.locationCode || s.roomId}
               </h3>
-              {typeof s.score === "number" && (
-                <p className="mt-1 text-[11px] text-orange-600 font-medium">
-                  Match: {(s.score * 100).toFixed(0)}%
-                </p>
-              )}
             </div>
             <span
               className={`shrink-0 rounded-lg border px-2.5 py-1 text-[10px] font-semibold ${
@@ -1065,37 +1068,42 @@ const AIAssistantPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="mb-3 grid grid-cols-3 gap-2">
-            {/* Building */}
-            <div className="rounded-lg border border-orange-100 bg-orange-50/50 px-2 py-2">
-              <p className="text-[10px] font-semibold text-orange-600 uppercase tracking-wide">
-                Building
-              </p>
-              <p className="mt-1 truncate text-xs font-medium text-slate-900">
-                {s.building || "—"}
-              </p>
-            </div>
+          {showMetaGrid && (
+            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {hasBuilding && (
+                <div className="rounded-lg border border-orange-100 bg-orange-50/50 px-2 py-2">
+                  <p className="text-[10px] font-semibold text-orange-600 uppercase tracking-wide">
+                    Building
+                  </p>
+                  <p className="mt-1 truncate text-xs font-medium text-slate-900">
+                    {s.building}
+                  </p>
+                </div>
+              )}
 
-            {/* Floor */}
-            <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-2 py-2">
-              <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">
-                Floor
-              </p>
-              <p className="mt-1 truncate text-xs font-medium text-slate-900">
-                {s.floor || "—"}
-              </p>
-            </div>
+              {hasFloor && (
+                <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-2 py-2">
+                  <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">
+                    Floor
+                  </p>
+                  <p className="mt-1 truncate text-xs font-medium text-slate-900">
+                    {s.floor}
+                  </p>
+                </div>
+              )}
 
-            {/* Capacity */}
-            <div className="rounded-lg border border-sky-100 bg-sky-50/50 px-2 py-2">
-              <p className="text-[10px] font-semibold text-sky-600 uppercase tracking-wide">
-                Capacity
-              </p>
-              <p className="mt-1 text-xs font-medium text-slate-900">
-                {typeof s.capacity === "number" ? s.capacity : "—"}
-              </p>
+              {hasCapacity && (
+                <div className="rounded-lg border border-sky-100 bg-sky-50/50 px-2 py-2">
+                  <p className="text-[10px] font-semibold text-sky-600 uppercase tracking-wide">
+                    Capacity
+                  </p>
+                  <p className="mt-1 text-xs font-medium text-slate-900">
+                    {s.capacity}
+                  </p>
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
           {s.availableTimeSlots && s.availableTimeSlots.length > 0 && (
             <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-2">
@@ -1150,6 +1158,14 @@ const AIAssistantPage: React.FC = () => {
 
   const suggestions = latestSuggestionMessage?.suggestions || [];
   const isSingleSuggestion = suggestions.length === 1;
+  const suggestionKind = latestSuggestionMessage?.suggestionType || "suggested";
+  const suggestionLabel =
+    suggestionKind === "alternative"
+      ? "Alternative Rooms"
+      : suggestionKind === "available"
+        ? "Available Rooms Today"
+        : "Suggested Rooms";
+  const showBestMatch = isSingleSuggestion && suggestionKind === "suggested";
   const shouldEnableConversationScroll = sessions.length > 5;
 
   const handleSelectSession = (sessionId: string) => {
@@ -1441,7 +1457,7 @@ const AIAssistantPage: React.FC = () => {
                 >
                   <div>
                     <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">
-                      Suggested Rooms
+                      {suggestionLabel}
                     </h3>
                     <p className="mt-0.5 text-[11px] font-medium text-orange-700/80">
                       {suggestions.length} suggestion
@@ -1461,16 +1477,15 @@ const AIAssistantPage: React.FC = () => {
                 {!isSuggestionsCollapsed && (
                   <div id="suggested-rooms-panel" className="mt-3">
                     <div className="max-h-[16rem] space-y-2.5 overflow-y-auto pr-1">
-                      {isSingleSuggestion && (
+                      {showBestMatch && (
                         <div className="mb-2">
                           {renderSuggestionCard(suggestions[0], true)}
                         </div>
                       )}
 
-                      {(isSingleSuggestion
-                        ? suggestions.slice(1)
-                        : suggestions
-                      ).map((s) => renderSuggestionCard(s))}
+                      {(showBestMatch ? suggestions.slice(1) : suggestions).map(
+                        (s) => renderSuggestionCard(s),
+                      )}
                     </div>
 
                     {suggestions.length > 3 && (

@@ -1677,18 +1677,22 @@ const MyBookingsPage: React.FC = () => {
           !canRender.returnRoom &&
           !canRender.extend &&
           !canRender.cancel &&
-          !canRender.feedback
+          !canRender.feedback &&
+          !(
+            (record.purpose?.toLowerCase().includes("event") ||
+              record.note?.toLowerCase().includes("event")) &&
+            !TAB_STATUS_FILTERS.history.includes(status.toUpperCase())
+          )
         ) {
-          return (
-            <span className="text-xs text-gray-400">No available actions</span>
-          );
+          return null;
         }
 
         return (
           <div className="flex flex-wrap gap-1.5">
             {/* Manage Event button */}
-            {record.purpose?.toLowerCase().includes("event") ||
-            record.note?.toLowerCase().includes("event") ? (
+            {(record.purpose?.toLowerCase().includes("event") ||
+              record.note?.toLowerCase().includes("event")) &&
+            !TAB_STATUS_FILTERS.history.includes(status.toUpperCase()) ? (
               <button
                 type="button"
                 onClick={() =>
@@ -1993,9 +1997,9 @@ const MyBookingsPage: React.FC = () => {
                 }
                 loading={loading}
                 columns={
-                  activeTab === "history"
-                    ? columns.filter((col) => col.key !== "actions")
-                    : columns
+                  activeTab === "history" || activeTab === "meeting-with-event"
+    ? columns.filter((col) => col.key !== "actions")
+    : columns
                 }
                 dataSource={bookings}
                 pagination={false}

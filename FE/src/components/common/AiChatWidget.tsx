@@ -14,6 +14,7 @@ import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
 import { ROUTES } from "../../constants";
 import { roomService } from "../../services/roomService";
+import { extractApiMessage } from "../../utils/errorHandlers";
 
 type Sender = "user" | "bot";
 
@@ -22,6 +23,8 @@ interface ChatBubbleMessage {
   sender: Sender;
   text: string;
   createdAt: string;
+  intent?: AiChatResponseDto["intent"];
+  suggestionType?: AiChatResponseDto["suggestionType"];
   suggestions?: AiRoomSuggestion[];
   reservation?: Reservation | null;
   reservationCreated?: boolean;
@@ -202,6 +205,14 @@ export const AiChatWidget: React.FC = () => {
   const isSuggestionsVisible =
     latestSuggestions.length > 0 &&
     latestSuggestionMessage?.id !== dismissedSuggestionMessageId;
+  const suggestionKind = latestSuggestionMessage?.suggestionType || "suggested";
+  const suggestionLabel =
+    suggestionKind === "alternative"
+      ? "Alternative Rooms"
+      : suggestionKind === "available"
+        ? "Available Rooms Today"
+        : "Suggested Rooms";
+  const showBestMatch = isSingleSuggestion && suggestionKind === "suggested";
 
   useEffect(() => {
     try {
@@ -310,6 +321,7 @@ export const AiChatWidget: React.FC = () => {
 
   const sendMessageToAi = useCallback(
     async (content: string, _mode: "chat" | "voice") => {
+      void _mode;
       if (!content || isSending) return;
 
       const now = new Date().toISOString();
@@ -337,17 +349,24 @@ export const AiChatWidget: React.FC = () => {
           sender: "bot",
           text: response.reply,
           createdAt: new Date().toISOString(),
+          intent: response.intent,
+          suggestionType: response.suggestionType,
           suggestions: response.suggestions,
           reservation: response.reservation,
           reservationCreated: response.reservationCreated,
-          roomDetail: response.roomDetail as Record<string, unknown> | null | undefined,
+          roomDetail: response.roomDetail as
+            | Record<string, unknown>
+            | null
+            | undefined,
         };
         setMessages((prev) => [...prev, botMessage]);
-      } catch {
+      } catch (err: unknown) {
+        const fallbackMessage =
+          "Sorry, UniBot is unavailable right now. Please try again later.";
         const botMessage: ChatBubbleMessage = {
           id: createId(),
           sender: "bot",
-          text: "Sorry, UniBot is unavailable right now. Please try again later.",
+          text: extractApiMessage(err, fallbackMessage),
           createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, botMessage]);
@@ -636,96 +655,171 @@ export const AiChatWidget: React.FC = () => {
                         {m.text}
 
                         {/* Room Detail Card */}
-                        {!isUser && m.roomDetail && (() => {
-                          const rd = m.roomDetail as Record<string, unknown>;
-                          const rdImages = Array.isArray(rd.images) ? rd.images as string[] : [];
-                          const rdAmenities = Array.isArray(rd.amenities) ? rd.amenities as string[] : [];
-                          const rdCode = toText(rd.locationCode) || toText(rd.id) || "-";
-                          const rdCapacity = toNumberOrNull(rd.capacity);
-                          const rdScore = toNumberOrNull(rd.score);
-                          const rdCurrentUser = toText(rd.currentUserName);
-                          const rdCheckIn = toText(rd.checkInTime);
-                          const rdFeedbacks = Array.isArray(rd.feedbacks) ? rd.feedbacks as Record<string, unknown>[] : [];
-                          const rdId = toText(rd.id);
-                          return (
-                            <div className="mt-2 overflow-hidden rounded-xl border border-orange-200 bg-white shadow-md">
-                              <div className="flex items-center justify-between gap-2 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-2.5 py-2">
-                                <span className="text-[10px] font-bold uppercase tracking-wide text-orange-700">Room Detail</span>
-                                {rdScore !== null && (
-                                  <span className="rounded-lg border border-orange-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-orange-700">
-                                    Score {rdScore.toFixed(1)}
+                        {!isUser &&
+                          m.roomDetail &&
+                          (() => {
+                            const rd = m.roomDetail as Record<string, unknown>;
+                            const rdImages = Array.isArray(rd.images)
+                              ? (rd.images as string[])
+                              : [];
+                            const rdAmenities = Array.isArray(rd.amenities)
+                              ? (rd.amenities as string[])
+                              : [];
+                            const rdCode =
+                              toText(rd.locationCode) || toText(rd.id) || "-";
+                            const rdCapacity = toNumberOrNull(rd.capacity);
+                            const rdScore = toNumberOrNull(rd.score);
+                            const rdCurrentUser = toText(rd.currentUserName);
+                            const rdCheckIn = toText(rd.checkInTime);
+                            const rdFeedbacks = Array.isArray(rd.feedbacks)
+                              ? (rd.feedbacks as Record<string, unknown>[])
+                              : [];
+                            const rdId = toText(rd.id);
+                            return (
+                              <div className="mt-2 overflow-hidden rounded-xl border border-orange-200 bg-white shadow-md">
+                                <div className="flex items-center justify-between gap-2 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-2.5 py-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-wide text-orange-700">
+                                    Room Detail
                                   </span>
+                                  {rdScore !== null && (
+                                    <span className="rounded-lg border border-orange-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-orange-700">
+                                      Score {rdScore.toFixed(1)}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {rdImages[0] && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setPreviewImageUrl(rdImages[0])
+                                    }
+                                    className="block w-full"
+                                  >
+                                    <img
+                                      src={rdImages[0]}
+                                      alt={rdCode}
+                                      className="h-20 w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  </button>
                                 )}
-                              </div>
 
-                              {rdImages[0] && (
-                                <button type="button" onClick={() => setPreviewImageUrl(rdImages[0])} className="block w-full">
-                                  <img src={rdImages[0]} alt={rdCode} className="h-20 w-full object-cover" loading="lazy" />
-                                </button>
-                              )}
-
-                              <div className="space-y-1.5 px-2.5 py-2 text-[10px] text-slate-700">
-                                <div className="grid grid-cols-2 gap-1.5">
-                                  <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
-                                    <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">Room Code</p>
-                                    <p className="mt-0.5 text-xs font-semibold text-slate-900">{rdCode}</p>
+                                <div className="space-y-1.5 px-2.5 py-2 text-[10px] text-slate-700">
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
+                                      <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">
+                                        Room Code
+                                      </p>
+                                      <p className="mt-0.5 text-xs font-semibold text-slate-900">
+                                        {rdCode}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
+                                      <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">
+                                        Capacity
+                                      </p>
+                                      <p className="mt-0.5 text-xs font-semibold text-slate-900">
+                                        {rdCapacity ?? "-"}
+                                      </p>
+                                    </div>
                                   </div>
-                                  <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
-                                    <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">Capacity</p>
-                                    <p className="mt-0.5 text-xs font-semibold text-slate-900">{rdCapacity ?? "-"}</p>
-                                  </div>
-                                </div>
 
-                                <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1.5">
-                                  <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">Current User</p>
-                                  <p className="mt-0.5 text-xs font-semibold text-slate-900">{rdCurrentUser || "No active user"}</p>
-                                </div>
-
-                                {rdCheckIn && (
                                   <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1.5">
-                                    <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">Check-in</p>
-                                    <p className="mt-0.5 text-xs font-semibold text-slate-900">{formatDateTimeLabel(rdCheckIn)}</p>
+                                    <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">
+                                      Current User
+                                    </p>
+                                    <p className="mt-0.5 text-xs font-semibold text-slate-900">
+                                      {rdCurrentUser || "No active user"}
+                                    </p>
                                   </div>
-                                )}
 
-                                {rdAmenities.length > 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {rdAmenities.slice(0, 5).map((a) => (
-                                      <span key={`${rdId}-${a}`} className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[9px] font-medium text-orange-700">• {a}</span>
-                                    ))}
-                                  </div>
-                                )}
+                                  {rdCheckIn && (
+                                    <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1.5">
+                                      <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">
+                                        Check-in
+                                      </p>
+                                      <p className="mt-0.5 text-xs font-semibold text-slate-900">
+                                        {formatDateTimeLabel(rdCheckIn)}
+                                      </p>
+                                    </div>
+                                  )}
 
-                                {rdFeedbacks.length > 0 && (
-                                  <div className="space-y-1">
-                                    {rdFeedbacks.slice(0, 2).map((fb, i) => {
-                                      const rating = typeof fb.rating === "number" ? Math.max(0, Math.min(5, Math.round(fb.rating))) : 0;
-                                      const desc = toText(fb.description);
-                                      return (
-                                        <div key={toText(fb.id) || `fb-${i}`} className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1">
-                                          <div className="text-[10px] font-semibold text-amber-600">{rating > 0 ? "★".repeat(rating) : "No rating"}</div>
-                                          {desc && <p className="mt-0.5 text-[9px] text-slate-700">{desc}</p>}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                  {rdAmenities.length > 0 && (
+                                    <div className="flex flex-wrap gap-1">
+                                      {rdAmenities.slice(0, 5).map((a) => (
+                                        <span
+                                          key={`${rdId}-${a}`}
+                                          className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[9px] font-medium text-orange-700"
+                                        >
+                                          • {a}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
 
-                                {(rdId || rdCode !== "-") && (
-                                  <div className="flex justify-end pt-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleViewDetails({ roomId: rdId || "", locationCode: rdCode, status: "AVAILABLE", capacity: rdCapacity ?? undefined, amenities: rdAmenities.length > 0 ? rdAmenities : undefined, imageUrl: rdImages[0] || undefined })}
-                                      className="rounded-lg border border-orange-500 bg-orange-500 px-2.5 py-1 text-[9px] font-semibold text-white transition hover:bg-orange-600"
-                                    >
-                                      View Room →
-                                    </button>
-                                  </div>
-                                )}
+                                  {rdFeedbacks.length > 0 && (
+                                    <div className="space-y-1">
+                                      {rdFeedbacks.slice(0, 2).map((fb, i) => {
+                                        const rating =
+                                          typeof fb.rating === "number"
+                                            ? Math.max(
+                                                0,
+                                                Math.min(
+                                                  5,
+                                                  Math.round(fb.rating),
+                                                ),
+                                              )
+                                            : 0;
+                                        const desc = toText(fb.description);
+                                        return (
+                                          <div
+                                            key={toText(fb.id) || `fb-${i}`}
+                                            className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1"
+                                          >
+                                            <div className="text-[10px] font-semibold text-amber-600">
+                                              {rating > 0
+                                                ? "★".repeat(rating)
+                                                : "No rating"}
+                                            </div>
+                                            {desc && (
+                                              <p className="mt-0.5 text-[9px] text-slate-700">
+                                                {desc}
+                                              </p>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {(rdId || rdCode !== "-") && (
+                                    <div className="flex justify-end pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleViewDetails({
+                                            roomId: rdId || "",
+                                            locationCode: rdCode,
+                                            status: "AVAILABLE",
+                                            capacity: rdCapacity ?? undefined,
+                                            amenities:
+                                              rdAmenities.length > 0
+                                                ? rdAmenities
+                                                : undefined,
+                                            imageUrl: rdImages[0] || undefined,
+                                          })
+                                        }
+                                        className="rounded-lg border border-orange-500 bg-orange-500 px-2.5 py-1 text-[9px] font-semibold text-white transition hover:bg-orange-600"
+                                      >
+                                        View Room →
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })()}
+                            );
+                          })()}
 
                         {/* Booking Details Card */}
                         {!isUser && (booking || m.reservationCreated) && (
@@ -867,7 +961,7 @@ export const AiChatWidget: React.FC = () => {
               <div className="mt-2 rounded-xl border border-orange-200 bg-white p-2.5">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-700">
-                    Suggested Rooms
+                    {suggestionLabel}
                   </p>
                   <button
                     type="button"
@@ -883,7 +977,7 @@ export const AiChatWidget: React.FC = () => {
                   </button>
                 </div>
 
-                {isSingleSuggestion && (
+                {showBestMatch && (
                   <p className="mb-2 inline-flex rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
                     Best match
                   </p>
@@ -895,49 +989,64 @@ export const AiChatWidget: React.FC = () => {
                       key={`${item.roomId}-${item.locationCode}`}
                       className="rounded-lg border border-orange-100 px-2 py-1.5"
                     >
-                      {item.imageUrl && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setPreviewImageUrl(item.imageUrl || null)
-                          }
-                          className="mb-1 block w-full"
-                        >
-                          <img
-                            src={item.imageUrl}
-                            alt={item.locationCode || item.roomId}
-                            className="h-20 w-full rounded-md object-cover"
-                            loading="lazy"
-                          />
-                        </button>
-                      )}
+                      {(() => {
+                        const metaParts = [
+                          item.building,
+                          item.floor,
+                          typeof item.capacity === "number"
+                            ? `Capacity ${item.capacity}`
+                            : "",
+                        ]
+                          .map((value) =>
+                            typeof value === "string" ? value.trim() : value,
+                          )
+                          .filter(Boolean) as string[];
+                        return (
+                          <>
+                            {item.imageUrl && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPreviewImageUrl(item.imageUrl || null)
+                                }
+                                className="mb-1 block w-full"
+                              >
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.locationCode || item.roomId}
+                                  className="h-20 w-full rounded-md object-cover"
+                                  loading="lazy"
+                                />
+                              </button>
+                            )}
 
-                      <div className="truncate text-xs font-semibold text-orange-900">
-                        {item.locationCode || item.roomId}
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-orange-700/90">
-                        {item.building || "Unknown building"}
-                        {item.floor ? ` · ${item.floor}` : ""}
-                        {typeof item.capacity === "number"
-                          ? ` · Capacity ${item.capacity}`
-                          : ""}
-                      </div>
-                      <div className="mt-1.5 flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleViewDetails(item)}
-                          className="rounded border border-orange-200 px-2 py-0.5 text-[10px] font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-                        >
-                          Details
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleBookNow(item)}
-                          className="rounded bg-orange-500 px-2 py-0.5 text-[10px] font-semibold text-white transition hover:bg-orange-600"
-                        >
-                          Book
-                        </button>
-                      </div>
+                            <div className="truncate text-xs font-semibold text-orange-900">
+                              {item.locationCode || item.roomId}
+                            </div>
+                            {metaParts.length > 0 && (
+                              <div className="mt-0.5 text-[11px] text-orange-700/90">
+                                {metaParts.join(" · ")}
+                              </div>
+                            )}
+                            <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleViewDetails(item)}
+                                className="rounded border border-orange-200 px-2 py-0.5 text-[10px] font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+                              >
+                                Details
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleBookNow(item)}
+                                className="rounded bg-orange-500 px-2 py-0.5 text-[10px] font-semibold text-white transition hover:bg-orange-600"
+                              >
+                                Book
+                              </button>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
