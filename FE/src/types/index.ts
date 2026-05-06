@@ -204,4 +204,5 @@ export interface UserProfile {
   gender: string;
   cancellationCount: number;
   bookingLockedUntil: Date;
+  statusPay?: "NO_PAY" | "PAID" | null;
 }

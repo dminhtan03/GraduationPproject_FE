@@ -129,21 +129,26 @@ const BarChart: React.FC<{ data: DailyTrend[] }> = ({ data }) => {
 
   const maxVal = Math.max(...data.map((d) => d.count), 1);
   const W = 560;
-  const H = 160;
-  const PAD_L = 32;
+  const H = 180;        // total SVG drawing height (bars + top padding)
+  const PAD_T = 24;     // top padding — reserves space for value labels above tallest bar
+  const PAD_L = 36;
   const PAD_B = 36;
+  const CHART_H = H - PAD_T; // actual bar area height
   const barW = Math.floor((W - PAD_L - 16) / data.length) - 6;
+
+  // Round maxVal up to a "nice" number so the top grid line matches
+  const niceMax = Math.ceil(maxVal / 5) * 5 || 5;
 
   return (
     <svg viewBox={`0 0 ${W} ${H + PAD_B}`} className="w-full" aria-label="Daily booking bar chart">
-      {/* Y grid */}
+      {/* Y grid lines — drawn from PAD_T (top) to H (bottom) */}
       {[0, 0.25, 0.5, 0.75, 1].map((t) => {
-        const y = H - t * H;
+        const y = PAD_T + (1 - t) * CHART_H;
         return (
           <g key={t}>
             <line x1={PAD_L} y1={y} x2={W - 8} y2={y} stroke="#e2e8f0" strokeWidth={1} />
             <text x={PAD_L - 4} y={y + 4} fontSize={10} fill="#94a3b8" textAnchor="end">
-              {Math.round(t * maxVal)}
+              {Math.round(t * niceMax)}
             </text>
           </g>
         );
@@ -152,8 +157,8 @@ const BarChart: React.FC<{ data: DailyTrend[] }> = ({ data }) => {
       {/* Bars */}
       {data.map((d, i) => {
         const x = PAD_L + i * ((W - PAD_L - 16) / data.length) + 3;
-        const bH = Math.max((d.count / maxVal) * H, d.count > 0 ? 4 : 0);
-        const y = H - bH;
+        const bH = Math.max((d.count / niceMax) * CHART_H, d.count > 0 ? 4 : 0);
+        const y = H - bH;    // bar top — minimum is PAD_T when bH = CHART_H
         const label = d.date.slice(5); // "MM-DD"
         return (
           <g key={d.date}>
@@ -167,7 +172,7 @@ const BarChart: React.FC<{ data: DailyTrend[] }> = ({ data }) => {
               opacity={0.9}
             />
             {d.count > 0 && (
-              <text x={x + barW / 2} y={y - 4} fontSize={9} fill="#64748b" textAnchor="middle">
+              <text x={x + barW / 2} y={y - 5} fontSize={10} fill="#475569" fontWeight="600" textAnchor="middle">
                 {d.count}
               </text>
             )}

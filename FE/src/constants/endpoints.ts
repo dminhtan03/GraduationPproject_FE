@@ -28,6 +28,7 @@ export const API_ENDPOINTS = {
     MAX_EXTEND: "/api/v1/reservations/extend/:id/max",
     CANCEL_BOOKING: "/api/v1/reservations/cancel/:id",
     FORCE_CANCEL_BOOKING: "/api/v1/reservations/force-cancel/:id",
+    CONFIRM_PAY: "/api/v1/reservations/confirm-pay/:reservationId",
     // start+ chức năng sự kiện (gọi thêm dịch vụ/tiện ích trong lúc diễn ra)
     RESERVATION_SERVICE_ITEMS: "/api/v1/reservations/:id/service-items",
     // start+ chức năng service item status

@@ -4,6 +4,7 @@ import { Client, type IMessage } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import { api } from "../../services/api";
 import { reservationService } from "../../services/reservationService";
+import { getProfile } from "../../services/authService";
 import { API_CONFIG, ROUTES } from "../../constants";
 import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
 import CustomMessage, {
@@ -99,6 +100,7 @@ const EventSetupPage: React.FC = () => {
 
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
   const [eventData, setEventData] = useState<EventData | null>(null);
+  const [userStatusPay, setUserStatusPay] = useState<"NO_PAY" | "PAID" | null>(null);
   const [serviceItems, setServiceItems] = useState<ServiceItem[]>([]);
   const [serviceDraft, setServiceDraft] = useState<
     Record<string, { quantity: string; note: string }>
@@ -276,6 +278,12 @@ const EventSetupPage: React.FC = () => {
   useEffect(() => {
     if (!normalizedReservationId) return;
     setLoading(true);
+    // Fetch user statusPay
+    getProfile().then((res) => {
+      const data = (res as any)?.data?.data ?? (res as any)?.data;
+      setUserStatusPay(data?.statusPay ?? null);
+    }).catch(() => {});
+
     Promise.all([
       loadReservationDetail(),
       loadServiceItems(),
@@ -870,6 +878,17 @@ const EventSetupPage: React.FC = () => {
               Add services for your event (microphone, desk, chairs, etc.)
             </p>
 
+            {userStatusPay === "NO_PAY" && (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <svg className="h-4 w-4 shrink-0 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm font-medium text-red-700">
+                  You have an outstanding payment from a previous event. Please complete your payment at the lobby before ordering new services.
+                </span>
+              </div>
+            )}
+
             <div className="space-y-3">
               {serviceItems.length ? (
                 serviceItems.map((s) => {
@@ -928,11 +947,11 @@ const EventSetupPage: React.FC = () => {
               )}
 
               <button
-                disabled={loading}
+                disabled={loading || userStatusPay === "NO_PAY"}
                 onClick={saveServices}
-                className="w-full rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-orange-700 disabled:opacity-60"
+                className="w-full rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Save Services
+                {userStatusPay === "NO_PAY" ? "Service Locked — Unpaid Bill" : "Save Services"}
               </button>
             </div>
           </div>

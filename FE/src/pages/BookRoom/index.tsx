@@ -226,6 +226,11 @@ const BookRoomPage: React.FC = () => {
     [roomId, room],
   );
   const minDate = useMemo(() => formatDateInput(new Date()), []);
+  const maxDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return formatDateInput(d);
+  }, []);
   const nowHour = useMemo(() => new Date().getHours(), []);
 
   // Real-time clock for monitoring
@@ -300,6 +305,16 @@ const BookRoomPage: React.FC = () => {
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
     return end.getTime() - start.getTime() > 8 * 60 * 60 * 1000;
   }, [startTime, endTime]);
+
+  const startExceeds1Week = useMemo(() => {
+    if (!startTime) return false;
+    const start = new Date(startTime);
+    if (Number.isNaN(start.getTime())) return false;
+    const limit = new Date();
+    limit.setDate(limit.getDate() + 7);
+    limit.setHours(23, 59, 59, 999);
+    return start > limit;
+  }, [startTime]);
 
   const startHourOptions = useMemo(() => {
     const selectedHour = Number(getClockHour(startClock));
@@ -410,6 +425,14 @@ const BookRoomPage: React.FC = () => {
 
     if (start <= now) {
       message.warning("Start time must be in the future.");
+      return false;
+    }
+
+    const maxAllowed = new Date();
+    maxAllowed.setDate(maxAllowed.getDate() + 7);
+    maxAllowed.setHours(23, 59, 59, 999);
+    if (start > maxAllowed) {
+      message.warning("You can only book up to 7 days in advance.");
       return false;
     }
 
@@ -617,12 +640,13 @@ const BookRoomPage: React.FC = () => {
                   <div className="mb-3 flex items-center gap-2">
                     <ClockIcon className="h-5 w-5 text-orange-500" />
                     <span className="text-sm font-semibold text-slate-700">
-                      Meeting Time
+                      Meeting Time (Install only one week in advance.)
                     </span>
                   </div>
                   <p className="mb-4 text-xs text-slate-500">
                     Start and end times are auto-validated to prevent booking in
                     the past.
+                  
                   </p>
 
                   <div className="grid gap-4 lg:grid-cols-2">
@@ -635,10 +659,24 @@ const BookRoomPage: React.FC = () => {
                         <DatePickerField
                           value={startDate}
                           minDate={minDate}
+                          maxDate={maxDate}
+                          onInvalidSelect={(reason) => {
+                            if (reason === "past") {
+                              message.warning("Start date cannot be in the past.");
+                            } else {
+                              message.warning("You can only book up to 7 days in advance.");
+                            }
+                          }}
                           onChange={(nextDate) => {
                             if (isDateBefore(nextDate, minDate)) {
                               message.warning(
                                 "Start date cannot be in the past.",
+                              );
+                              return;
+                            }
+                            if (nextDate > maxDate) {
+                              message.warning(
+                                "You can only book up to 7 days in advance.",
                               );
                               return;
                             }
@@ -800,6 +838,15 @@ const BookRoomPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {startExceeds1Week && (
+                    <div className="col-span-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700">
+                      <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                      </svg>
+                      You can only book a room up to 7 days in advance. Please select an earlier start time.
+                    </div>
+                  )}
 
                   {durationExceeds8h && (
                     <div className="col-span-2 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-700">

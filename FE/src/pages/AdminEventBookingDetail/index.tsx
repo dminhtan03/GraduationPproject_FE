@@ -180,6 +180,7 @@ const AdminEventBookingDetailPage: React.FC = () => {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   // start+ reason modal for CANCELLED
   const [historyOpen, setHistoryOpen] = useState(true);
+  const [confirmPayLoading, setConfirmPayLoading] = useState(false);
 
   const [cancelModal, setCancelModal] = useState<{
     item: ServiceLine;
@@ -411,6 +412,21 @@ const AdminEventBookingDetailPage: React.FC = () => {
   const reservationNode = detail?.reservation ?? detail;
   const startTime = reservationNode?.startTime || "";
   const endTime = reservationNode?.endTime || "";
+  const reservationStatus = String((reservationNode as any)?.status || "").toUpperCase();
+
+  const handleConfirmPay = async () => {
+    if (!reservationId) return;
+    setConfirmPayLoading(true);
+    try {
+      await api.put(buildUrl(API_ENDPOINTS.ROOMS.CONFIRM_PAY, { reservationId }));
+      setToast({ type: "success", message: "Payment confirmed. User service ordering is now unlocked." });
+      await loadReservationDetail();
+    } catch (err: unknown) {
+      setToast({ type: "error", message: getErrorMessage(err, "Failed to confirm payment") });
+    } finally {
+      setConfirmPayLoading(false);
+    }
+  };
 
   const ServiceTable: React.FC<{
     lines: ServiceLine[];
@@ -569,15 +585,51 @@ const AdminEventBookingDetailPage: React.FC = () => {
                 <span className="font-semibold text-slate-800">{roomCode}</span>
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600"
-            >
-              <ArrowLeftIcon className="h-4 w-4" />
-              Back
-            </button>
+            <div className="flex items-center gap-2">
+              {reservationStatus === "PAYING" && (
+                <button
+                  type="button"
+                  disabled={confirmPayLoading}
+                  onClick={handleConfirmPay}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {confirmPayLoading ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  ) : (
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V8a2 2 0 00-2-2h-5L9 4H4zm7 5a1 1 0 10-2 0v1H8a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V9z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                  Confirm Payment
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600"
+              >
+                <ArrowLeftIcon className="h-4 w-4" />
+                Back
+              </button>
+            </div>
           </div>
+
+          {/* PAYING status banner */}
+          {reservationStatus === "PAYING" && (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 shadow-sm">
+              <div className="flex items-center gap-2">
+                <svg className="h-5 w-5 shrink-0 text-amber-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V8a2 2 0 00-2-2h-5L9 4H4zm7 5a1 1 0 10-2 0v1H8a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V9z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm font-semibold text-amber-800">
+                  This booking is awaiting payment confirmation. Click <strong>Confirm Payment</strong> after the user completes payment at the lobby.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-amber-200 px-3 py-1 text-xs font-bold uppercase text-amber-800">
+                Awaiting Payment
+              </span>
+            </div>
+          )}
 
           {/* Event info + Amenities */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 mb-6">
