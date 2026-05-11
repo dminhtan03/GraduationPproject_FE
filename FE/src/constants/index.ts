@@ -10,6 +10,7 @@ export const API_CONFIG = {
 
 // Routes constants
 export const ROUTES = {
+  HOME: "/",
   LOGIN: "/login",
   FORBIDDEN: "/403",
   NOT_FOUND: "/404",

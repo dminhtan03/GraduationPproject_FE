@@ -7,6 +7,7 @@ import {
   BankOutlined,
   CalendarOutlined,
   RetweetOutlined,
+  HomeOutlined,
 } from "@ant-design/icons";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -53,6 +54,7 @@ const Sidebar: React.FC = () => {
     label: React.ReactNode;
     children?: { key: string; icon: React.ReactNode; label: React.ReactNode }[];
   }[] = [
+    { key: ROUTES.HOME, icon: <HomeOutlined />, label: "Home" },
     { key: ROUTES.ROOM_LIST, icon: <BankOutlined />, label: "Room List" },
     {
       key: ROUTES.AI_ASSISTANT,

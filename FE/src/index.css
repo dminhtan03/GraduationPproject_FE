@@ -49,6 +49,35 @@ body {
   animation: slideIn 0.3s ease-in-out;
 }
 
+.home-reveal,
+.home-fade-up {
+  animation: homeFadeUp 0.7s ease-out both;
+}
+
+.home-delay-1 {
+  animation-delay: 80ms;
+}
+
+.home-delay-2 {
+  animation-delay: 160ms;
+}
+
+.home-delay-3 {
+  animation-delay: 240ms;
+}
+
+.home-rise-in {
+  animation: homeRiseIn 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-blob {
+  animation: blobFloat 14s ease-in-out infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -57,6 +86,50 @@ body {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes homeFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes homeRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes blobFloat {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(14px, -10px) scale(1.05);
+  }
+  66% {
+    transform: translate(-12px, 12px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-reveal,
+  .home-fade-up,
+  .home-rise-in,
+  .animate-blob {
+    animation: none !important;
   }
 }
 
