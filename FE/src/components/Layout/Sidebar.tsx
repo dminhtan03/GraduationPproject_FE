@@ -7,6 +7,8 @@ import {
   BankOutlined,
   CalendarOutlined,
   RetweetOutlined,
+  CheckSquareOutlined,
+  VideoCameraOutlined,
 } from "@ant-design/icons";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -71,6 +73,16 @@ const Sidebar: React.FC = () => {
       label: "Recurring Bookings",
     },
     // end+ chức năng đặt phòng lặp lại (sidebar tab)
+    {
+      key: ROUTES.TASKS,
+      icon: <CheckSquareOutlined />,
+      label: "Tasks",
+    },
+    {
+      key: ROUTES.MEETINGS,
+      icon: <VideoCameraOutlined />,
+      label: "Meetings",
+    },
   ];
 
   const handleMenuClick = ({ key }: { key: string }) => {

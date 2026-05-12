@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Alert, Tag, Typography } from "antd";
+import MeetingRecorder from "../../components/meeting/MeetingRecorder";
 import { reservationService } from "../../services/reservationService";
 import { roomService } from "../../services/roomService";
 import { getProfile } from "../../services/authService";
@@ -621,6 +622,14 @@ const BookingDetailPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Meeting recording — visible only when room is IN_USE */}
+          {String(mergedDetail.status || "").toUpperCase() === "IN_USE" && (
+            <MeetingRecorder
+              reservationId={normalizedBookingId}
+              meetingTitle={purposeLabel !== "Not found" ? purposeLabel : undefined}
+            />
+          )}
 
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-lg font-semibold text-slate-900">Feedback</p>
