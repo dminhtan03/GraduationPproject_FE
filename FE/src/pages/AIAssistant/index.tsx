@@ -511,10 +511,6 @@ const AIAssistantPage: React.FC = () => {
     recognition.start();
   }, [isListening, isSending, selectedSession, sendMessageToAi]);
 
-  const handleQuickAction = (prompt: string) => {
-    void handleSend(prompt);
-  };
-
   useEffect(() => {
     if (!messagesEndRef.current) return;
     messagesEndRef.current.scrollIntoView({
@@ -574,10 +570,10 @@ const AIAssistantPage: React.FC = () => {
           className={`flex items-end gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}
         >
           <div
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
+            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
               isUser
                 ? "bg-orange-500 text-white"
-                : "bg-orange-100 text-orange-700"
+                : "bg-orange-50 border border-orange-400 text-orange-600 shadow-sm"
             }`}
           >
             {isUser ? userInitials : "AI"}
@@ -585,8 +581,8 @@ const AIAssistantPage: React.FC = () => {
           <div
             className={`max-w-[85vw] sm:max-w-[70vw] xl:max-w-[44rem] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
               isUser
-                ? "rounded-br-md bg-orange-500 text-orange-50"
-                : "rounded-bl-md border border-orange-200 bg-white text-orange-900"
+                ? "rounded-br-md bg-orange-500 text-white font-medium"
+                : "rounded-bl-md bg-slate-100 text-slate-700"
             }`}
           >
             <div>{message.text}</div>
@@ -1277,13 +1273,13 @@ const AIAssistantPage: React.FC = () => {
   ]);
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-amber-50 to-white p-3 sm:p-6">
-      <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-orange-200/45 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-12 right-10 h-48 w-48 rounded-full bg-amber-200/50 blur-3xl" />
+    <section className="ai-assistant-enter relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:p-6">
+      <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-slate-200/45 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-12 right-10 h-48 w-48 rounded-full bg-slate-200/50 blur-3xl" />
 
       <div className="relative grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-12">
         <aside className="hidden xl:col-span-4 xl:block 2xl:col-span-3">
-          <div className="flex max-h-[280px] min-h-0 flex-col rounded-2xl border border-orange-200 bg-white/90 p-4 shadow-sm backdrop-blur-sm sm:max-h-[340px] sm:p-5 xl:max-h-none xl:min-h-[620px]">
+          <div className="flex max-h-[280px] min-h-0 flex-col rounded-2xl bg-white/90 p-4 shadow-sm backdrop-blur-sm sm:max-h-[340px] sm:p-5 xl:max-h-none xl:min-h-[620px]">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-orange-700">
@@ -1369,7 +1365,7 @@ const AIAssistantPage: React.FC = () => {
         </aside>
 
         <main className="xl:col-span-8 2xl:col-span-9">
-          <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-2xl border border-orange-200 bg-white/95 shadow-sm sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px]">
+          <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-2xl bg-white/95 shadow-sm sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px]">
             <header className="border-b border-orange-100 bg-gradient-to-r from-orange-500 to-amber-950 px-4 py-4 text-white sm:px-6">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -1392,7 +1388,7 @@ const AIAssistantPage: React.FC = () => {
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-orange-50/40 px-4 py-5 sm:px-6">
+            <div className="flex-1 overflow-y-auto bg-white px-4 py-5 sm:px-6">
               {isSelectedSessionLoading && (
                 <div className="mb-5 flex justify-center">
                   <div className="rounded-xl border border-orange-200 bg-white px-4 py-2 text-xs font-medium text-orange-600">
@@ -1484,27 +1480,6 @@ const AIAssistantPage: React.FC = () => {
             )}
 
             <div className="sticky bottom-0 z-10 border-t border-orange-100 bg-white px-4 py-3 sm:px-6">
-              <div className="mb-3 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleQuickAction("Suggest available rooms right now")
-                  }
-                  className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-                >
-                  Suggest rooms
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleQuickAction("I want to reserve a room for 10 people")
-                  }
-                  className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-                >
-                  Quick reserve
-                </button>
-              </div>
-
               <div className="flex items-end gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-2.5">
                 <textarea
                   value={inputValue}
@@ -1516,8 +1491,7 @@ const AIAssistantPage: React.FC = () => {
                     }
                   }}
                   placeholder="Type your message for UniBot..."
-                  rows={1}
-                  className="max-h-28 min-h-10 flex-1 resize-y border-none bg-transparent text-sm text-orange-950 outline-none placeholder:text-orange-400"
+                  className="max-h-28 min-h-10 flex-1 resize-none border-none bg-transparent text-sm text-orange-950 outline-none placeholder:text-orange-400"
                 />
 
                 <button
@@ -1585,9 +1559,20 @@ const AIAssistantPage: React.FC = () => {
                   type="button"
                   onClick={() => handleSend()}
                   disabled={isSending || !inputValue.trim() || !selectedSession}
-                  className="inline-flex h-10 items-center rounded-xl bg-orange-500 px-4 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300 shadow-sm"
+                  aria-label="Send"
                 >
-                  {isSending ? "Sending..." : "Send"}
+                  {isSending ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="h-5 w-5"
+                    >
+                      <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+                    </svg>
+                  )}
                 </button>
               </div>
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
 import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
@@ -7,25 +7,28 @@ import { api } from "../../services/api";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
+import CustomPagination from "../../components/common/CustomPagination";
+import {
+  formatNotificationTime,
+  getNotificationCategoryClass,
+  getNotificationCategoryLabel,
+} from "../../utils/notificationHelpers";
 import {
   formatReservationStatusLabel,
   getReservationStatusClass,
 } from "../../utils/reservationStatusStyles";
 
-const formatTime = (iso: string): string => {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
+const EVENT_KEYWORDS = ["event", "invitation", "invite", "participant"];
+const NOTIFICATION_PAGE_SIZE = 10;
 
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / (60 * 1000));
-
-  if (diffMinutes < 1) return "Just now";
-  if (diffMinutes < 60) return `${diffMinutes} mins ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+const isEventNotification = (
+  title: string,
+  message: string,
+  category?: string,
+) => {
+  if (category === "event") return true;
+  const source = `${title} ${message}`.toLowerCase();
+  return EVENT_KEYWORDS.some((keyword) => source.includes(keyword));
 };
 
 const NotificationsPage: React.FC = () => {
@@ -33,6 +36,7 @@ const NotificationsPage: React.FC = () => {
   const { notifications, markAllAsRead, unreadCount, markAsRead } =
     useNotifications();
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
   const [toast, setToast] = useState<{
     type: MessageType;
     message: string;
@@ -47,20 +51,22 @@ const NotificationsPage: React.FC = () => {
     }, 3000);
   };
 
-  const eventKeywords = useMemo(
-    () => ["event", "invitation", "invite", "participant"],
-    [],
+  const totalPages = Math.max(
+    1,
+    Math.ceil(notifications.length / NOTIFICATION_PAGE_SIZE),
+  );
+  const pagedNotifications = useMemo(
+    () =>
+      notifications.slice(
+        page * NOTIFICATION_PAGE_SIZE,
+        (page + 1) * NOTIFICATION_PAGE_SIZE,
+      ),
+    [notifications, page],
   );
 
-  const isEventNotification = (
-    title: string,
-    message: string,
-    category?: string,
-  ) => {
-    if (category === "event") return true;
-    const source = `${title} ${message}`.toLowerCase();
-    return eventKeywords.some((keyword) => source.includes(keyword));
-  };
+  useEffect(() => {
+    setPage((prev) => Math.min(prev, Math.max(0, totalPages - 1)));
+  }, [totalPages]);
 
   const respondEventInvitation = async (
     participantId: string,
@@ -136,32 +142,6 @@ const NotificationsPage: React.FC = () => {
     );
   };
 
-  const getCategoryClass = (category?: string) => {
-    if (category === "booking") {
-      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
-    }
-    if (category === "event") {
-      return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
-    }
-    if (category === "ai") {
-      return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
-    }
-    return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
-  };
-
-  const getCategoryLabel = (category?: string) => {
-    if (category === "booking") {
-      return "Booking";
-    }
-    if (category === "event") {
-      return "Event";
-    }
-    if (category === "ai") {
-      return "AI";
-    }
-    return "System";
-  };
-
   return (
     <div className="page-container mx-auto max-w-5xl">
       <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -199,7 +179,7 @@ const NotificationsPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-3">
-          {notifications.map((n) => (
+          {pagedNotifications.map((n) => (
             <button
               type="button"
               key={n.id}
@@ -223,14 +203,17 @@ const NotificationsPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryClass(
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getNotificationCategoryClass(
                       n.category,
+                      { includeEvent: true },
                     )}`}
                   >
-                    {getCategoryLabel(n.category)}
+                    {getNotificationCategoryLabel(n.category, {
+                      includeEvent: true,
+                    })}
                   </span>
                   <span className="text-xs text-slate-500">
-                    {formatTime(n.createdAt)}
+                    {formatNotificationTime(n.createdAt, "long")}
                   </span>
                 </div>
               </div>
@@ -320,6 +303,16 @@ const NotificationsPage: React.FC = () => {
             </button>
           ))}
         </div>
+      )}
+      {notifications.length > 0 && (
+        <CustomPagination
+          currentPage={page + 1}
+          totalPages={totalPages}
+          onPageChange={(nextPage) => setPage(nextPage - 1)}
+          totalItems={notifications.length}
+          pageSize={NOTIFICATION_PAGE_SIZE}
+          className="mt-6"
+        />
       )}
       {toast && (
         <CustomMessage

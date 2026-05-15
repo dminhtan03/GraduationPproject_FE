@@ -78,6 +78,14 @@ body {
   animation-delay: 2s;
 }
 
+.room-card-enter {
+  animation: roomCardEnter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.room-card-skeleton {
+  animation: roomSkeletonPulse 1.2s ease-in-out infinite;
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -124,11 +132,34 @@ body {
   }
 }
 
+@keyframes roomCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes roomSkeletonPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .home-reveal,
   .home-fade-up,
   .home-rise-in,
-  .animate-blob {
+  .animate-blob,
+  .room-card-enter,
+  .room-card-skeleton {
     animation: none !important;
   }
 }

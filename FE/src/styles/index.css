@@ -101,6 +101,64 @@
   transform: translateY(-2px);
 }
 
+/* ===== NOTIFICATION ANIMATIONS ===== */
+.notification-popup {
+  transform-origin: top right;
+  animation: notification-pop 220ms ease-out;
+}
+
+.notification-bell-bounce {
+  animation: notification-bell-bounce 280ms ease-out;
+}
+
+@keyframes notification-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes notification-bell-bounce {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.12) rotate(6deg);
+  }
+  65% {
+    transform: scale(0.98) rotate(-4deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+/* ===== AI ASSISTANT ENTER ===== */
+.ai-assistant-enter {
+  animation: ai-assistant-enter 360ms ease-out;
+}
+
+@keyframes ai-assistant-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-assistant-enter {
+    animation: none;
+  }
+}
+
 /* ===== TYPING DOTS ANIMATION ===== */
 .typing-dots {
   display: inline-flex;

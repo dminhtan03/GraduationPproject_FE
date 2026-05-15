@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Typography, Alert } from "antd";
+import { Alert } from "antd";
 import { useNavigate } from "react-router-dom";
 import { ClockIcon } from "@heroicons/react/24/outline";
 import { roomService } from "../../services/roomService";
-import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import DatePickerField from "../../components/common/DatePickerField";
 import AnimatedDropdown, {
@@ -18,12 +17,21 @@ import {
   buildDateTime,
   normalizeLocalDateTime,
 } from "../../utils";
+import {
+  buildTimeStatusOverrides,
+  normalizeRoomsMap,
+} from "../../utils/roomList";
 import CustomPagination from "../../components/common/CustomPagination";
 import RoomCard from "../../components/ui/RoomCard";
-import { ROOM_LIST_PAGE_SIZE, roomStatusFilterOptions } from "../../constants/roomList";
-import type { FilterType, RoomListItem, RoomListStatus, RawMapBuilding } from "../../types/roomList";
-
-const { Title, Text } = Typography;
+import {
+  ROOM_LIST_PAGE_SIZE,
+  roomStatusFilterOptions,
+} from "../../constants/roomList";
+import type {
+  FilterType,
+  RoomListItem,
+  RoomListStatus,
+} from "../../types/roomList";
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -53,12 +61,18 @@ const DashboardPage: React.FC = () => {
   };
 
   const {
-    startDate, setStartDate,
-    startHour, setStartHour,
-    startMinute, setStartMinute,
-    endDate, setEndDate,
-    endHour, setEndHour,
-    endMinute, setEndMinute,
+    startDate,
+    setStartDate,
+    startHour,
+    setStartHour,
+    startMinute,
+    setStartMinute,
+    endDate,
+    setEndDate,
+    endHour,
+    setEndHour,
+    endMinute,
+    setEndMinute,
     startHourDropdownOptions,
     startMinuteDropdownOptions,
     endHourDropdownOptions,
@@ -68,92 +82,21 @@ const DashboardPage: React.FC = () => {
     clearTimeFilter,
   } = useRoomListFilter();
 
-  const normalizeRoomsMap = useCallback((mapData: unknown): RoomListItem[] => {
-    const buildings: RawMapBuilding[] = Array.isArray(
-      (mapData as { buildingResponse?: unknown })?.buildingResponse,
-    )
-      ? ((mapData as { buildingResponse?: unknown })
-          .buildingResponse as RawMapBuilding[])
-      : [];
-
-    const flattened: RoomListItem[] = [];
-    buildings.forEach((building) => {
-      const floors = Array.isArray(building.floors) ? building.floors : [];
-      floors.forEach((floor) => {
-        const floorRooms = Array.isArray(floor.rooms) ? floor.rooms : [];
-        floorRooms.forEach((room) => {
-          const roomId = room.roomId || room.id;
-          if (!roomId) return;
-
-          const rawStatus = String(room.status || "").toUpperCase();
-          const normalizedStatus: RoomListStatus =
-            rawStatus === "BROKEN"
-              ? "BROKEN"
-              : rawStatus === "UNAVAILABLE"
-                ? "UNAVAILABLE"
-                : rawStatus === "LEARNING"
-                  ? "LEARNING"
-                  : "AVAILABLE";
-
-          let roomImage = "";
-          let amenities: string[] = [];
-
-          if (Array.isArray(room.images) && room.images.length > 0) {
-            const firstImage = room.images[0];
-            roomImage = firstImage?.imageUrl || firstImage?.url || firstImage?.image || firstImage?.path || "";
-          } else if (typeof room.imageUrl === "string") {
-            roomImage = room.imageUrl;
-          } else if (typeof room.image === "string") {
-            roomImage = room.image;
-          } else if (typeof room.roomImage === "string") {
-             roomImage = room.roomImage;
-          }
-          
-          if (Array.isArray(room.amenities)) {
-            amenities = room.amenities.map((a: any) => typeof a === "string" ? a : a?.name || a?.amenityName).filter(Boolean);
-          } else if (Array.isArray(room.utilities)) {
-             amenities = room.utilities.map((a: any) => typeof a === "string" ? a : a?.name || a?.utilityName).filter(Boolean);
-          } else if (typeof room.amenity === "string") {
-             amenities = [room.amenity];
-          }
-
-          flattened.push({
-            id: roomId,
-            roomName: room.locationCode || room.roomName || "",
-            building: building.buildingName || "",
-            floorInfo: floor.floorName || "",
-            status: normalizedStatus,
-            buildingId: building.buildingId,
-            floorId: floor.floorId,
-            roomImage,
-            amenities,
-            capacity: room.capacity || room.slot || 0,
-          });
-        });
-      });
-    });
-
-    return flattened;
+  const loadRooms = useCallback(async (skipLoading = false) => {
+    if (!skipLoading) {
+      setLoading(true);
+    }
+    setError(null);
+    try {
+      const mapData = await roomService.getRoomsMap();
+      setRooms(normalizeRoomsMap(mapData));
+    } catch (e: unknown) {
+      setError(extractApiMessage(e, "Unable to load room data"));
+      setRooms([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
-
-  const loadRooms = useCallback(
-    async (skipLoading = false) => {
-      if (!skipLoading) {
-        setLoading(true);
-      }
-      setError(null);
-      try {
-        const mapData = await roomService.getRoomsMap();
-        setRooms(normalizeRoomsMap(mapData));
-      } catch (e: unknown) {
-        setError(extractApiMessage(e, "Unable to load room data"));
-        setRooms([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [normalizeRoomsMap],
-  );
 
   useEffect(() => {
     const cached = roomService.getRoomsMapCached();
@@ -165,7 +108,7 @@ const DashboardPage: React.FC = () => {
     }
 
     loadRooms(hasCached);
-  }, [loadRooms, normalizeRoomsMap]);
+  }, [loadRooms]);
 
   // Search state
   const [tableSearch, setTableSearch] = useState("");
@@ -268,7 +211,10 @@ const DashboardPage: React.FC = () => {
   );
 
   const totalFiltered = filteredRooms.length;
-  const totalPages = Math.max(1, Math.ceil(totalFiltered / ROOM_LIST_PAGE_SIZE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalFiltered / ROOM_LIST_PAGE_SIZE),
+  );
 
   useEffect(() => {
     setPage((prev) => Math.min(prev, Math.max(0, totalPages - 1)));
@@ -335,7 +281,10 @@ const DashboardPage: React.FC = () => {
             key: `${pair.buildingId}|${pair.floorId}`,
             message: searchResult.message,
             statusMap: new Map(
-              searchResult.items.map((room) => [room.roomId, room.status]),
+              searchResult.items.map((room) => [
+                room.roomId,
+                room.status as RoomListStatus,
+              ]),
             ),
           };
         }),
@@ -345,22 +294,10 @@ const DashboardPage: React.FC = () => {
         floorResults.map((item) => [item.key, item.statusMap]),
       );
 
-      const overrides: Record<string, RoomListStatus> = {};
-      scopedRooms.forEach((room) => {
-        if (room.status === "BROKEN") {
-          overrides[room.id] = "BROKEN";
-          return;
-        }
-
-        const key = `${room.buildingId}|${room.floorId}`;
-        const statusMap = floorAvailability.get(key);
-
-        if (statusMap?.has(room.id)) {
-          overrides[room.id] = statusMap.get(room.id) as RoomListStatus;
-        } else {
-          overrides[room.id] = "UNAVAILABLE";
-        }
-      });
+      const overrides = buildTimeStatusOverrides(
+        scopedRooms,
+        floorAvailability,
+      );
 
       setTimeStatusOverrides(overrides);
       setTimeFilterActive(true);
@@ -380,11 +317,8 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 py-5 sm:py-10">
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900 m-0">Room List</h1>
-        </div>
-        <div className="flex items-center gap-3">
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4">
+        <div className="w-full flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={() => navigate("/room-map")}
@@ -588,31 +522,70 @@ const DashboardPage: React.FC = () => {
         />
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-        {pagedRooms.map((room) => (
-          <RoomCard
-            key={room.id}
-            room={room}
-            timeFilterActive={timeFilterActive}
-            timeRange={{
-              startDate,
-              startHour,
-              startMinute,
-              endDate,
-              endHour,
-              endMinute,
-            }}
-          />
-        ))}
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={`room-skeleton-${index}`}
+              className="rounded-[20px] border border-gray-200 bg-white shadow-sm overflow-hidden room-card-enter"
+              style={{ animationDelay: `${80 + index * 60}ms` }}
+            >
+              <div className="h-48 bg-slate-200 room-card-skeleton" />
+              <div className="p-5 space-y-3">
+                <div className="h-5 w-2/3 bg-slate-200 rounded-md room-card-skeleton" />
+                <div className="h-4 w-1/3 bg-slate-200 rounded-md room-card-skeleton" />
+                <div className="h-4 w-full bg-slate-200 rounded-md room-card-skeleton" />
+                <div className="h-10 w-full bg-slate-200 rounded-xl room-card-skeleton" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          {pagedRooms.map((room, index) => (
+            <div
+              key={room.id}
+              className="room-card-enter"
+              style={{ animationDelay: `${80 + index * 60}ms` }}
+            >
+              <RoomCard
+                room={room}
+                timeFilterActive={timeFilterActive}
+                timeRange={{
+                  startDate,
+                  startHour,
+                  startMinute,
+                  endDate,
+                  endHour,
+                  endMinute,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loading && pagedRooms.length === 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center flex flex-col items-center">
-          <svg className="w-12 h-12 text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+          <svg
+            className="w-12 h-12 text-slate-300 mb-3"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
+            />
           </svg>
-          <div className="text-base font-semibold text-slate-700">No rooms found</div>
-          <div className="text-sm text-slate-500 mt-1">Try adjusting your filters or search terms.</div>
+          <div className="text-base font-semibold text-slate-700">
+            No rooms found
+          </div>
+          <div className="text-sm text-slate-500 mt-1">
+            Try adjusting your filters or search terms.
+          </div>
         </div>
       )}
 

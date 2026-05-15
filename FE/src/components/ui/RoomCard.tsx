@@ -16,22 +16,32 @@ interface RoomCardProps {
   };
 }
 
-const RoomCard: React.FC<RoomCardProps> = ({ room, timeFilterActive, timeRange }) => {
+const RoomCard: React.FC<RoomCardProps> = ({
+  room,
+  timeFilterActive,
+  timeRange,
+}) => {
   const navigate = useNavigate();
   const isAvailable = room.status === "AVAILABLE";
 
   let statusLabel = room.status;
   let statusColor = "bg-rose-500";
-  let statusMessage = <span className="text-rose-500 font-semibold">In Use</span>;
+  let statusMessage = (
+    <span className="text-rose-500 font-semibold">In Use</span>
+  );
 
   if (room.status === "AVAILABLE") {
     statusLabel = "AVAILABLE";
     statusColor = "bg-emerald-500";
-    statusMessage = <span className="text-emerald-500 font-semibold">Ready now</span>;
+    statusMessage = (
+      <span className="text-emerald-500 font-semibold">Ready now</span>
+    );
   } else if (room.status === "BROKEN") {
     statusLabel = "MAINTENANCE";
     statusColor = "bg-slate-500";
-    statusMessage = <span className="text-slate-500 font-semibold">Maintenance</span>;
+    statusMessage = (
+      <span className="text-slate-500 font-semibold">Maintenance</span>
+    );
   } else if (room.status === "LEARNING") {
     statusLabel = "CLASSROOM";
     statusColor = "bg-purple-500";
@@ -40,7 +50,10 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, timeFilterActive, timeRange }
   }
 
   const capacity = room.capacity || 0;
-  const amenities = Array.isArray(room.amenities) && room.amenities.length > 0 ? room.amenities : [];
+  const amenities =
+    Array.isArray(room.amenities) && room.amenities.length > 0
+      ? room.amenities
+      : [];
 
   const roomImage = room.roomImage;
 
@@ -72,7 +85,12 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, timeFilterActive, timeRange }
             {statusLabel}
           </span>
           <span className="px-3 py-1 rounded-full bg-white/95 backdrop-blur-md text-slate-800 text-[11px] font-semibold shadow-sm flex items-center gap-1.5">
-            <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg
+              className="w-3.5 h-3.5 text-slate-500"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -97,14 +115,24 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, timeFilterActive, timeRange }
         </div>
 
         <div className="flex items-start gap-2 text-sm text-slate-500 mb-5">
-          <svg className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg
+            className="w-4 h-4 mt-0.5 shrink-0 text-slate-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
               d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
             />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+            />
           </svg>
           <span className="line-clamp-2 leading-tight">
             {room.building} &bull; <br />
@@ -120,7 +148,12 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, timeFilterActive, timeRange }
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-100 text-[11px] font-medium text-slate-600"
               >
                 {amenity === "Fast WiFi" && (
-                  <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -130,7 +163,12 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, timeFilterActive, timeRange }
                   </svg>
                 )}
                 {amenity === "4K Projector" && (
-                  <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -140,7 +178,12 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, timeFilterActive, timeRange }
                   </svg>
                 )}
                 {amenity === "Coffee" && (
-                  <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -150,7 +193,12 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, timeFilterActive, timeRange }
                   </svg>
                 )}
                 {amenity === "Pro Audio" && (
-                  <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -170,7 +218,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, timeFilterActive, timeRange }
             type="button"
             className={`w-full py-2.5 rounded-xl text-[13px] font-bold transition-all duration-200 ${
               isAvailable
-                ? "bg-slate-50 text-slate-800 hover:bg-slate-100 border border-slate-200 hover:border-slate-300"
+                ? "bg-orange-500 text-white hover:bg-orange-600 border border-orange-500 hover:border-orange-600"
                 : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200"
             }`}
             onClick={() => {

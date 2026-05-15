@@ -382,14 +382,6 @@ const RoomDetailPage: React.FC = () => {
                 </div>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
-                <div className="text-[11px] text-slate-500 mb-1">
-                  Location code
-                </div>
-                <div className="text-sm font-semibold text-slate-800">
-                  {roomCode}
-                </div>
-              </div>
-              <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
                 <div className="text-[11px] text-slate-500 mb-1">Capacity</div>
                 <div className="text-sm font-semibold text-slate-800">
                   {slot}
