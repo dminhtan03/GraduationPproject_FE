@@ -87,6 +87,11 @@ const AdminRecurringSeriesPage = React.lazy(
 const AdminFeedbackManagementPage = React.lazy(
   () => import("../pages/AdminFeedbackManagement"),
 );
+const TaskListPage = React.lazy(() => import("../pages/TaskList"));
+const TaskCreatePage = React.lazy(() => import("../pages/TaskCreate"));
+const TaskDetailPage = React.lazy(() => import("../pages/TaskDetail"));
+const MeetingListPage = React.lazy(() => import("../pages/MeetingList"));
+const MeetingDetailPage = React.lazy(() => import("../pages/MeetingDetail"));
 const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
 const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 
@@ -579,6 +584,28 @@ export const router = createBrowserRouter([
           </SuspenseWrapper>
         ),
         // end+ chức năng sự kiện đang diễn ra (route live)
+      },
+      // Task Management
+      {
+        path: ROUTES.TASKS,
+        element: <SuspenseWrapper><TaskListPage /></SuspenseWrapper>,
+      },
+      {
+        path: ROUTES.TASK_CREATE,
+        element: <SuspenseWrapper><TaskCreatePage /></SuspenseWrapper>,
+      },
+      {
+        path: ROUTES.TASK_DETAIL,
+        element: <SuspenseWrapper><TaskDetailPage /></SuspenseWrapper>,
+      },
+      // Meeting Management
+      {
+        path: ROUTES.MEETINGS,
+        element: <SuspenseWrapper><MeetingListPage /></SuspenseWrapper>,
+      },
+      {
+        path: ROUTES.MEETING_DETAIL,
+        element: <SuspenseWrapper><MeetingDetailPage /></SuspenseWrapper>,
       },
     ],
   },
