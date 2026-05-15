@@ -7,7 +7,9 @@ interface DatePickerFieldProps {
   value: string;
   onChange: (nextDate: string) => void;
   minDate?: string;
+  maxDate?: string;
   label?: string;
+  onInvalidSelect?: (reason: "past" | "future") => void;
 }
 
 const parseDateOnly = (value?: string) => {
@@ -37,16 +39,22 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
   value,
   onChange,
   minDate,
+  maxDate,
   label,
+  onInvalidSelect,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
 
   const selectedDate = useMemo(() => parseDateOnly(value), [value]);
   const fromDate = useMemo(() => parseDateOnly(minDate), [minDate]);
+  const toDate = useMemo(() => parseDateOnly(maxDate), [maxDate]);
   const disabledDays = useMemo(
-    () => (fromDate ? { before: fromDate } : undefined),
-    [fromDate],
+    () => [
+      ...(fromDate ? [{ before: fromDate }] : []),
+      ...(toDate ? [{ after: toDate }] : []),
+    ],
+    [fromDate, toDate],
   );
 
   useEffect(() => {
@@ -90,7 +98,17 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
             mode="single"
             selected={selectedDate}
             fromDate={fromDate}
+            toDate={toDate}
             disabled={disabledDays}
+            onDayClick={(day, modifiers) => {
+              if (modifiers.disabled && onInvalidSelect) {
+                if (fromDate && day < fromDate) {
+                  onInvalidSelect("past");
+                } else if (toDate && day > toDate) {
+                  onInvalidSelect("future");
+                }
+              }
+            }}
             onSelect={(date) => {
               if (!date) return;
               onChange(toDateInputValue(date));

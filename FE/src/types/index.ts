@@ -163,6 +163,10 @@ export interface Reservation {
   status?: ReservationStatus;
   feedbackId?: string;
   feedbackSubmitted?: boolean;
+  // start+ booking type
+  seriesId?: string;
+  bookingType?: "NORMAL" | "RECURRING" | "EVENT" | string;
+  // end+ booking type
   rawData?: Record<string, unknown>;
 }
 
@@ -200,4 +204,5 @@ export interface UserProfile {
   gender: string;
   cancellationCount: number;
   bookingLockedUntil: Date;
+  statusPay?: "NO_PAY" | "PAID" | null;
 }

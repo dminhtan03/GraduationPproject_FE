@@ -48,7 +48,7 @@ import { buildDateTime } from "../../utils";
 
 const { Title, Paragraph } = Typography;
 
-type BookingTabKey = "history" | "ongoing" | "invitations";
+type BookingTabKey = "history" | "ongoing" | "recurring" | "invitations" | "meeting-with-event";
 type BookingActionType = "check-in" | "return-room" | "extend" | "cancel";
 
 interface BookingActionModalState {
@@ -188,17 +188,42 @@ const normalizeFloorOptions = (payload: unknown): FloorFilterOption[] => {
     .map(({ value, label }) => ({ value, label }));
 };
 
+const ALL_BOOKING_STATUSES = ["RESERVED", "IN_USE", "NO_SHOW", "CANCELLED", "COMPLETED", "FORCE_CANCELLED", "FAILED"];
+
 const TAB_STATUS_FILTERS: Record<BookingTabKey, string[]> = {
   ongoing: ["RESERVED", "IN_USE"],
+  recurring: ALL_BOOKING_STATUSES,
   history: ["NO_SHOW", "CANCELLED", "COMPLETED", "FORCE_CANCELLED", "FAILED"],
   invitations: [],
+  "meeting-with-event": ALL_BOOKING_STATUSES,
 };
 
-const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey) => {
-  const allowedStatuses = [
-    ...TAB_STATUS_FILTERS.ongoing,
-    ...TAB_STATUS_FILTERS.history,
-  ];
+const isEventBooking = (item: Reservation): boolean => {
+  // Check if booking type is EVENT from backend
+  return (item.bookingType || "").toUpperCase() === "EVENT";
+};
+
+const getBookingType = (item: Reservation): "RECURRING" | "EVENT" | "NORMAL" => {
+  const raw = item.rawData as Record<string, unknown> | undefined;
+  const bt = (item.bookingType || "").toUpperCase();
+  if (bt === "RECURRING" || raw?.seriesId) return "RECURRING";
+  if (bt === "EVENT" || raw?.hasEvent) return "EVENT";
+  return "NORMAL";
+};
+
+const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey, eventInvitations: EventInvitation[] = []) => {
+  void eventInvitations;
+
+  if (tabKey === "recurring") {
+    return items.filter((item) => getBookingType(item) === "RECURRING");
+  }
+
+  if (tabKey === "meeting-with-event") {
+    return items.filter((item) => {
+      const status = (item.status || "").toUpperCase();
+      return getBookingType(item) === "EVENT" && TAB_STATUS_FILTERS["meeting-with-event"].includes(status);
+    });
+  }
 
   if (tabKey === "history") {
     return items.filter((item) => {
@@ -207,12 +232,10 @@ const filterItemsByTab = (items: Reservation[], tabKey: BookingTabKey) => {
     });
   }
 
+  // ongoing: NORMAL + EVENT bookings with active statuses
   return items.filter((item) => {
     const status = (item.status || "").toUpperCase();
-    return (
-      TAB_STATUS_FILTERS.ongoing.includes(status) ||
-      !allowedStatuses.includes(status)
-    );
+    return getBookingType(item) !== "RECURRING" && TAB_STATUS_FILTERS.ongoing.includes(status);
   });
 };
 
@@ -573,6 +596,14 @@ const MyBookingsPage: React.FC = () => {
     useState<string>("");
   const [appliedEndTimeFilter, setAppliedEndTimeFilter] = useState<string>("");
   const [cancelReason, setCancelReason] = useState<string>("");
+  const [maxExtendHours, setMaxExtendHours] = useState<number>(8);
+  const [nextBookingTime, setNextBookingTime] = useState<string | null>(null);
+  const [isAcademicConstraint, setIsAcademicConstraint] = useState(false);
+
+  const [checkoutServiceItems, setCheckoutServiceItems] = useState<
+    { name: string; quantity: number; priceSnapshot: number | null; unit?: string | null }[]
+  >([]);
+  const [checkoutServiceLoading, setCheckoutServiceLoading] = useState(false);
 
   // start add currentTime state for auto-enabling buttons
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -678,10 +709,18 @@ const MyBookingsPage: React.FC = () => {
       statusValue: string,
       startTimeValue: string,
       endTimeValue: string,
+      eventInvitations: EventInvitation[] = [],
     ) => {
       setLoading(true);
       setError(null);
       setBookings([]); // Clear old data immediately to prevent showing stale records
+      
+      // Invitations tab handled separately via loadInvitations()
+      if (tabKey === "invitations") {
+        setLoading(false);
+        return;
+      }
+      
       try {
         const selectedBuilding =
           buildingId !== "all"
@@ -698,123 +737,85 @@ const MyBookingsPage: React.FC = () => {
             ? [normalizedStatus]
             : TAB_STATUS_FILTERS[tabKey];
 
-        const hasTimeRange = Boolean(startTimeValue && endTimeValue);
-        const requiresClientFiltering = hasTimeRange || floorId !== "all";
-
-        if (requiresClientFiltering) {
-          // Fetch full data then apply FE filters for floor/time compatibility.
-          const largePageSize = 1000;
-          let allItems: Reservation[] = [];
-
-          try {
-            const result = await reservationService.getMyBookings({
-              page: 0,
-              size: largePageSize,
-              statuses: requestedStatuses,
-              buildingId: buildingId !== "all" ? buildingId : undefined,
-              locationCode: locationCode.trim() || undefined,
-            });
-            allItems = result.items;
-          } catch {
-            const fallbackResult = await reservationService.getMyBookings({
-              page: 0,
-              size: largePageSize,
-              buildingId: buildingId !== "all" ? buildingId : undefined,
-              locationCode: locationCode.trim() || undefined,
-            });
-            allItems =
-              normalizedStatus && normalizedStatus !== "ALL"
-                ? fallbackResult.items.filter(
-                    (item) =>
-                      (item.status || "").toUpperCase() === normalizedStatus,
-                  )
-                : filterItemsByTab(fallbackResult.items, tabKey);
-          }
-
+        const applyExtraFilters = (items: Reservation[]) => {
+          let result = items;
           if (selectedBuilding?.label) {
-            allItems = allItems.filter((item) => {
-              const buildingName = (
-                item.buildingName ||
-                item.address ||
-                ""
-              ).toLowerCase();
-              return buildingName.includes(
-                selectedBuilding.label.toLowerCase(),
-              );
-            });
+            result = result.filter((item) =>
+              (item.buildingName || item.address || "").toLowerCase().includes(selectedBuilding.label.toLowerCase()),
+            );
           }
-
           if (selectedFloor?.label) {
-            allItems = allItems.filter((item) => {
-              const floorName = String(item.floor || "").toLowerCase();
-              return floorName.includes(selectedFloor.label.toLowerCase());
-            });
+            result = result.filter((item) =>
+              String(item.floor || "").toLowerCase().includes(selectedFloor.label.toLowerCase()),
+            );
           }
-
-          if (hasTimeRange) {
+          if (startTimeValue && endTimeValue) {
             const start = parseBookingDateTime(startTimeValue);
             const end = parseBookingDateTime(endTimeValue);
-
             if (start && end) {
-              allItems = allItems.filter((item) => {
+              result = result.filter((item) => {
                 const itemStart = parseBookingDateTime(item.startTime);
-                if (!itemStart) return false;
-                return itemStart >= start && itemStart <= end;
+                return itemStart ? itemStart >= start && itemStart <= end : false;
               });
             }
           }
+          return result;
+        };
 
-          const startIndex = Math.max(nextPage - 1, 0) * nextSize;
-          const paged = allItems.slice(startIndex, startIndex + nextSize);
+        if (tabKey === "recurring" || tabKey === "meeting-with-event") {
+          // Client-side type filtering: fetch large batch, filter by type, paginate locally
+          const result = await reservationService.getMyBookings({
+            page: 0,
+            size: 1000,
+            statuses: requestedStatuses,
+            buildingId: buildingId !== "all" ? buildingId : undefined,
+            locationCode: locationCode.trim() || undefined,
+          });
+          let allItems = filterItemsByTab(result.items, tabKey, eventInvitations);
+          allItems = applyExtraFilters(allItems);
 
-          setBookings(paged);
+          if (tabKey === "recurring") {
+            // Sort ascending by start time
+            allItems.sort((a, b) => {
+              const ta = parseBookingDateTime(a.startTime)?.getTime() ?? 0;
+              const tb = parseBookingDateTime(b.startTime)?.getTime() ?? 0;
+              return ta - tb;
+            });
+          }
+
+          const startIdx = (nextPage - 1) * nextSize;
+          setBookings(allItems.slice(startIdx, startIdx + nextSize));
           setTotal(allItems.length);
+        } else if (tabKey === "history") {
+          // Server-side pagination — history statuses already narrow the result,
+          // show all types (NORMAL + RECURRING + EVENT history)
+          const result = await reservationService.getMyBookings({
+            page: Math.max(nextPage - 1, 0),
+            size: nextSize,
+            statuses: requestedStatuses,
+            buildingId: buildingId !== "all" ? buildingId : undefined,
+            locationCode: locationCode.trim() || undefined,
+            startTime: startTimeValue || undefined,
+            endTime: endTimeValue || undefined,
+          });
+          setBookings(result.items);
+          setTotal(result.total);
         } else {
-          try {
-            const result = await reservationService.getMyBookings({
-              page: Math.max(nextPage - 1, 0),
-              size: nextSize,
-              statuses: requestedStatuses,
-              buildingId: buildingId !== "all" ? buildingId : undefined,
-              locationCode: locationCode.trim() || undefined,
-              startTime: startTimeValue || undefined,
-              endTime: endTimeValue || undefined,
-            });
-            setBookings(result.items);
-            setTotal(result.total);
-          } catch {
-            const fallbackResult = await reservationService.getMyBookings({
-              page: Math.max(nextPage - 1, 0),
-              size: nextSize,
-              buildingId: buildingId !== "all" ? buildingId : undefined,
-              locationCode: locationCode.trim() || undefined,
-            });
-            let filteredItems =
-              normalizedStatus && normalizedStatus !== "ALL"
-                ? fallbackResult.items.filter(
-                    (item) =>
-                      (item.status || "").toUpperCase() === normalizedStatus,
-                  )
-                : filterItemsByTab(fallbackResult.items, tabKey);
-            if (selectedBuilding?.label) {
-              filteredItems = filteredItems.filter((item) => {
-                const buildingName = (
-                  item.buildingName ||
-                  item.address ||
-                  ""
-                ).toLowerCase();
-                return buildingName.includes(
-                  selectedBuilding.label.toLowerCase(),
-                );
-              });
-            }
-            setBookings(filteredItems);
-            setTotal(filteredItems.length);
-          }
+          // ongoing: server-side pagination, exclude RECURRING (they live in Recurring tab)
+          const result = await reservationService.getMyBookings({
+            page: Math.max(nextPage - 1, 0),
+            size: nextSize,
+            statuses: requestedStatuses,
+            buildingId: buildingId !== "all" ? buildingId : undefined,
+            locationCode: locationCode.trim() || undefined,
+            startTime: startTimeValue || undefined,
+            endTime: endTimeValue || undefined,
+          });
+          const items = result.items.filter((item) => getBookingType(item) !== "RECURRING");
+          setBookings(items);
+          const removed = result.items.length - items.length;
+          setTotal(Math.max(0, result.total - removed));
         }
-
-        setPage(nextPage);
-        setPageSize(nextSize);
       } catch (err) {
         setError(extractApiMessage(err, "Unable to load bookings"));
         setBookings([]);
@@ -823,13 +824,13 @@ const MyBookingsPage: React.FC = () => {
         setLoading(false);
       }
     },
-    [buildingOptions, floorOptions],
+    [buildingOptions, floorOptions, invitations],
   );
 
   useEffect(() => {
     if (activeTab === "invitations") return;
     loadBookings(
-      1,
+      page,
       pageSize,
       activeTab,
       appliedBuildingId,
@@ -838,9 +839,11 @@ const MyBookingsPage: React.FC = () => {
       appliedStatusFilter,
       appliedStartTimeFilter,
       appliedEndTimeFilter,
+      invitations,
     );
   }, [
     loadBookings,
+    page,
     pageSize,
     activeTab,
     appliedBuildingId,
@@ -950,7 +953,7 @@ const MyBookingsPage: React.FC = () => {
         updatedItems,
       );
 
-      return filterItemsByTab(updatedItems, activeTab);
+      return filterItemsByTab(updatedItems, activeTab, invitations);
     });
 
     console.log(
@@ -966,6 +969,7 @@ const MyBookingsPage: React.FC = () => {
       appliedStatusFilter,
       appliedStartTimeFilter,
       appliedEndTimeFilter,
+      invitations,
     );
   }, [
     activeTab,
@@ -979,6 +983,7 @@ const MyBookingsPage: React.FC = () => {
     loadBookings,
     page,
     pageSize,
+    invitations,
   ]);
 
   const openActionModal = (type: BookingActionType, booking: Reservation) => {
@@ -989,7 +994,61 @@ const MyBookingsPage: React.FC = () => {
     if (type === "cancel") {
       setCancelReason("");
     }
+    setCheckoutServiceItems([]);
+    setMaxExtendHours(8);
+    setNextBookingTime(null);
+    setIsAcademicConstraint(false);
     setActionModal({ type, booking });
+
+    if (type === "extend" && booking.id) {
+      api
+        .get(buildUrl(API_ENDPOINTS.ROOMS.MAX_EXTEND, { id: booking.id }))
+        .then((res) => {
+          const data = (res as any)?.data?.data ?? (res as any)?.data;
+          const max = Number(data?.maxHours ?? 8);
+          const next = data?.nextBookingStartTime ?? null;
+          const academic = Boolean(data?.isAcademicConstraint);
+          setMaxExtendHours(Math.max(0, Math.min(8, Math.floor(max * 60) / 60)));
+          setNextBookingTime(next);
+          setIsAcademicConstraint(academic);
+          // Clamp extendHour if it exceeds new max
+          setExtendHour((prev) => Math.min(prev, Math.max(1, Math.floor(Math.max(0, Math.min(8, max))))));
+        })
+        .catch(() => {
+          setMaxExtendHours(8);
+          setNextBookingTime(null);
+        });
+    }
+
+    if (type === "return-room" && booking.id) {
+      setCheckoutServiceLoading(true);
+      api
+        .get(buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEMS, { id: booking.id }))
+        .then((res) => {
+          const raw = (res as any)?.data?.data ?? (res as any)?.data;
+          const list = Array.isArray(raw) ? raw : [];
+          const doneItems = list.filter(
+            (item: any) =>
+              (item?.status || "").toUpperCase() === "DONE" &&
+              item?.priceSnapshot != null,
+          );
+          // Group by name — sum quantities, keep unit price
+          const grouped = new Map<string, { name: string; quantity: number; priceSnapshot: number; unit: string | null }>();
+          for (const item of doneItems) {
+            const key = String(item?.name ?? "");
+            const qty = Number(item?.quantity ?? 1);
+            const price = Number(item?.priceSnapshot ?? 0);
+            if (grouped.has(key)) {
+              grouped.get(key)!.quantity += qty;
+            } else {
+              grouped.set(key, { name: key, quantity: qty, priceSnapshot: price, unit: item?.unit ?? null });
+            }
+          }
+          setCheckoutServiceItems(Array.from(grouped.values()));
+        })
+        .catch(() => setCheckoutServiceItems([]))
+        .finally(() => setCheckoutServiceLoading(false));
+    }
   };
 
   const closeActionModal = () => {
@@ -1046,6 +1105,7 @@ const MyBookingsPage: React.FC = () => {
         appliedStatusFilter,
         appliedStartTimeFilter,
         appliedEndTimeFilter,
+        invitations,
       );
     } catch (err) {
       showToast("error", extractApiMessage(err, "Unable to submit feedback"));
@@ -1127,8 +1187,8 @@ const MyBookingsPage: React.FC = () => {
       return;
     }
 
-    if (currentAction.type === "cancel" && !cancelReason.trim()) {
-      showToast("warning", "Please provide a cancellation reason.");
+    if (currentAction.type === "cancel" && cancelReason.trim().length < 2) {
+      showToast("error", "Reason must be at least 2 characters");
       return;
     }
 
@@ -1168,9 +1228,14 @@ const MyBookingsPage: React.FC = () => {
               ? "Extend room completed successfully"
               : "Cancel booking completed successfully";
 
+      const successMessage =
+        currentAction.type === "check-in" || currentAction.type === "return-room"
+          ? actionSuccessFallback
+          : extractBackendSuccessMessage(actionResponse, actionSuccessFallback);
+
       showToast(
         "success",
-        extractBackendSuccessMessage(actionResponse, actionSuccessFallback),
+        successMessage,
       );
 
       // start update profile after cancellation
@@ -1193,6 +1258,7 @@ const MyBookingsPage: React.FC = () => {
         appliedStatusFilter,
         appliedStartTimeFilter,
         appliedEndTimeFilter,
+        invitations,
       );
     } catch (err) {
       const actionErrorMessage = extractApiMessage(
@@ -1224,7 +1290,7 @@ const MyBookingsPage: React.FC = () => {
         void loadInvitations();
         return;
       }
-      loadBookings(1, pageSize, nextTab, "all", "all", "", "all", "", "");
+      loadBookings(1, pageSize, nextTab, "all", "all", "", "all", "", "", invitations);
     }, 0);
   };
 
@@ -1235,13 +1301,32 @@ const MyBookingsPage: React.FC = () => {
     extra: { action?: string },
   ) => {
     if (activeTab === "invitations") return;
-    // Keep filter/sort on current page data in FE; only reload from API when paginating.
+
+    const nextPage = pagination.current || 1;
+    const nextSize = pagination.pageSize || pageSize;
+
+    // If pageSize changed, reset to page 1
+    if (nextSize !== pageSize) {
+      loadBookings(
+        1,
+        nextSize,
+        activeTab,
+        appliedBuildingId,
+        appliedFloorId,
+        appliedLocationCode,
+        appliedStatusFilter,
+        appliedStartTimeFilter,
+        appliedEndTimeFilter,
+        invitations,
+      );
+      return;
+    }
+
+    // Handle pagination (page change)
     if (extra?.action && extra.action !== "paginate") {
       return;
     }
 
-    const nextPage = pagination.current || 1;
-    const nextSize = pagination.pageSize || pageSize;
     loadBookings(
       nextPage,
       nextSize,
@@ -1252,6 +1337,7 @@ const MyBookingsPage: React.FC = () => {
       appliedStatusFilter,
       appliedStartTimeFilter,
       appliedEndTimeFilter,
+      invitations,
     );
   };
 
@@ -1293,6 +1379,7 @@ const MyBookingsPage: React.FC = () => {
         appliedStatusFilter,
         appliedStartTimeFilter,
         appliedEndTimeFilter,
+        invitations,
       );
     },
     [
@@ -1307,6 +1394,7 @@ const MyBookingsPage: React.FC = () => {
       page,
       pageSize,
       totalPages,
+      invitations,
     ],
   );
 
@@ -1391,6 +1479,18 @@ const MyBookingsPage: React.FC = () => {
           <span className="font-medium tracking-wide">
             On-going / In-coming Meeting
           </span>
+        ),
+      },
+      {
+        key: "recurring",
+        label: (
+          <span className="font-medium tracking-wide">Recurring Booking</span>
+        ),
+      },
+      {
+        key: "meeting-with-event",
+        label: (
+          <span className="font-medium tracking-wide">Meeting with Event</span>
         ),
       },
       {
@@ -1676,18 +1776,22 @@ const MyBookingsPage: React.FC = () => {
           !canRender.returnRoom &&
           !canRender.extend &&
           !canRender.cancel &&
-          !canRender.feedback
+          !canRender.feedback &&
+          !(
+            (record.purpose?.toLowerCase().includes("event") ||
+              record.note?.toLowerCase().includes("event")) &&
+            !TAB_STATUS_FILTERS.history.includes(status.toUpperCase())
+          )
         ) {
-          return (
-            <span className="text-xs text-gray-400">No available actions</span>
-          );
+          return null;
         }
 
         return (
           <div className="flex flex-wrap gap-1.5">
             {/* Manage Event button */}
-            {record.purpose?.toLowerCase().includes("event") ||
-            record.note?.toLowerCase().includes("event") ? (
+            {(record.purpose?.toLowerCase().includes("event") ||
+              record.note?.toLowerCase().includes("event")) &&
+            !TAB_STATUS_FILTERS.history.includes(status.toUpperCase()) ? (
               <button
                 type="button"
                 onClick={() =>
@@ -1954,6 +2058,7 @@ const MyBookingsPage: React.FC = () => {
                   appliedStatusFilter,
                   appliedStartTimeFilter,
                   appliedEndTimeFilter,
+                  invitations,
                 )
               }
               className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1977,7 +2082,11 @@ const MyBookingsPage: React.FC = () => {
               description={
                 activeTab === "history"
                   ? "No booking history yet."
-                  : "No on-going/in-coming meetings."
+                  : activeTab === "recurring"
+                    ? "No recurring bookings found."
+                    : activeTab === "meeting-with-event"
+                      ? "No meetings with events."
+                      : "No on-going/in-coming meetings."
               }
             />
           ) : (
@@ -2018,20 +2127,39 @@ const MyBookingsPage: React.FC = () => {
                 rowClassName={(record) => (record.id ? "cursor-pointer" : "")}
                 scroll={{ x: 980 }}
               />
+              
+              {/* Custom Pagination */}
+              {total > 0 && (
+                <div className="border-t border-slate-200 px-6 py-4 bg-slate-50">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <CustomPagination
+                      currentPage={page}
+                      totalPages={Math.ceil(total / pageSize)}
+                      onPageChange={(p) => setPage(p)}
+                      totalItems={total}
+                      pageSize={pageSize}
+                      className="w-full lg:flex-1"
+                    />
+
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setPage(1);
+                      }}
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                    >
+                      <option value="5">5</option>
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {(total > 0 || loading) && (
-            <div className="mt-6 rounded-2xl border border-orange-100 bg-white/90 px-3 py-3 shadow-sm sm:px-4">
-              <CustomPagination
-                currentPage={page}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                totalItems={loading ? 0 : total}
-                pageSize={pageSize}
-              />
-            </div>
-          )}
+
         </>
       ) : (
         <>
@@ -2354,6 +2482,79 @@ const MyBookingsPage: React.FC = () => {
             )}
           </div>
 
+          {/* Service bill summary — only for return-room */}
+          {actionModal?.type === "return-room" && (
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+              <div className="flex items-center gap-2 bg-slate-50 px-4 py-2.5 border-b border-slate-200">
+                <svg className="h-4 w-4 text-orange-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm3 5a1 1 0 000 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm font-semibold text-slate-700">Service Bill</span>
+              </div>
+
+              {checkoutServiceLoading ? (
+                <p className="px-4 py-4 text-sm text-slate-400">Loading services...</p>
+              ) : checkoutServiceItems.length === 0 ? (
+                <p className="px-4 py-4 text-sm text-slate-400">No services used.</p>
+              ) : (
+                <>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-xs font-semibold uppercase text-slate-500">
+                        <th className="px-4 py-2 text-left">Service</th>
+                        <th className="px-4 py-2 text-center">Qty</th>
+                        <th className="px-4 py-2 text-right">Unit price</th>
+                        <th className="px-4 py-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {checkoutServiceItems.map((item, idx) => (
+                        <tr key={idx}>
+                          <td className="px-4 py-2 font-medium text-slate-700">
+                            {item.name}
+                            {item.unit ? <span className="ml-1 text-xs text-slate-400">/{item.unit}</span> : null}
+                          </td>
+                          <td className="px-4 py-2 text-center text-slate-600">{item.quantity}</td>
+                          <td className="px-4 py-2 text-right text-slate-600">
+                            {item.priceSnapshot != null
+                              ? item.priceSnapshot.toLocaleString("vi-VN") + " ₫"
+                              : "-"}
+                          </td>
+                          <td className="px-4 py-2 text-right font-semibold text-slate-800">
+                            {item.priceSnapshot != null
+                              ? (item.quantity * item.priceSnapshot).toLocaleString("vi-VN") + " ₫"
+                              : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-200 bg-slate-50">
+                        <td colSpan={3} className="px-4 py-2.5 text-sm font-bold text-slate-700">
+                          Total
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-base font-bold text-orange-600">
+                          {checkoutServiceItems
+                            .reduce((sum, item) => sum + item.quantity * (item.priceSnapshot ?? 0), 0)
+                            .toLocaleString("vi-VN")}{" "}₫
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+
+                  <div className="flex items-center gap-2 bg-amber-50 border-t border-amber-200 px-4 py-3">
+                    <svg className="h-4 w-4 shrink-0 text-amber-500" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm font-medium text-amber-700">
+                      Please proceed to the lobby to complete your payment.
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {actionModalError && (
             <Alert
               type="error"
@@ -2364,24 +2565,58 @@ const MyBookingsPage: React.FC = () => {
           )}
 
           {actionModal?.type === "extend" && (
-            <div className="rounded-xl border border-slate-200 bg-blue-50 p-3">
-              <label className="block text-sm font-semibold text-slate-700 mb-3">
+            <div className="rounded-xl border border-slate-200 bg-blue-50 p-3 space-y-3">
+              <label className="block text-sm font-semibold text-slate-700">
                 Extend hour(s)
               </label>
-              <InputNumber
-                min={1}
-                max={8}
-                step={1}
-                value={extendHour}
-                onChange={(value) =>
-                  setExtendHour(typeof value === "number" ? value : 1)
-                }
-                className="w-24 text-center"
-              />
-              <p className="text-xs text-slate-600 mt-2">
-                Extend your meeting by {extendHour} hour
-                {extendHour > 1 ? "s" : ""}
+              <div className="flex items-center gap-3">
+                <InputNumber
+                  min={1}
+                  max={Math.max(1, Math.floor(maxExtendHours))}
+                  step={1}
+                  value={extendHour}
+                  onChange={(value) =>
+                    setExtendHour(typeof value === "number" ? Math.min(value, Math.floor(maxExtendHours)) : 1)
+                  }
+                  className="w-24 text-center"
+                />
+                <span className="text-xs text-slate-500">
+                  Max: <span className="font-semibold text-slate-700">{Math.floor(maxExtendHours)}h</span>
+                </span>
+              </div>
+              <p className="text-xs text-slate-600">
+                Extend your meeting by {extendHour} hour{extendHour > 1 ? "s" : ""}
               </p>
+              {nextBookingTime && (
+                <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${isAcademicConstraint ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
+                  <svg className={`h-4 w-4 shrink-0 ${isAcademicConstraint ? "text-red-500" : "text-amber-500"}`} viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
+                  <span className={`text-xs font-medium ${isAcademicConstraint ? "text-red-700" : "text-amber-700"}`}>
+                    {isAcademicConstraint ? (
+                      <>
+                        There is a <span className="font-bold">class scheduled at {nextBookingTime.replace(" (class)", "")}</span> in this room — you can extend up to{" "}
+                        <span className="font-bold">{Math.floor(maxExtendHours)}h</span>.
+                      </>
+                    ) : (
+                      <>
+                        Next booking starts at{" "}
+                        <span className="font-bold">
+                          {(() => {
+                            const raw = nextBookingTime ?? "";
+                            const d = new Date(raw);
+                            return Number.isNaN(d.getTime())
+                              ? raw
+                              : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+                          })()}
+                        </span>
+                        {" — "}you can extend up to{" "}
+                        <span className="font-bold">{Math.floor(maxExtendHours)}h</span>.
+                      </>
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 

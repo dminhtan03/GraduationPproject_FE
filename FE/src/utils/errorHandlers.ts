@@ -12,6 +12,27 @@ const extractMessageFromPayload = (payload: unknown): string | null => {
   if (typeof payload !== "object") return null;
 
   const data = payload as Record<string, unknown>;
+  const errors = Array.isArray(data.errors) ? data.errors : null;
+  const isGenericValidationMessage = (value: unknown) =>
+    typeof value === "string" && value.trim().toLowerCase() === "validation failed";
+  const extractFromErrors = (): string | null => {
+    if (!errors) return null;
+    for (const err of errors) {
+      if (err && typeof err === "object") {
+        const record = err as Record<string, unknown>;
+        const direct = [record.defaultMessage, record.message, record.detail];
+        for (const candidate of direct) {
+          if (typeof candidate === "string" && candidate.trim()) {
+            return candidate.trim();
+          }
+        }
+      }
+
+      const nested = extractMessageFromPayload(err);
+      if (nested) return nested;
+    }
+    return null;
+  };
 
   const directCandidates = [
     data.message,
@@ -23,7 +44,12 @@ const extractMessageFromPayload = (payload: unknown): string | null => {
 
   for (const candidate of directCandidates) {
     if (typeof candidate === "string" && candidate.trim()) {
-      return candidate.trim();
+      const trimmed = candidate.trim();
+      if (isGenericValidationMessage(trimmed)) {
+        const detailed = extractFromErrors();
+        if (detailed) return detailed;
+      }
+      return trimmed;
     }
   }
 
@@ -37,17 +63,20 @@ const extractMessageFromPayload = (payload: unknown): string | null => {
     }
   }
 
+  if (data.errors && typeof data.errors === "object" && !Array.isArray(data.errors)) {
+    for (const value of Object.values(data.errors)) {
+      const nested = extractMessageFromPayload(value);
+      if (nested) return nested;
+    }
+  }
+
   if (data.data != null) {
     const nested = extractMessageFromPayload(data.data);
     if (nested) return nested;
   }
 
-  if (Array.isArray(data.errors)) {
-    for (const err of data.errors) {
-      const nested = extractMessageFromPayload(err);
-      if (nested) return nested;
-    }
-  }
+  const nestedFromErrors = extractFromErrors();
+  if (nestedFromErrors) return nestedFromErrors;
 
   return null;
 };

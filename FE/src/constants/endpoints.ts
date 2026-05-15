@@ -25,8 +25,10 @@ export const API_ENDPOINTS = {
     CHECK_IN: "/api/v1/reservations/check-in/:id",
     RETURN_ROOM: "/api/v1/reservations/return-room/:id",
     EXTEND_ROOM: "/api/v1/reservations/extend/:id",
+    MAX_EXTEND: "/api/v1/reservations/extend/:id/max",
     CANCEL_BOOKING: "/api/v1/reservations/cancel/:id",
     FORCE_CANCEL_BOOKING: "/api/v1/reservations/force-cancel/:id",
+    CONFIRM_PAY: "/api/v1/reservations/confirm-pay/:reservationId",
     // start+ chức năng sự kiện (gọi thêm dịch vụ/tiện ích trong lúc diễn ra)
     RESERVATION_SERVICE_ITEMS: "/api/v1/reservations/:id/service-items",
     // start+ chức năng service item status
@@ -76,6 +78,9 @@ export const API_ENDPOINTS = {
     ADMIN_ADD: "/api/v1/user/admin/add",
     ADMIN_IMPORT_EXCEL: "/api/v1/user/admin/import-excel",
     // end add admin endpoints
+    // start+ check email exists
+    CHECK_EMAIL: "/api/v1/user/check-email",
+    // end+ check email exists
   },
   // Demo data endpoints (sử dụng JSONPlaceholder)
   DEMO: {

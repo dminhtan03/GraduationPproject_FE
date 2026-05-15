@@ -35,7 +35,6 @@ const AdminDashboardPage: React.FC = () => {
 
       {/* ── Main content ── */}
       <main className="min-h-screen px-4 pb-8 pt-5 lg:ml-72 lg:px-8">
-
         {/* Header */}
         <section className="rounded-3xl border border-slate-200/80 bg-white/80 p-5 shadow-sm backdrop-blur-sm sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -91,7 +90,6 @@ const AdminDashboardPage: React.FC = () => {
 
         {/* ── Charts row ── */}
         <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr,380px]">
-
           {/* Bar Chart — Daily Trend */}
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-4">
@@ -124,7 +122,10 @@ const AdminDashboardPage: React.FC = () => {
                 <div className="h-44 w-44 animate-pulse rounded-full bg-slate-100" />
                 <div className="flex-1 space-y-3">
                   {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-4 animate-pulse rounded bg-slate-100" />
+                    <div
+                      key={i}
+                      className="h-4 animate-pulse rounded bg-slate-100"
+                    />
                   ))}
                 </div>
               </div>
@@ -136,7 +137,6 @@ const AdminDashboardPage: React.FC = () => {
 
         {/* ── Summary insight strip ── */}
         <SummaryStrip loading={loading} stats={stats} />
-
       </main>
     </div>
   );

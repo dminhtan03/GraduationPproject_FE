@@ -44,6 +44,7 @@ type BackendChatbotRoomItem = {
 type BackendChatbotResponse = {
   sessionId?: string;
   reply?: string;
+  intent?: string;
   suggestions?: Array<{
     roomId?: string;
     locationCode?: string;
@@ -187,6 +188,14 @@ const mapRoomsToSuggestions = (rooms?: BackendChatbotRoomItem[]) => {
 const normalizeChatResponse = (
   raw: BackendChatbotResponse,
 ): AiChatResponseDto => {
+  const suggestionType =
+    raw.alternativeRooms && raw.alternativeRooms.length > 0
+      ? "alternative"
+      : raw.availableRooms && raw.availableRooms.length > 0
+        ? "available"
+        : raw.suggestions && raw.suggestions.length > 0
+          ? "suggested"
+          : undefined;
   const roomDetail = raw.roomDetail
     ? {
         id: raw.roomDetail.id,
@@ -248,6 +257,8 @@ const normalizeChatResponse = (
   return {
     sessionId: raw.sessionId,
     reply: raw.reply || "I could not generate a response. Please try again.",
+    intent: raw.intent,
+    suggestionType,
     suggestions: mappedSuggestions,
     roomDetail,
     reservationCreated: raw.reservationCreated ?? Boolean(raw.reservation),
@@ -324,31 +335,17 @@ export const aiService = {
     const res = await api.delete<unknown>(
       buildUrl(API_ENDPOINTS.AI.DELETE_CHAT, { sessionId }),
     );
-    const rawResponse = (res.data ?? null) as {
-      message?: unknown;
-      meta?: { message?: unknown };
-    };
-    const payloadData = unwrapData<{
-      sessionId?: string;
-      deletedMessages?: number;
-      message?: string;
-    }>(res.data);
-
-    const toOptionalMessage = (value: unknown) => {
-      if (typeof value !== "string") return undefined;
-      const normalized = value.trim();
-      return normalized || undefined;
-    };
-
-    const message =
-      toOptionalMessage(payloadData?.message) ||
-      toOptionalMessage(rawResponse?.message) ||
-      toOptionalMessage(rawResponse?.meta?.message);
-
+    const payloadData = unwrapData<unknown>(res.data);
+    const deletedMessages =
+      typeof payloadData === "number"
+        ? payloadData
+        : Number(
+            (payloadData as { deletedMessages?: unknown } | null)
+              ?.deletedMessages ?? 0,
+          );
     return {
-      sessionId: payloadData.sessionId || sessionId,
-      deletedMessages: Number(payloadData.deletedMessages ?? 0),
-      message,
+      sessionId,
+      deletedMessages,
     };
   },
 

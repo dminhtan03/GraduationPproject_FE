@@ -9,6 +9,8 @@ export interface ChatMessage {
   sender: Sender;
   text: string;
   createdAt: string;
+  intent?: AiChatResponseDto["intent"];
+  suggestionType?: AiChatResponseDto["suggestionType"];
   suggestions?: AiRoomSuggestion[];
   roomDetail?: AiChatResponseDto["roomDetail"];
   reservation?: Reservation | null;

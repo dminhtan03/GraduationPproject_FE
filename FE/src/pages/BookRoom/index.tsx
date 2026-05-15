@@ -38,7 +38,7 @@ type BookingStep = "form" | "review";
 
 const pad = (value: number) => value.toString().padStart(2, "0");
 const ALL_HOURS = Array.from({ length: 24 }, (_, index) => pad(index));
-const MINUTE_OPTIONS = ["00", "10", "20", "30", "40", "50"];
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
 
 const getScrollableHourOptions = (anchorHour: number) => {
   const safeAnchor = Math.min(23, Math.max(0, anchorHour));
@@ -146,36 +146,21 @@ const getMinStartSlot = (selectedDate: string) => {
   const today = formatDateInput(now);
   if (selectedDate !== today) return null;
 
-  const nextMinuteDate = new Date(now);
-  nextMinuteDate.setMinutes(nextMinuteDate.getMinutes() + 1, 0, 0);
-
-  const roundedMinute = Math.ceil(nextMinuteDate.getMinutes() / 10) * 10;
-  if (roundedMinute === 60) {
-    nextMinuteDate.setHours(nextMinuteDate.getHours() + 1, 0, 0, 0);
-  } else {
-    nextMinuteDate.setMinutes(roundedMinute, 0, 0);
-  }
+  // Allow next minute (1-minute granularity)
+  const next = new Date(now);
+  next.setMinutes(next.getMinutes() + 1, 0, 0);
 
   return {
-    minHour: nextMinuteDate.getHours(),
-    minMinute: nextMinuteDate.getMinutes(),
+    minHour: next.getHours(),
+    minMinute: next.getMinutes(),
   };
 };
 
 const getRoundedCurrentSlot = () => {
   const now = new Date();
-  const rounded = new Date(now);
-
-  const roundedMinute = Math.round(rounded.getMinutes() / 10) * 10;
-  if (roundedMinute === 60) {
-    rounded.setHours(rounded.getHours() + 1, 0, 0, 0);
-  } else {
-    rounded.setMinutes(roundedMinute, 0, 0);
-  }
-
   return {
-    hour: rounded.getHours(),
-    minute: rounded.getMinutes(),
+    hour: now.getHours(),
+    minute: now.getMinutes(),
   };
 };
 
@@ -241,6 +226,11 @@ const BookRoomPage: React.FC = () => {
     [roomId, room],
   );
   const minDate = useMemo(() => formatDateInput(new Date()), []);
+  const maxDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return formatDateInput(d);
+  }, []);
   const nowHour = useMemo(() => new Date().getHours(), []);
 
   // Real-time clock for monitoring
@@ -307,6 +297,24 @@ const BookRoomPage: React.FC = () => {
     () => combineDateTime(endDate, endClock),
     [endDate, endClock],
   );
+
+  const durationExceeds8h = useMemo(() => {
+    if (!startTime || !endTime) return false;
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+    return end.getTime() - start.getTime() > 8 * 60 * 60 * 1000;
+  }, [startTime, endTime]);
+
+  const startExceeds1Week = useMemo(() => {
+    if (!startTime) return false;
+    const start = new Date(startTime);
+    if (Number.isNaN(start.getTime())) return false;
+    const limit = new Date();
+    limit.setDate(limit.getDate() + 7);
+    limit.setHours(23, 59, 59, 999);
+    return start > limit;
+  }, [startTime]);
 
   const startHourOptions = useMemo(() => {
     const selectedHour = Number(getClockHour(startClock));
@@ -420,6 +428,14 @@ const BookRoomPage: React.FC = () => {
       return false;
     }
 
+    const maxAllowed = new Date();
+    maxAllowed.setDate(maxAllowed.getDate() + 7);
+    maxAllowed.setHours(23, 59, 59, 999);
+    if (start > maxAllowed) {
+      message.warning("You can only book up to 7 days in advance.");
+      return false;
+    }
+
     if (end <= now) {
       message.warning("End time must be in the future.");
       return false;
@@ -427,6 +443,12 @@ const BookRoomPage: React.FC = () => {
 
     if (end <= start) {
       message.warning("End time must be later than start time.");
+      return false;
+    }
+
+    const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+    if (durationHours > 8) {
+      message.warning("Maximum booking duration is 8 hours. Please adjust your end time.");
       return false;
     }
 
@@ -618,12 +640,13 @@ const BookRoomPage: React.FC = () => {
                   <div className="mb-3 flex items-center gap-2">
                     <ClockIcon className="h-5 w-5 text-orange-500" />
                     <span className="text-sm font-semibold text-slate-700">
-                      Meeting Time
+                      Meeting Time (Install only one week in advance.)
                     </span>
                   </div>
                   <p className="mb-4 text-xs text-slate-500">
                     Start and end times are auto-validated to prevent booking in
                     the past.
+                  
                   </p>
 
                   <div className="grid gap-4 lg:grid-cols-2">
@@ -636,10 +659,24 @@ const BookRoomPage: React.FC = () => {
                         <DatePickerField
                           value={startDate}
                           minDate={minDate}
+                          maxDate={maxDate}
+                          onInvalidSelect={(reason) => {
+                            if (reason === "past") {
+                              message.warning("Start date cannot be in the past.");
+                            } else {
+                              message.warning("You can only book up to 7 days in advance.");
+                            }
+                          }}
                           onChange={(nextDate) => {
                             if (isDateBefore(nextDate, minDate)) {
                               message.warning(
                                 "Start date cannot be in the past.",
+                              );
+                              return;
+                            }
+                            if (nextDate > maxDate) {
+                              message.warning(
+                                "You can only book up to 7 days in advance.",
                               );
                               return;
                             }
@@ -801,6 +838,24 @@ const BookRoomPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {startExceeds1Week && (
+                    <div className="col-span-2 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700">
+                      <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                      </svg>
+                      You can only book a room up to 7 days in advance. Please select an earlier start time.
+                    </div>
+                  )}
+
+                  {durationExceeds8h && (
+                    <div className="col-span-2 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-700">
+                      <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                      </svg>
+                      Maximum booking duration is 8 hours. Please adjust your end time.
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
