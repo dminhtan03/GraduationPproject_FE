@@ -83,22 +83,22 @@ function AnimatedDropdown<T extends string>({
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
         className={[
-          "flex w-full items-center justify-between rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition",
-          "focus-visible:border-orange-400 focus-visible:ring-2 focus-visible:ring-orange-100",
-          "disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500",
-          isSelecting ? "border-orange-300 bg-orange-50/80" : "",
+          "flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white/95 px-3 text-sm text-slate-800 shadow-sm outline-none transition-all",
+          "hover:border-orange-200 hover:bg-white focus-visible:border-orange-400 focus-visible:ring-2 focus-visible:ring-orange-100",
+          "disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 disabled:shadow-none",
+          isSelecting ? "border-orange-300 bg-orange-50/80 shadow-md" : "",
           buttonClassName,
         ].join(" ")}
       >
         <span className="truncate">{selectedOption?.label || "Select"}</span>
         <ChevronDownIcon
-          className={`ml-2 h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${isOpen ? "rotate-180" : "rotate-0"}`}
+          className={`ml-2 h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : "rotate-0"}`}
         />
       </button>
 
       <div
         className={[
-          "absolute left-0 right-0 z-40 mt-2 max-h-60 overflow-y-auto origin-top rounded-xl border border-slate-200 bg-white p-1 shadow-lg transition-all duration-200",
+          "absolute left-0 right-0 z-40 mt-2 max-h-60 overflow-y-auto origin-top rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-xl ring-1 ring-slate-100 transition-all duration-200",
           isOpen
             ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
             : "pointer-events-none -translate-y-1 scale-95 opacity-0",
@@ -128,10 +128,10 @@ function AnimatedDropdown<T extends string>({
                     setIsOpen(false);
                   }}
                   className={[
-                    "flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition active:scale-[0.98]",
+                    "flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition active:scale-[0.98]",
                     isSelected
                       ? "bg-orange-50 text-orange-700"
-                      : "text-slate-700 hover:bg-slate-50",
+                      : "text-slate-700 hover:bg-orange-50/60",
                     option.disabled
                       ? "cursor-not-allowed opacity-50 hover:bg-transparent"
                       : "",

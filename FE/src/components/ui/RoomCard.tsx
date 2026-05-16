@@ -24,7 +24,7 @@ const RoomCard: React.FC<RoomCardProps> = ({
   const navigate = useNavigate();
   const isAvailable = room.status === "AVAILABLE";
 
-  let statusLabel = room.status;
+  let statusLabel: string = room.status;
   let statusColor = "bg-rose-500";
   let statusMessage = (
     <span className="text-rose-500 font-semibold">In Use</span>
@@ -42,9 +42,18 @@ const RoomCard: React.FC<RoomCardProps> = ({
     statusMessage = (
       <span className="text-slate-500 font-semibold">Maintenance</span>
     );
+  } else if (room.status === "UNAVAILABLE") {
+    statusLabel = "UNAVAILABLE";
+    statusColor = "bg-amber-500";
+    statusMessage = (
+      <span className="text-amber-500 font-semibold">Unavailable</span>
+    );
   } else if (room.status === "LEARNING") {
-    statusLabel = "CLASSROOM";
+    statusLabel = "LEARNING";
     statusColor = "bg-purple-500";
+    statusMessage = (
+      <span className="text-purple-500 font-semibold">Learning</span>
+    );
   } else {
     statusLabel = "OCCUPIED";
   }

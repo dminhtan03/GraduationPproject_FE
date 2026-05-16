@@ -7,9 +7,12 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDownIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { aiService } from "../../services/aiService";
-import type { AiChatResponseDto, AiRoomSuggestion } from "../../types/api";
-import type { UserProfile } from "../../types";
+// Backend AI integration (kept for later use).
+// import { aiService } from "../../services/aiService";
+// import type { AiChatResponseDto } from "../../types/api";
+// import { extractApiMessage } from "../../utils/errorHandlers";
+import type { AiRoomSuggestion } from "../../types/api";
+import type { Reservation, UserProfile } from "../../types";
 import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
@@ -18,8 +21,6 @@ import { ConfirmDialog } from "../../components/common";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
-import { extractApiMessage } from "../../utils/errorHandlers";
-
 import type { ChatMessage, ChatSessionSummary } from "../../types/chat";
 import type {
   SpeechRecognitionEventLike,
@@ -27,12 +28,9 @@ import type {
 } from "../../types/speech.d";
 import {
   createId,
-  createWelcomeMessage,
   formatClock,
   formatDate,
   formatDateTimeLabel,
-  mapDetailMessageToChatMessage,
-  mapHistorySessionToSummary,
   statusClass,
   bookingStatusClass,
   getBookingCardData,
@@ -125,27 +123,206 @@ const deriveStoredSessions = (
     })
     .sort(
       (left, right) =>
-        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+        new Date(right.createdAt).getTime() -
+        new Date(left.createdAt).getTime(),
     );
 
-const mergeSessionsById = (
-  primarySessions: ChatSessionSummary[],
-  secondarySessions: ChatSessionSummary[],
-): ChatSessionSummary[] => {
-  const merged = [...primarySessions];
-  const knownIds = new Set(primarySessions.map((session) => session.id));
+type DemoActionId = "book" | "extend" | "cancel" | "lookup";
 
-  for (const session of secondarySessions) {
-    if (!knownIds.has(session.id)) {
-      merged.push(session);
+interface DemoActionDefinition {
+  id: DemoActionId;
+  title: string;
+  description: string;
+}
+
+interface DemoTimeRange {
+  start: Date;
+  end: Date;
+  extendedEnd: Date;
+}
+
+interface PendingDemoAction {
+  id: DemoActionId;
+  range: DemoTimeRange;
+}
+
+const DEMO_ACTIONS: DemoActionDefinition[] = [
+  {
+    id: "book",
+    title: "Book room",
+    description: "Create a quick booking",
+  },
+  {
+    id: "extend",
+    title: "Extend time",
+    description: "Extend by 30 minutes",
+  },
+  {
+    id: "cancel",
+    title: "Cancel room",
+    description: "Cancel an existing booking",
+  },
+  {
+    id: "lookup",
+    title: "Check today",
+    description: "See today's booked rooms",
+  },
+];
+
+const DEMO_ACTION_KEYWORDS: Record<DemoActionId, string[]> = {
+  book: ["book", "booking", "reserve", "reservation"],
+  extend: ["extend", "add time", "extend time", "extra time"],
+  cancel: ["cancel", "stop"],
+  lookup: ["lookup", "history", "today", "bookings"],
+};
+
+const DEMO_CONFIRM_KEYWORDS = ["confirm", "yes", "ok", "agree"];
+const DEMO_CANCEL_KEYWORDS = ["cancel", "no", "stop"];
+
+const normalizeText = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+const findDemoActionFromText = (value: string): DemoActionId | null => {
+  const normalized = normalizeText(value);
+  for (const action of DEMO_ACTIONS) {
+    const keywords = DEMO_ACTION_KEYWORDS[action.id] || [];
+    if (keywords.some((keyword) => normalized.includes(keyword))) {
+      return action.id;
     }
   }
-
-  return merged.sort(
-    (left, right) =>
-      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
-  );
+  return null;
 };
+
+const isDemoConfirmText = (value: string) => {
+  const normalized = normalizeText(value);
+  return DEMO_CONFIRM_KEYWORDS.some((keyword) => normalized.includes(keyword));
+};
+
+const isDemoCancelText = (value: string) => {
+  const normalized = normalizeText(value);
+  return DEMO_CANCEL_KEYWORDS.some((keyword) => normalized.includes(keyword));
+};
+
+const buildDemoTimeRange = (): DemoTimeRange => {
+  const now = new Date();
+  const start = new Date(now.getTime());
+  start.setMinutes(0, 0, 0);
+  start.setHours(start.getHours() + 1);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const extendedEnd = new Date(end.getTime() + 30 * 60 * 1000);
+
+  return { start, end, extendedEnd };
+};
+
+const buildDemoReservation = (
+  range: DemoTimeRange,
+  overrides?: Partial<Reservation>,
+): Reservation => ({
+  id: "RSV-2026-0516",
+  roomId: "ROOM-B1-402",
+  locationCode: "B1-402",
+  buildingName: "Main Building",
+  floor: "4F",
+  purpose: "Demo team sync",
+  note: "Demo flow",
+  attendeeCount: 6,
+  startTime: range.start.toISOString(),
+  endTime: range.end.toISOString(),
+  status: "APPROVED",
+  ...overrides,
+});
+
+const buildDemoRoomDetail = (
+  checkInTime: string,
+): ChatMessage["roomDetail"] => ({
+  id: "ROOM-B1-402",
+  locationCode: "B1-402",
+  capacity: 12,
+  score: 4.7,
+  amenities: ["TV", "Whiteboard", "HDMI"],
+  currentUserName: "Team Sync",
+  checkInTime,
+});
+
+const buildDemoConfirmText = (action: PendingDemoAction) => {
+  const startLabel = formatDateTimeLabel(action.range.start.toISOString());
+  const endLabel = formatDateTimeLabel(action.range.end.toISOString());
+  const extendedLabel = formatDateTimeLabel(
+    action.range.extendedEnd.toISOString(),
+  );
+
+  if (action.id === "book") {
+    return `Do you want to book room B1-402 from ${startLabel} to ${endLabel}?`;
+  }
+  if (action.id === "extend") {
+    return `Do you want to extend room B1-402 by 30 minutes (until ${extendedLabel})?`;
+  }
+  if (action.id === "cancel") {
+    return `Do you want to cancel the booking for B1-402 at ${startLabel}?`;
+  }
+  return "Do you want to check today's booking history?";
+};
+
+const buildDemoResult = (action: PendingDemoAction) => {
+  const startLabel = formatDateTimeLabel(action.range.start.toISOString());
+  const endLabel = formatDateTimeLabel(action.range.end.toISOString());
+  const extendedLabel = formatDateTimeLabel(
+    action.range.extendedEnd.toISOString(),
+  );
+
+  if (action.id === "book") {
+    return {
+      text: `Demo booking created for B1-402 (${startLabel} - ${endLabel}). Ref: RSV-2026-0516.`,
+      extras: {
+        reservationCreated: true,
+        reservation: buildDemoReservation(action.range),
+        roomDetail: buildDemoRoomDetail(action.range.start.toISOString()),
+      } satisfies Partial<ChatMessage>,
+    };
+  }
+
+  if (action.id === "extend") {
+    return {
+      text: `Extended by 30 minutes. New schedule: ${startLabel} - ${extendedLabel}.`,
+      extras: {
+        reservation: buildDemoReservation(action.range, {
+          endTime: action.range.extendedEnd.toISOString(),
+          note: "Demo extended",
+        }),
+      } satisfies Partial<ChatMessage>,
+    };
+  }
+
+  if (action.id === "cancel") {
+    return {
+      text: "Demo booking cancelled. You can create a new booking anytime.",
+      extras: {
+        reservation: buildDemoReservation(action.range, {
+          status: "CANCELLED",
+          note: "Demo cancelled",
+        }),
+      } satisfies Partial<ChatMessage>,
+    };
+  }
+
+  return {
+    text: `Today's booking history: B1-402 (${startLabel} - ${endLabel}, Approved, Team Sync). B2-301 (14:00 - 15:30, Pending, Project Review).`,
+    extras: {},
+  };
+};
+
+const createDemoWelcomeMessages = (): ChatMessage[] => [
+  {
+    id: createId(),
+    sender: "bot",
+    text: "Welcome! This is demo mode. Use the quick actions below to start.",
+    createdAt: new Date().toISOString(),
+  },
+];
 
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
@@ -161,8 +338,11 @@ const AIAssistantPage: React.FC = () => {
   const [sessions, setSessions] = useState<ChatSessionSummary[]>(
     () => initialStoredSessions,
   );
-  const [selectedSessionId, setSelectedSessionId] = useState<string>(() =>
-    storedAssistantState?.selectedSessionId || initialStoredSessions[0]?.id || "",
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(
+    () =>
+      storedAssistantState?.selectedSessionId ||
+      initialStoredSessions[0]?.id ||
+      "",
   );
   const [messagesBySession, setMessagesBySession] = useState<
     Record<string, ChatMessage[]>
@@ -174,7 +354,6 @@ const AIAssistantPage: React.FC = () => {
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
   const [isMobileHistoryOpen, setIsMobileHistoryOpen] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [pendingDeleteSession, setPendingDeleteSession] =
@@ -183,6 +362,9 @@ const AIAssistantPage: React.FC = () => {
     type: MessageType;
     message: string;
   } | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingDemoAction | null>(
+    null,
+  );
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isHydrated, setIsHydrated] = useState(
     Object.keys(initialStoredMessagesBySession).length > 0,
@@ -194,113 +376,52 @@ const AIAssistantPage: React.FC = () => {
   const manualStopRef = useRef(false);
   const keepListeningRef = useRef(false);
   const transcriptRef = useRef("");
-  const loadedSessionDetailsRef = useRef<Set<string>>(
-    new Set(Object.keys(initialStoredMessagesBySession)),
-  );
 
   const createEmptySession = useCallback(async () => {
-    const aiSessionId = await aiService.addChat();
     const now = new Date().toISOString();
 
     return {
-      id: aiSessionId,
+      id: createId(),
       title: DEFAULT_CHAT_TITLE,
       subtitle: DEFAULT_CHAT_SUBTITLE,
       createdAt: now,
-      aiSessionId,
     } satisfies ChatSessionSummary;
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    const bootstrapChatHistory = async () => {
-      setIsLoadingHistory(true);
-      try {
-        const history = await aiService.getChatHistory();
-        if (cancelled) return;
-
-        const storedSelectedSessionId =
-          storedAssistantState?.selectedSessionId || "";
-
-        if (history.length > 0) {
-          const mappedSessions = history.map(mapHistorySessionToSummary);
-          const mergedSessions = mergeSessionsById(
-            mappedSessions,
-            initialStoredSessions,
-          );
-          const nextSelectedSessionId =
-            mergedSessions.find(
-              (session) => session.id === storedSelectedSessionId,
-            )?.id || mergedSessions[0]?.id || "";
-
-          setSessions(mergedSessions);
-          setSelectedSessionId(nextSelectedSessionId);
-          return;
+    const ensureDemoSession = async () => {
+      if (sessions.length > 0) {
+        if (!selectedSessionId) {
+          setSelectedSessionId(sessions[0]?.id || "");
         }
-
-        if (initialStoredSessions.length > 0) {
-          const nextSelectedSessionId =
-            initialStoredSessions.find(
-              (session) => session.id === storedSelectedSessionId,
-            )?.id || initialStoredSessions[0]?.id || "";
-
-          setSessions(initialStoredSessions);
-          setSelectedSessionId(nextSelectedSessionId);
-          return;
-        }
-
-        const session = await createEmptySession();
-        if (cancelled) return;
-
-        loadedSessionDetailsRef.current.add(session.id);
-        setSessions([session]);
-        setSelectedSessionId(session.id);
-        setMessagesBySession({
-          [session.id]: [createWelcomeMessage()],
-        });
-      } catch {
-        if (cancelled) return;
-
-        if (initialStoredSessions.length > 0) {
-          const nextSelectedSessionId =
-            initialStoredSessions.find(
-              (session) => session.id === storedAssistantState?.selectedSessionId,
-            )?.id || initialStoredSessions[0]?.id || "";
-
-          setSessions(initialStoredSessions);
-          setSelectedSessionId(nextSelectedSessionId);
-          return;
-        }
-
-        const fallbackId = createId();
-        loadedSessionDetailsRef.current.add(fallbackId);
-        setSessions([
-          {
-            id: fallbackId,
-            title: DEFAULT_CHAT_TITLE,
-            subtitle: DEFAULT_CHAT_SUBTITLE,
-            createdAt: new Date().toISOString(),
-          },
-        ]);
-        setSelectedSessionId(fallbackId);
-        setMessagesBySession({
-          [fallbackId]: [createWelcomeMessage()],
-        });
-      } finally {
         if (!cancelled) {
           setIsLoadingHistory(false);
           setIsHydrated(true);
         }
+        return;
       }
+
+      setIsLoadingHistory(true);
+      const session = await createEmptySession();
+      if (cancelled) return;
+
+      setSessions([session]);
+      setSelectedSessionId(session.id);
+      setMessagesBySession({
+        [session.id]: createDemoWelcomeMessages(),
+      });
+      setIsLoadingHistory(false);
+      setIsHydrated(true);
     };
 
-    void bootstrapChatHistory();
+    void ensureDemoSession();
 
     return () => {
       cancelled = true;
     };
-  }, [createEmptySession, initialStoredSessions, storedAssistantState]);
+  }, [createEmptySession, selectedSessionId, sessions]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -345,86 +466,12 @@ const AIAssistantPage: React.FC = () => {
   }, [messagesBySession, selectedSessionId]);
 
   const isSelectedSessionLoading =
-    !!selectedSession &&
-    loadingSessionId === selectedSession.id &&
-    selectedMessages.length === 0;
+    isLoadingHistory && !!selectedSession && selectedMessages.length === 0;
 
   useEffect(() => {
-    if (!selectedSession?.aiSessionId) return;
-    if (loadedSessionDetailsRef.current.has(selectedSession.id)) return;
-
-    let cancelled = false;
-    loadedSessionDetailsRef.current.add(selectedSession.id);
-    setLoadingSessionId(selectedSession.id);
-
-    const loadSessionDetail = async () => {
-      try {
-        const detail = await aiService.getChatHistoryDetail(
-          selectedSession.aiSessionId as string,
-        );
-        if (cancelled) return;
-
-        const mappedMessages = detail.messages
-          .map((message) => mapDetailMessageToChatMessage(message))
-          .filter((message): message is ChatMessage => message !== null);
-
-        setMessagesBySession((prev) => {
-          if ((prev[selectedSession.id]?.length ?? 0) > 0) {
-            return prev;
-          }
-
-          return {
-            ...prev,
-            [selectedSession.id]:
-              mappedMessages.length > 0
-                ? mappedMessages
-                : [createWelcomeMessage()],
-          };
-        });
-
-        setSessions((prev) =>
-          prev.map((session) => {
-            if (session.id !== selectedSession.id) return session;
-
-            const lastMessage = toText(detail.lastMessage);
-            const shouldUpdateTitle = session.title === DEFAULT_CHAT_TITLE;
-
-            return {
-              ...session,
-              title: shouldUpdateTitle
-                ? toSessionTitle(lastMessage)
-                : session.title,
-              subtitle: toSessionSubtitle(lastMessage),
-              createdAt: detail.startedAt || session.createdAt,
-            };
-          }),
-        );
-      } catch {
-        if (cancelled) return;
-
-        setMessagesBySession((prev) => {
-          if ((prev[selectedSession.id]?.length ?? 0) > 0) return prev;
-
-          return {
-            ...prev,
-            [selectedSession.id]: [createWelcomeMessage()],
-          };
-        });
-      } finally {
-        if (!cancelled) {
-          setLoadingSessionId((current) =>
-            current === selectedSession.id ? null : current,
-          );
-        }
-      }
-    };
-
-    void loadSessionDetail();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedSession]);
+    if (!selectedSessionId) return;
+    setPendingAction(null);
+  }, [selectedSessionId]);
 
   const latestMessage = useMemo(
     () => selectedMessages[selectedMessages.length - 1] ?? null,
@@ -455,102 +502,167 @@ const AIAssistantPage: React.FC = () => {
     }
   }
 
-  const sendMessageToAi = useCallback(
-    async (content: string, _mode: "chat" | "voice") => {
-      void _mode;
-      if (!content || isSending || !selectedSession) return;
+  const pendingActionDefinition = useMemo(() => {
+    if (!pendingAction) return null;
+    return (
+      DEMO_ACTIONS.find((action) => action.id === pendingAction.id) || null
+    );
+  }, [pendingAction]);
 
-      const now = new Date().toISOString();
-      const userMessage: ChatMessage = {
-        id: createId(),
-        sender: "user",
-        text: content,
-        createdAt: now,
-      };
-
-      loadedSessionDetailsRef.current.add(selectedSession.id);
+  const appendMessage = useCallback(
+    (message: ChatMessage, options?: { updateTitle?: boolean }) => {
+      if (!selectedSession) return;
 
       setMessagesBySession((prev) => ({
         ...prev,
-        [selectedSession.id]: [
-          ...(prev[selectedSession.id] ?? []),
-          userMessage,
-        ],
+        [selectedSession.id]: [...(prev[selectedSession.id] ?? []), message],
       }));
 
       setSessions((prev) =>
         prev.map((session) => {
           if (session.id !== selectedSession.id) return session;
-          const shouldUpdateTitle = session.title === DEFAULT_CHAT_TITLE;
+          const shouldUpdateTitle =
+            options?.updateTitle && session.title === DEFAULT_CHAT_TITLE;
           return {
             ...session,
             title: shouldUpdateTitle
-              ? content.slice(0, 36) + (content.length > 36 ? "..." : "")
+              ? toSessionTitle(message.text)
               : session.title,
-            subtitle: content,
+            subtitle: toSessionSubtitle(message.text),
           };
         }),
       );
+    },
+    [selectedSession],
+  );
 
+  const appendUserMessage = useCallback(
+    (text: string) => {
+      appendMessage(
+        {
+          id: createId(),
+          sender: "user",
+          text,
+          createdAt: new Date().toISOString(),
+        },
+        { updateTitle: true },
+      );
+    },
+    [appendMessage],
+  );
+
+  const appendBotMessage = useCallback(
+    (text: string, extras?: Partial<ChatMessage>) => {
+      appendMessage({
+        id: createId(),
+        sender: "bot",
+        text,
+        createdAt: new Date().toISOString(),
+        ...extras,
+      });
+    },
+    [appendMessage],
+  );
+
+  const respondWithDelay = useCallback(
+    async (text: string, extras?: Partial<ChatMessage>) => {
       setIsSending(true);
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 350);
+      });
+      appendBotMessage(text, extras);
+      setIsSending(false);
+    },
+    [appendBotMessage],
+  );
+
+  const completeDemoAction = useCallback(
+    async (action: PendingDemoAction) => {
+      const result = buildDemoResult(action);
+      await respondWithDelay(result.text, result.extras);
+    },
+    [respondWithDelay],
+  );
+
+  const sendMessageToAi = useCallback(
+    async (content: string, _mode: "chat" | "voice") => {
+      void _mode;
+      if (!content || isSending || !selectedSession) return;
+
+      appendUserMessage(content);
+
+      /* Backend AI integration (kept for later use).
       try {
         const response: AiChatResponseDto = await aiService.chat({
           message: content,
           sessionId: selectedSession.aiSessionId,
         });
 
-        const botMessage: ChatMessage = {
-          id: createId(),
-          sender: "bot",
-          text: response.reply,
-          createdAt: new Date().toISOString(),
+        appendBotMessage(response.reply, {
           intent: response.intent,
           suggestionType: response.suggestionType,
           suggestions: response.suggestions,
           roomDetail: response.roomDetail,
           reservation: response.reservation,
           reservationCreated: response.reservationCreated,
-        };
-
-        setMessagesBySession((prev) => ({
-          ...prev,
-          [selectedSession.id]: [
-            ...(prev[selectedSession.id] ?? []),
-            botMessage,
-          ],
-        }));
-
-        setSessions((prev) =>
-          prev.map((session) => {
-            if (session.id !== selectedSession.id) return session;
-            return {
-              ...session,
-              subtitle: response.reply,
-              aiSessionId: response.sessionId || session.aiSessionId,
-            };
-          }),
-        );
+        });
+        return;
       } catch (error: unknown) {
-        const fallbackMessage =
-          "I cannot reach the AI service right now. Please try again in a moment.";
-        const botMessage: ChatMessage = {
-          id: createId(),
-          sender: "bot",
-          text: extractApiMessage(error, fallbackMessage),
-          createdAt: new Date().toISOString(),
-        };
-        setMessagesBySession((prev) => ({
-          ...prev,
-          [selectedSession.id]: [
-            ...(prev[selectedSession.id] ?? []),
-            botMessage,
-          ],
-        }));
-      } finally {
-        setIsSending(false);
+        appendBotMessage(
+          extractApiMessage(
+            error,
+            "AI service is unavailable. Please try again later.",
+          ),
+        );
+        return;
       }
+      */
+
+      if (pendingAction) {
+        if (isDemoConfirmText(content)) {
+          await completeDemoAction(pendingAction);
+          setPendingAction(null);
+          return;
+        }
+
+        if (isDemoCancelText(content)) {
+          await respondWithDelay(
+            "Demo request cancelled. You can choose another action anytime.",
+          );
+          setPendingAction(null);
+          return;
+        }
+
+        await respondWithDelay(
+          "A request is waiting for confirmation. Please confirm or cancel first.",
+        );
+        return;
+      }
+
+      const detectedAction = findDemoActionFromText(content);
+      if (detectedAction) {
+        const range = buildDemoTimeRange();
+        const nextPending: PendingDemoAction = {
+          id: detectedAction,
+          range,
+        };
+        setPendingAction(nextPending);
+        await respondWithDelay(buildDemoConfirmText(nextPending));
+        return;
+      }
+
+      await respondWithDelay(
+        "This is demo mode. Use the quick actions below: Book room, Extend time, Cancel room, Check today.",
+      );
     },
-    [isSending, selectedSession],
+    [
+      appendUserMessage,
+      completeDemoAction,
+      isSending,
+      pendingAction,
+      respondWithDelay,
+      selectedSession,
+    ],
   );
 
   const handleSend = useCallback(
@@ -563,6 +675,55 @@ const AIAssistantPage: React.FC = () => {
     },
     [inputValue, sendMessageToAi],
   );
+
+  const handleSelectAction = useCallback(
+    async (actionId: DemoActionId) => {
+      if (isSending || !selectedSession) return;
+
+      const action = DEMO_ACTIONS.find((item) => item.id === actionId);
+      if (!action) return;
+
+      if (pendingAction) {
+        await respondWithDelay(
+          "A request is waiting for confirmation. Finish it before starting another action.",
+        );
+        return;
+      }
+
+      appendUserMessage(action.title);
+
+      const range = buildDemoTimeRange();
+      const nextPending: PendingDemoAction = {
+        id: action.id,
+        range,
+      };
+      setPendingAction(nextPending);
+      await respondWithDelay(buildDemoConfirmText(nextPending));
+    },
+    [
+      appendUserMessage,
+      isSending,
+      pendingAction,
+      respondWithDelay,
+      selectedSession,
+    ],
+  );
+
+  const handleConfirmAction = useCallback(async () => {
+    if (!pendingAction) return;
+    appendUserMessage("Confirm");
+    await completeDemoAction(pendingAction);
+    setPendingAction(null);
+  }, [appendUserMessage, completeDemoAction, pendingAction]);
+
+  const handleCancelAction = useCallback(async () => {
+    if (!pendingAction) return;
+    appendUserMessage("Cancel");
+    await respondWithDelay(
+      "Demo request cancelled. You can choose another action anytime.",
+    );
+    setPendingAction(null);
+  }, [appendUserMessage, pendingAction, respondWithDelay]);
 
   const handleMicClick = useCallback(() => {
     if (isSending || !selectedSession) return;
@@ -1322,7 +1483,6 @@ const AIAssistantPage: React.FC = () => {
     setIsCreatingChat(true);
     try {
       const newSession = await createEmptySession();
-      loadedSessionDetailsRef.current.add(newSession.id);
 
       setSessions((prev) => [
         newSession,
@@ -1331,7 +1491,7 @@ const AIAssistantPage: React.FC = () => {
       setSelectedSessionId(newSession.id);
       setMessagesBySession((prev) => ({
         ...prev,
-        [newSession.id]: [createWelcomeMessage()],
+        [newSession.id]: createDemoWelcomeMessages(),
       }));
       setInputValue("");
     } catch {
@@ -1376,29 +1536,12 @@ const AIAssistantPage: React.FC = () => {
     }
 
     setIsDeletingSession(true);
-    let deleteResult: {
-      sessionId: string;
-      deletedMessages: number;
-      message?: string;
-    } | null = null;
-    try {
-      deleteResult = await aiService.deleteChat(sessionId);
-    } catch (error) {
-      showDeleteToast(
-        "error",
-        extractApiMessage(error, "Unable to delete conversation."),
-      );
-      return;
-    } finally {
-      setIsDeletingSession(false);
-    }
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 200);
+    });
+    setIsDeletingSession(false);
 
-    showDeleteToast(
-      "success",
-      toText(deleteResult?.message) || "Conversation deleted successfully.",
-    );
-
-    loadedSessionDetailsRef.current.delete(targetSession.id);
+    showDeleteToast("success", "Conversation deleted (demo).");
 
     const remainingSessions = sessions.filter(
       (item) => item.id !== targetSession.id,
@@ -1539,9 +1682,10 @@ const AIAssistantPage: React.FC = () => {
                     Conversations
                   </button>
                   <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[11px] font-medium">
-                    {selectedSession?.aiSessionId
-                      ? "Session Synced"
-                      : "New Session"}
+                    Demo Mode
+                  </span>
+                  <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[11px] font-medium">
+                    {selectedSession ? "Local Session" : "New Session"}
                   </span>
                 </div>
               </div>
@@ -1638,6 +1782,80 @@ const AIAssistantPage: React.FC = () => {
             )}
 
             <div className="sticky bottom-0 z-10 border-t border-orange-100 bg-white px-4 py-3 sm:px-6">
+              <div className="relative mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 px-3 py-3 shadow-sm">
+                <div className="pointer-events-none absolute -right-12 -top-10 h-24 w-24 rounded-full bg-sky-200/40 blur-2xl" />
+                <div className="pointer-events-none absolute -left-10 bottom-0 h-16 w-16 rounded-full bg-teal-200/40 blur-2xl" />
+
+                <div className="relative flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">
+                      Quick actions
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-600">
+                      Choose an action and UniBot will ask for confirmation.
+                    </p>
+                  </div>
+                  <span className="inline-flex rounded-full border border-slate-200 bg-white/70 px-2.5 py-1 text-[10px] font-semibold text-slate-700 shadow-sm">
+                    Demo
+                  </span>
+                </div>
+
+                <div className="relative mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {DEMO_ACTIONS.map((action) => (
+                    <button
+                      key={action.id}
+                      type="button"
+                      onClick={() => void handleSelectAction(action.id)}
+                      disabled={
+                        isSending || !selectedSession || !!pendingAction
+                      }
+                      className="group relative flex flex-col items-start rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-left text-[11px] font-semibold text-slate-900 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <span className="text-xs font-semibold">
+                        {action.title}
+                      </span>
+                      <span className="mt-0.5 text-[10px] font-medium text-slate-600">
+                        {action.description}
+                      </span>
+                      <span className="mt-1 h-0.5 w-6 rounded-full bg-sky-400/60 transition-all duration-200 group-hover:w-9" />
+                    </button>
+                  ))}
+                </div>
+
+                {pendingActionDefinition && (
+                  <div className="relative mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" />
+                      <p className="text-[11px] font-semibold text-slate-900">
+                        Waiting for confirmation:{" "}
+                        {pendingActionDefinition.title}
+                      </p>
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-600">
+                      Confirm to proceed or cancel to pick another action.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleConfirmAction()}
+                        disabled={isSending}
+                        className="rounded-lg border border-slate-900 bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-slate-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleCancelAction()}
+                        disabled={isSending}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-end gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-2.5">
                 <textarea
                   value={inputValue}
