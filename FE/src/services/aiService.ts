@@ -44,6 +44,7 @@ type BackendChatbotRoomItem = {
 type BackendChatbotResponse = {
   sessionId?: string;
   reply?: string;
+  message?: string;
   intent?: string;
   suggestions?: Array<{
     roomId?: string;
@@ -83,6 +84,13 @@ type BackendChatbotResponse = {
   };
   availableRooms?: BackendChatbotRoomItem[];
   alternativeRooms?: BackendChatbotRoomItem[];
+  items?: Array<{
+    id?: string;
+    label?: string;
+    roomCode?: string;
+    startTime?: string;
+    endTime?: string;
+  }>;
 };
 
 type BackendChatHistorySummary = {
@@ -270,9 +278,24 @@ const normalizeChatResponse = (
           }))
       : undefined;
 
+  const bookingItems =
+    Array.isArray(raw.items) && raw.items.length > 0
+      ? raw.items.map((item) => ({
+          id: item.id || "",
+          label: item.label || "",
+          roomCode: item.roomCode || "",
+          startTime: item.startTime || "",
+          endTime: item.endTime || "",
+        }))
+      : undefined;
+
   return {
     sessionId: raw.sessionId,
-    reply: raw.reply || "I could not generate a response. Please try again.",
+    reply:
+      raw.reply ||
+      raw.message ||
+      "I could not generate a response. Please try again.",
+    message: raw.message,
     intent: raw.intent,
     suggestionType,
     suggestions: mappedSuggestions,
@@ -280,6 +303,7 @@ const normalizeChatResponse = (
     roomDetail,
     reservationCreated: raw.reservationCreated ?? Boolean(raw.reservation),
     reservation: raw.reservation ?? null,
+    bookingItems,
   };
 };
 

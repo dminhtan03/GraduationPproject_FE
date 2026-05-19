@@ -130,9 +130,18 @@ export interface AiRoomDetailDto {
   }>;
 }
 
+export interface AiBookingItem {
+  id: string;
+  label: string;
+  roomCode: string;
+  startTime: string;
+  endTime: string;
+}
+
 export interface AiChatResponseDto {
   sessionId?: string;
   reply: string;
+  message?: string;
   intent?: string;
   suggestionType?: "available" | "alternative" | "suggested";
   suggestions?: AiRoomSuggestion[];
@@ -140,6 +149,7 @@ export interface AiChatResponseDto {
   roomDetail?: AiRoomDetailDto | null;
   reservationCreated: boolean;
   reservation?: Reservation | null;
+  bookingItems?: AiBookingItem[];
 }
 
 // API endpoint types

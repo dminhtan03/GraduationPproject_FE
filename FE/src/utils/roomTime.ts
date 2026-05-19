@@ -53,3 +53,8 @@ export const buildDateTime = (date: string, hour: string, minute: string) => {
   if (!date || !hour || !minute) return "";
   return `${date}T${hour}:${minute}:00`;
 };
+
+export const isBackendDateTime = (value: string) => {
+  if (!LOCAL_DATE_TIME_PATTERN.test(value)) return false;
+  return !Number.isNaN(new Date(value).getTime());
+};
