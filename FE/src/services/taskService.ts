@@ -122,4 +122,51 @@ export const taskService = {
     const res = await api.post(`${BASE}/${taskId}/supporters/${supporterId}/respond`, { response });
     return extractData(res);
   },
+
+  // ── Comments ──────────────────────────────────────────────────────────────
+  getComments: async (taskId: string) => {
+    const res = await api.get(`${BASE}/${taskId}/comments`);
+    const data = extractData(res);
+    return Array.isArray(data) ? data : [];
+  },
+
+  addComment: async (taskId: string, content: string, parentId?: string) => {
+    const res = await api.post(`${BASE}/${taskId}/comments`, { content, parentId });
+    return extractData(res);
+  },
+
+  deleteComment: async (taskId: string, commentId: string) => {
+    await api.delete(`${BASE}/${taskId}/comments/${commentId}`);
+  },
+
+  // ── Sprints ───────────────────────────────────────────────────────────────
+  listSprints: async () => {
+    const res = await api.get("/api/v1/sprints");
+    const data = extractData(res);
+    return Array.isArray(data) ? data : [];
+  },
+
+  createSprint: async (payload: { name: string; startDate?: string; endDate?: string; status?: string }) => {
+    const res = await api.post("/api/v1/sprints", payload);
+    return extractData(res);
+  },
+
+  getSprint: async (sprintId: string) => {
+    const res = await api.get(`/api/v1/sprints/${sprintId}`);
+    return extractData(res);
+  },
+
+  updateSprint: async (sprintId: string, payload: { name?: string; startDate?: string; endDate?: string; status?: string }) => {
+    const res = await api.put(`/api/v1/sprints/${sprintId}`, payload);
+    return extractData(res);
+  },
+
+  endSprint: async (sprintId: string, targetSprintId?: string) => {
+    const res = await api.post(`/api/v1/sprints/${sprintId}/end`, { targetSprintId });
+    return extractData(res);
+  },
+
+  deleteSprint: async (sprintId: string) => {
+    await api.delete(`/api/v1/sprints/${sprintId}`);
+  },
 };

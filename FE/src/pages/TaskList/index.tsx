@@ -1,17 +1,31 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Tag, Tabs, Empty, Spin, Select } from "antd";
-import { PlusIcon, ClipboardDocumentListIcon } from "@heroicons/react/24/outline";
+import { Tag, Tabs, Empty, Spin, Select, Modal, Input, DatePicker, Button, Tooltip, Dropdown, MenuProps } from "antd";
+import {
+  PlusIcon,
+  ClipboardDocumentListIcon,
+  ViewColumnsIcon,
+  InboxStackIcon,
+  ChartBarIcon,
+  ArrowRightIcon,
+  CheckIcon,
+  BoltIcon,
+  TrashIcon,
+  CalendarIcon,
+  ChevronDownIcon,
+  ChevronRightIcon
+} from "@heroicons/react/24/outline";
+import dayjs from "dayjs";
 import { taskService } from "../../services/taskService";
+import { getProfile } from "../../services/authService";
 import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
+import { Chart as ChartJS, ArcElement, Tooltip as ChartTooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
+import { Doughnut, Bar } from 'react-chartjs-2';
 
-const PRIORITY_COLOR: Record<string, string> = {
-  LOW: "default", MEDIUM: "blue", HIGH: "orange", URGENT: "red",
-};
-const STATUS_COLOR: Record<string, string> = {
-  TODO: "default", DOING: "processing", WAITING_REVIEW: "warning",
-  DONE: "success", CANCELLED: "error", REWORK: "magenta",
-};
+ChartJS.register(ArcElement, ChartTooltip, Legend, CategoryScale, LinearScale, BarElement);
+
+const PRIORITY_COLOR: Record<string, string> = { LOW: "default", MEDIUM: "blue", HIGH: "orange", URGENT: "red" };
+const STATUS_COLOR: Record<string, string> = { TODO: "default", DOING: "processing", WAITING_REVIEW: "warning", DONE: "success", CANCELLED: "error", REWORK: "magenta" };
 
 const fmt = (v?: string) => {
   if (!v) return "-";
@@ -19,119 +33,826 @@ const fmt = (v?: string) => {
   return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("vi-VN");
 };
 
-type TabKey = "my" | "assigned" | "pending" | "approvals" | "personal";
+const getInitials = (name?: string) => {
+  if (!name || name === "Unassigned") return "?";
+  const parts = name.trim().split(" ");
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+type TabKey = "tasks" | "board" | "backlog" | "analytics";
 
 const TaskListPage: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TabKey>("my");
+  const [activeTab, setActiveTab] = useState<TabKey>("tasks");
   const [tasks, setTasks] = useState<any[]>([]);
+  const [sprints, setSprints] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ type: MessageType; message: string } | null>(null);
+
+  // Filters
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Modals
+  const [isSprintModalOpen, setIsSprintModalOpen] = useState(false);
+  const [sprintForm, setSprintForm] = useState({ name: "", startDate: null as any, endDate: null as any });
+  const [isEndingSprint, setIsEndingSprint] = useState(false);
+  const [collapsedSprints, setCollapsedSprints] = useState<Record<string, boolean>>({});
+  const [userId, setUserId] = useState<string | null>(null);
+  
+  // Review & Submit Modals
+  const [submitModalOpen, setSubmitModalOpen] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedTaskForAction, setSelectedTaskForAction] = useState<any>(null);
+  const [resultNote, setResultNote] = useState("");
+  const [reviewComment, setReviewComment] = useState("");
 
   const show = (type: MessageType, message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const load = useCallback(async (tab: TabKey) => {
+  const loadData = useCallback(async () => {
     setLoading(true);
-    setTasks([]);
     try {
-      let data: any[] = [];
-      if (tab === "assigned") data = await taskService.listAssignedToMe();
-      else if (tab === "pending") data = await taskService.listPendingAssignments();
-      else if (tab === "approvals") data = await taskService.listPendingApprovals();
-      else if (tab === "personal") data = await taskService.listMyTasks("personal");
-      else data = await taskService.listMyTasks();
-      setTasks(data);
+      const [tData, sData] = await Promise.all([
+        taskService.listMyTasks(),
+        taskService.listSprints()
+      ]);
+      setTasks(tData);
+      setSprints(sData);
     } catch {
-      show("error", "Failed to load tasks");
+      show("error", "Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(activeTab); }, [activeTab, load]);
+  useEffect(() => { void loadData(); }, [loadData]);
 
-  const filtered = useMemo(() =>
-    statusFilter === "ALL" ? tasks : tasks.filter((t) => t.status === statusFilter),
-    [tasks, statusFilter]);
+  const activeSprint = useMemo(() => sprints.find(s => s.status === "ACTIVE"), [sprints]);
+  const backlogTasks = useMemo(() => tasks.filter(t => !t.sprintId), [tasks]);
+  
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(t => {
+      const matchStatus = statusFilter === "ALL" || t.status === statusFilter;
+      const matchSearch = t.title?.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchStatus && matchSearch;
+    });
+  }, [tasks, statusFilter, searchQuery]);
 
-  const tabItems = [
-    { key: "my", label: "Tasks I Created" },
-    { key: "assigned", label: "Assigned to Me" },
-    { key: "pending", label: "Pending Invites" },
-    { key: "approvals", label: "Pending Approvals" },
-    { key: "personal", label: "Personal" },
-  ];
+  // Sprint Handlers
+  const handleCreateSprint = async () => {
+    if (!sprintForm.name) return show("error", "Sprint name is required");
+    try {
+      await taskService.createSprint({
+        name: sprintForm.name,
+        startDate: sprintForm.startDate ? sprintForm.startDate.toISOString() : undefined,
+        endDate: sprintForm.endDate ? sprintForm.endDate.toISOString() : undefined,
+      });
+      show("success", "Sprint created");
+      setIsSprintModalOpen(false);
+      setSprintForm({ name: "", startDate: null, endDate: null });
+      void loadData();
+    } catch {
+      show("error", "Failed to create sprint");
+    }
+  };
+
+  const handleStartSprint = async (sprintId: string) => {
+    try {
+      if (activeSprint) {
+        show("error", "Another sprint is already active. Complete it first.");
+        return;
+      }
+      await taskService.updateSprint(sprintId, { status: "ACTIVE" });
+      show("success", "Sprint started");
+      void loadData();
+    } catch {
+      show("error", "Failed to start sprint");
+    }
+  };
+
+  const handleCompleteSprint = async () => {
+    if (!activeSprint) return;
+    try {
+      await taskService.endSprint(activeSprint.id);
+      show("success", "Sprint completed");
+      setIsEndingSprint(false);
+      void loadData();
+    } catch {
+      show("error", "Failed to complete sprint");
+    }
+  };
+
+  const handleDeleteSprint = async (sprintId: string) => {
+    if (!window.confirm("Are you sure you want to delete this sprint? Tasks will be moved to backlog.")) return;
+    try {
+      await taskService.deleteSprint(sprintId);
+      show("success", "Sprint deleted");
+      void loadData();
+    } catch {
+      show("error", "Failed to delete sprint");
+    }
+  };
+
+  // Drag & Drop Handlers
+  const onDragStart = (e: React.DragEvent, task: any) => {
+    e.dataTransfer.setData("taskId", task.id);
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const onDropColumn = async (e: React.DragEvent, targetStatus: string) => {
+    e.preventDefault();
+    const taskId = e.dataTransfer.getData("taskId");
+    if (!taskId) return;
+    try {
+      await taskService.changeStatus(taskId, targetStatus);
+      show("success", "Task status updated");
+      void loadData();
+    } catch {
+      show("error", "Failed to update status");
+    }
+  };
+
+  const handleMoveToSprint = async (taskId: string, targetSprintId: string | null) => {
+    try {
+      await taskService.updateTask(taskId, { sprintId: targetSprintId });
+      show("success", "Task moved successfully");
+      void loadData();
+    } catch {
+      show("error", "Failed to move task");
+    }
+  };
+
+  // Status & Role Handlers
+  const getStatusMenuItems = (t: any): MenuProps['items'] => {
+    const isAssignee = t.assignments?.some((a: any) => a.assigneeId === userId);
+    const isReviewer = t.reviewerUserId === userId;
+    const isTaskCreator = t.createdById === userId;
+    
+    // Check sprint creator
+    const sprint = sprints.find(s => s.id === t.sprintId);
+    const isSprintCreator = sprint && sprint.createdById === userId;
+
+    const hasFullPower = isTaskCreator || isSprintCreator;
+
+    const items: any[] = [];
+
+    if (hasFullPower) {
+      if (t.status !== "TODO") items.push({ key: "TODO", label: "TO DO" });
+      if (t.status !== "DOING") items.push({ key: "DOING", label: "IN PROGRESS" });
+      if (t.status !== "WAITING_REVIEW") items.push({ key: "WAITING_REVIEW", label: "IN REVIEW" });
+      if (t.status !== "DONE") items.push({ key: "DONE", label: "DONE" });
+      if (t.status !== "REWORK") items.push({ key: "REWORK", label: "REWORK" });
+      if (t.status !== "CANCELLED") items.push({ key: "CANCELLED", label: "CANCELLED" });
+    } else {
+      if (t.status === "TODO" && isAssignee) {
+        items.push({ key: "DOING", label: "START PROGRESS" });
+      } else if (t.status === "DOING" && isAssignee) {
+        items.push({ key: "TODO", label: "BACK TO TO DO" });
+        if (t.reviewerUserId) {
+          items.push({ key: "WAITING_REVIEW", label: "SUBMIT FOR REVIEW" });
+        } else {
+          items.push({ key: "DONE", label: "MARK AS DONE" });
+        }
+      } else if (t.status === "REWORK" && isAssignee) {
+        if (t.reviewerUserId) {
+          items.push({ key: "WAITING_REVIEW", label: "SUBMIT FOR REVIEW" });
+        } else {
+          items.push({ key: "DONE", label: "MARK AS DONE" });
+        }
+      } else if (t.status === "WAITING_REVIEW" && isReviewer) {
+        items.push({ key: "OPEN_REVIEW_MODAL", label: "REVIEW TASK" });
+      } else if (t.status === "DONE" && isReviewer) {
+        items.push({ key: "WAITING_REVIEW", label: "REVERT TO REVIEW" });
+      }
+    }
+    return items;
+  };
+
+  const handleStatusMenuClick = async (taskId: string, key: string, task: any) => {
+    if (key === "WAITING_REVIEW" && (task.status === "DOING" || task.status === "REWORK")) {
+      setSelectedTaskForAction(task);
+      setResultNote("");
+      setSubmitModalOpen(true);
+    } else if (key === "OPEN_REVIEW_MODAL") {
+      setSelectedTaskForAction(task);
+      setReviewComment("");
+      setReviewModalOpen(true);
+    } else {
+      try {
+        await taskService.changeStatus(taskId, key);
+        show("success", "Task status updated");
+        void loadData();
+      } catch {
+        show("error", "Failed to update status");
+      }
+    }
+  };
+
+  // Action Submissions
+  const handleSubmitTask = async () => {
+    try {
+      await taskService.submitForReview(selectedTaskForAction.id, resultNote);
+      show("success", "Task submitted for review");
+      setSubmitModalOpen(false);
+      void loadData();
+    } catch {
+      show("error", "Failed to submit task");
+    }
+  };
+
+  const handleReviewTask = async (decision: "APPROVED" | "REJECTED") => {
+    try {
+      await taskService.reviewTask(selectedTaskForAction.id, decision, reviewComment);
+      show("success", `Task ${decision.toLowerCase()}`);
+      setReviewModalOpen(false);
+      void loadData();
+    } catch {
+      show("error", "Failed to review task");
+    }
+  };
+
+  // Analytics Data
+  const analyticsData = useMemo(() => {
+    const statusCounts = { TODO: 0, DOING: 0, WAITING_REVIEW: 0, DONE: 0, CANCELLED: 0, REWORK: 0 };
+    const priorityCounts = { LOW: 0, MEDIUM: 0, HIGH: 0, URGENT: 0 };
+    tasks.forEach(t => {
+      if (t.status in statusCounts) statusCounts[t.status as keyof typeof statusCounts]++;
+      if (t.priority in priorityCounts) priorityCounts[t.priority as keyof typeof priorityCounts]++;
+    });
+
+    const activeSprintTasks = activeSprint ? tasks.filter(t => t.sprintId === activeSprint.id) : [];
+    const activeSprintCompleted = activeSprintTasks.filter(t => t.status === "DONE").length;
+    
+    return {
+      statusData: {
+        labels: ['To Do', 'Doing', 'Waiting Review', 'Done', 'Cancelled', 'Rework'],
+        datasets: [{
+          data: [statusCounts.TODO, statusCounts.DOING, statusCounts.WAITING_REVIEW, statusCounts.DONE, statusCounts.CANCELLED, statusCounts.REWORK],
+          backgroundColor: ['#94a3b8', '#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#d946ef'],
+          borderWidth: 0,
+        }]
+      },
+      priorityData: {
+        labels: ['Low', 'Medium', 'High', 'Urgent'],
+        datasets: [{
+          label: 'Tasks by Priority',
+          data: [priorityCounts.LOW, priorityCounts.MEDIUM, priorityCounts.HIGH, priorityCounts.URGENT],
+          backgroundColor: ['#cbd5e1', '#60a5fa', '#fb923c', '#f87171'],
+          borderRadius: 4,
+        }]
+      },
+      activeSprintTotal: activeSprintTasks.length,
+      activeSprintCompleted,
+      activeSprintRate: activeSprintTasks.length ? Math.round((activeSprintCompleted / activeSprintTasks.length) * 100) : 0
+    };
+  }, [tasks, activeSprint]);
 
   return (
-    <div className="fade-in p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="fade-in p-6 max-w-[1400px] mx-auto min-h-screen">
+      {/* Header */}
+      <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Tasks</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage and track your tasks</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Task Workspace</h1>
+          <p className="text-sm text-slate-500 mt-1.5 font-medium">Plan, track, and ship your next big thing.</p>
         </div>
-        <button type="button" onClick={() => navigate("/tasks/create")}
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-600 transition">
-          <PlusIcon className="h-4 w-4" />
-          New Task
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setIsSprintModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition">
+            <PlusIcon className="h-4 w-4 text-slate-500" />
+            Create Sprint
+          </button>
+          <button type="button" onClick={() => navigate("/tasks/create")}
+            className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-600 transition">
+            <PlusIcon className="h-4 w-4" />
+            New Task
+          </button>
+        </div>
+      </div>
+
+      {/* Main Glassmorphic Navigation Tabs */}
+      <div className="mb-6 bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-wrap gap-1">
+        <button type="button" onClick={() => setActiveTab("tasks")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition ${activeTab === "tasks" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
+          <ClipboardDocumentListIcon className="h-4 w-4" />
+          Workplace List
+        </button>
+        <button type="button" onClick={() => setActiveTab("board")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition ${activeTab === "board" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
+          <ViewColumnsIcon className="h-4 w-4" />
+          Sprint Kanban Board
+          {activeSprint && <span className="ml-1 px-2 py-0.5 text-xs bg-orange-100 text-orange-700 rounded-full font-bold">Active</span>}
+        </button>
+        <button type="button" onClick={() => setActiveTab("backlog")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition ${activeTab === "backlog" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
+          <InboxStackIcon className="h-4 w-4" />
+          Backlog Pool
+          {backlogTasks.length > 0 && <span className="ml-1 px-2 py-0.5 text-xs bg-slate-200 text-slate-700 rounded-full font-bold">{backlogTasks.length}</span>}
+        </button>
+        <button type="button" onClick={() => setActiveTab("analytics")}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition ${activeTab === "analytics" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
+          <ChartBarIcon className="h-4 w-4" />
+          Analytics & Metrics
         </button>
       </div>
 
-      <Tabs activeKey={activeTab} onChange={(k) => setActiveTab(k as TabKey)} items={tabItems} className="mb-4" />
-
-      <div className="mb-4 flex items-center gap-3">
-        <Select value={statusFilter} onChange={setStatusFilter} className="w-44"
-          options={[
-            { value: "ALL", label: "All Status" },
-            { value: "TODO", label: "To Do" },
-            { value: "DOING", label: "Doing" },
-            { value: "WAITING_REVIEW", label: "Waiting Review" },
-            { value: "DONE", label: "Done" },
-            { value: "CANCELLED", label: "Cancelled" },
-            { value: "REWORK", label: "Rework" },
-          ]} />
-        <span className="text-sm text-slate-500">{filtered.length} task{filtered.length !== 1 ? "s" : ""}</span>
-      </div>
-
       {loading ? (
-        <div className="flex justify-center py-16"><Spin size="large" /></div>
-      ) : filtered.length === 0 ? (
-        <Empty image={<ClipboardDocumentListIcon className="h-16 w-16 text-slate-200 mx-auto" />}
-          description="No tasks found." />
+        <div className="flex justify-center items-center py-32"><Spin size="large" /></div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map((task) => (
-            <div key={task.id} onClick={() => navigate(`/tasks/${task.id}`)}
-              className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-orange-200 hover:shadow-md transition">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-900 truncate">{task.title}</p>
-                  {task.description && (
-                    <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">{task.description}</p>
-                  )}
+        <>
+          {/* TAB 1: Workplace List View */}
+          {activeTab === "tasks" && (
+            <div className="space-y-4">
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Select value={statusFilter} onChange={setStatusFilter} className="w-44"
+                    options={[
+                      { value: "ALL", label: "All Statuses" },
+                      { value: "TODO", label: "To Do" },
+                      { value: "DOING", label: "In Progress" },
+                      { value: "WAITING_REVIEW", label: "Currently Reviewing" },
+                      { value: "DONE", label: "Done" },
+                      { value: "CANCELLED", label: "Cancelled" },
+                      { value: "REWORK", label: "Rework" },
+                    ]} />
+                  <Input placeholder="Search tasks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-64" />
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Tag color={PRIORITY_COLOR[task.priority] ?? "default"}>{task.priority}</Tag>
-                  <Tag color={STATUS_COLOR[task.status] ?? "default"}>{task.status?.replace(/_/g, " ")}</Tag>
+                <span className="text-sm font-medium text-slate-500">{filteredTasks.length} total tasks</span>
+              </div>
+
+              {filteredTasks.length === 0 ? (
+                <Empty className="py-20 bg-white rounded-3xl border border-slate-100 shadow-sm"
+                  image={<ClipboardDocumentListIcon className="h-16 w-16 text-slate-200 mx-auto" />}
+                  description="No tasks match your filters." />
+              ) : (
+                <div className="grid gap-3.5">
+                  {filteredTasks.map((task) => (
+                    <div key={task.id} onClick={() => navigate(`/tasks/${task.id}`)}
+                      className="cursor-pointer rounded-2xl border border-slate-200/75 bg-white p-5 shadow-sm hover:border-orange-200 hover:shadow-md hover:-translate-y-0.5 transition duration-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1.5">
+                          <p className="font-bold text-slate-900 text-base truncate">{task.title}</p>
+                          <Tag color={PRIORITY_COLOR[task.priority]} className="m-0 text-xs font-bold px-2 py-0.5 border-0 rounded-md bg-opacity-20">{task.priority}</Tag>
+                        </div>
+                        {task.description && <p className="text-sm text-slate-500 line-clamp-1">{task.description}</p>}
+                        
+                        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-slate-500">
+                          <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-slate-300"></div>Due: <span className="text-slate-700">{fmt(task.dueAt)}</span></span>
+                          {task.assignments?.[0] && <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-300"></div>Assignee: <span className="text-slate-700">{task.assignments[0].assigneeName}</span></span>}
+                          {task.reviewerName && <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-300"></div>Reviewer: <span className="text-slate-700">{task.reviewerName}</span></span>}
+                          <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-orange-300"></div>Creator: <span className="text-slate-700">{task.createdByName}</span></span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <Dropdown 
+                          menu={{ items: getStatusMenuItems(task), onClick: (e) => { e.domEvent.stopPropagation(); handleStatusMenuClick(task.id, e.key, task); } }} 
+                          trigger={['click']}
+                          disabled={(getStatusMenuItems(task)?.length || 0) === 0}
+                        >
+                          <Tag color={STATUS_COLOR[task.status]} onClick={e => e.stopPropagation()} className={`m-0 text-xs uppercase font-bold px-3 py-1.5 border-0 shadow-sm rounded-lg ${(getStatusMenuItems(task)?.length || 0) > 0 ? "cursor-pointer hover:opacity-80" : ""}`}>
+                            {task.status?.replace(/_/g, " ")}
+                          </Tag>
+                        </Dropdown>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: Sprint Kanban Board */}
+          {activeTab === "board" && (
+            <div className="space-y-4">
+              {activeSprint ? (
+                <>
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <h2 className="text-lg font-bold text-slate-900">{activeSprint.name}</h2>
+                        <span className="px-2 py-0.5 text-xs bg-emerald-100 text-emerald-700 font-bold rounded-full border border-emerald-200">Active</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Timeline: <span className="font-semibold text-slate-600">{fmt(activeSprint.startDate)}</span> - <span className="font-semibold text-slate-600">{fmt(activeSprint.endDate)}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right hidden md:block">
+                        <p className="text-xs text-slate-400">Sprint Progress</p>
+                        <p className="text-sm font-bold text-slate-700">{analyticsData.activeSprintCompleted} / {analyticsData.activeSprintTotal} completed ({analyticsData.activeSprintRate}%)</p>
+                      </div>
+                      <button type="button" onClick={() => setIsEndingSprint(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 transition">
+                        Complete Sprint
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Kanban Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {[
+                      { title: "To Do", status: "TODO", color: "border-t-4 border-t-slate-400 bg-slate-100/50" },
+                      { title: "In Progress", status: "DOING", color: "border-t-4 border-t-blue-500 bg-blue-50/20" },
+                      { title: "Currently Reviewing", status: "WAITING_REVIEW", color: "border-t-4 border-t-amber-500 bg-amber-50/20" },
+                      { title: "Done", status: "DONE", color: "border-t-4 border-t-emerald-500 bg-emerald-50/20" }
+                    ].map(col => {
+                      const colTasks = tasks.filter(t => t.sprintId === activeSprint.id && t.status === col.status);
+                      return (
+                        <div key={col.status} onDragOver={onDragOver} onDrop={(e) => onDropColumn(e, col.status)}
+                          className={`rounded-2xl p-4 border border-slate-200 min-h-[500px] flex flex-col gap-3 ${col.color}`}>
+                          <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-1">
+                            <span className="font-bold text-slate-700 text-sm">{col.title}</span>
+                            <span className="px-2 py-0.5 text-xs bg-slate-200 text-slate-700 rounded-full font-bold">{colTasks.length}</span>
+                          </div>
+
+                          <div className="flex-1 flex flex-col gap-3 overflow-y-auto max-h-[600px] pr-1">
+                            {colTasks.length === 0 ? (
+                              <div className="flex-1 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-xl py-12 text-xs text-slate-400 text-center">
+                                Drop tasks here
+                              </div>
+                            ) : (
+                              colTasks.map(task => (
+                                <div key={task.id} draggable onDragStart={(e) => onDragStart(e, task)}
+                                  onClick={() => navigate(`/tasks/${task.id}`)}
+                                  className="cursor-pointer bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md hover:border-orange-200 transition duration-150 relative group">
+                                  <p className="font-semibold text-slate-800 text-sm leading-snug truncate">{task.title}</p>
+                                  {task.description && (
+                                    <p className="text-xs text-slate-400 mt-1 line-clamp-2">{task.description}</p>
+                                  )}
+                                  
+                                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[10px]">
+                                    <span className="text-slate-400 font-medium">{task.assignments?.[0]?.assigneeName || "Unassigned"}</span>
+                                    <Tag color={PRIORITY_COLOR[task.priority]} className="m-0 text-[9px] px-1">{task.priority}</Tag>
+                                  </div>
+
+                                  {/* Hover actions menu */}
+                                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                    {col.status === "TODO" && (
+                                      <Tooltip title="Start Working">
+                                        <button type="button" onClick={async (e) => {
+                                          e.stopPropagation();
+                                          await taskService.changeStatus(task.id, "DOING");
+                                          show("success", "Moved to In Progress");
+                                          void loadData();
+                                        }} className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+                                          <ArrowRightIcon className="h-3 w-3" />
+                                        </button>
+                                      </Tooltip>
+                                    )}
+                                    {col.status === "DOING" && (
+                                      <Tooltip title="Submit for Review">
+                                        <button type="button" onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedTaskForAction(task);
+                                          setResultNote("");
+                                          setSubmitModalOpen(true);
+                                        }} className="p-1 bg-amber-500 text-white rounded hover:bg-amber-600 transition">
+                                          <CheckIcon className="h-3 w-3" />
+                                        </button>
+                                      </Tooltip>
+                                    )}
+                                    {col.status === "WAITING_REVIEW" && (
+                                      <Tooltip title="Review Approval">
+                                        <button type="button" onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedTaskForAction(task);
+                                          setReviewComment("");
+                                          setReviewModalOpen(true);
+                                        }} className="p-1 bg-emerald-500 text-white rounded hover:bg-emerald-600 transition">
+                                          <BoltIcon className="h-3 w-3" />
+                                        </button>
+                                      </Tooltip>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <Empty className="py-24 bg-white rounded-3xl border border-slate-100 shadow-sm"
+                  image={<ClipboardDocumentListIcon className="h-16 w-16 text-slate-200 mx-auto" />}
+                  description={
+                    <div>
+                      <p className="text-slate-500 font-medium">No Active Sprint found.</p>
+                      <p className="text-slate-400 text-xs mt-1">Sprints are stages of development. Go to Backlog tab to create and start a Sprint.</p>
+                    </div>
+                  }
+                />
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: Jira-Style Backlog & Sprints Organizer */}
+          {activeTab === "backlog" && (
+            <div className="space-y-6 max-w-[1200px] mx-auto pb-12">
+              {/* Backlog Header */}
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-xl">Backlog</h3>
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-                <span>Due: <span className="font-medium text-slate-600">{fmt(task.dueAt)}</span></span>
-                {task.assignments?.length > 0 && (
-                  <span>Assignee: <span className="font-medium text-slate-600">{task.assignments[0]?.assigneeName || "-"}</span></span>
+
+              {/* Sprints List */}
+              <div className="space-y-8">
+                {sprints.map(sprint => {
+                  const sprintTasks = tasks.filter(t => t.sprintId === sprint.id);
+                  const isCollapsed = collapsedSprints[sprint.id];
+                  
+                  // Task counts
+                  const todoCount = sprintTasks.filter(t => t.status === "TODO").length;
+                  const doingCount = sprintTasks.filter(t => t.status === "DOING" || t.status === "WAITING_REVIEW").length;
+                  const doneCount = sprintTasks.filter(t => t.status === "DONE").length;
+
+                  return (
+                    <div key={sprint.id} className="bg-white rounded border border-slate-200"
+                         onDragOver={onDragOver}
+                         onDrop={async (e) => {
+                           e.preventDefault();
+                           const taskId = e.dataTransfer.getData("taskId");
+                           if (taskId) await handleMoveToSprint(taskId, sprint.id);
+                         }}>
+                      
+                      {/* Jira-style Sprint Header */}
+                      <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-200 flex items-center justify-between group">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setCollapsedSprints(prev => ({ ...prev, [sprint.id]: !prev[sprint.id] }))} className="text-slate-500 hover:bg-slate-200 rounded p-0.5 transition">
+                            {isCollapsed ? <ChevronRightIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
+                          </button>
+                          <h4 className="font-semibold text-slate-800 text-sm">{sprint.name}</h4>
+                          <span className="text-xs text-slate-500 font-medium ml-2">({sprintTasks.length} work items)</span>
+                          
+                          {sprint.status === "ACTIVE" && <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-emerald-100 text-emerald-700 uppercase font-bold rounded">Active</span>}
+                        </div>
+                        
+                        <div className="flex items-center gap-4">
+                          <div className="hidden sm:flex items-center gap-1 text-[10px] font-bold">
+                            <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full">{todoCount}</span>
+                            <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{doingCount}</span>
+                            <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">{doneCount}</span>
+                          </div>
+                          
+                          {sprint.status === "PLANNED" && (
+                            <button onClick={() => handleStartSprint(sprint.id)} className="px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 text-xs font-semibold rounded transition">Start sprint</button>
+                          )}
+                          {sprint.status === "ACTIVE" && (
+                            <button onClick={() => setIsEndingSprint(true)} className="px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 text-xs font-semibold rounded transition">Complete sprint</button>
+                          )}
+                          <button onClick={() => handleDeleteSprint(sprint.id)} className="p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded transition opacity-0 group-hover:opacity-100"><TrashIcon className="h-4 w-4" /></button>
+                        </div>
+                      </div>
+
+                      {/* Jira-style Task List */}
+                      {!isCollapsed && (
+                        <div className="min-h-[40px] flex flex-col bg-white">
+                          {sprintTasks.length === 0 ? (
+                            <div className="p-4 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg m-2 bg-slate-50/50">
+                              Plan a sprint by dragging issues here
+                            </div>
+                          ) : (
+                            sprintTasks.map(t => {
+                              const isDone = t.status === "DONE";
+                              const assigneeName = t.assignments?.[0]?.assigneeName || "Unassigned";
+                              
+                              return (
+                                <div key={t.id} draggable onDragStart={(e) => onDragStart(e, t)}
+                                  className="flex items-center justify-between gap-3 py-2 px-4 bg-white border-b border-slate-100 hover:bg-slate-50 cursor-grab active:cursor-grabbing group">
+                                  <div className="flex items-center gap-3 overflow-hidden flex-1">
+                                    <input type="checkbox" className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 cursor-pointer" />
+                                    
+                                    {/* Issue Type Icon */}
+                                    <div className="w-4 h-4 rounded-sm bg-blue-500 flex items-center justify-center shrink-0">
+                                      <CheckIcon className="w-3 h-3 text-white font-bold" />
+                                    </div>
+                                    
+                                    <span className={`text-[11px] font-medium shrink-0 ${isDone ? 'line-through text-slate-400' : 'text-slate-500'}`}>TSK-{t.id.toString().slice(-4).toUpperCase()}</span>
+                                    
+                                    <span className={`text-[13px] truncate hover:underline cursor-pointer ${isDone ? 'line-through text-slate-500' : 'text-slate-800'}`} onClick={() => navigate(`/tasks/${t.id}`)}>
+                                      {t.title}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-4 shrink-0">
+                                    <Dropdown menu={{ items: getStatusMenuItems(t), onClick: (e) => { e.domEvent.stopPropagation(); handleStatusMenuClick(t.id, e.key, t); } }} trigger={['click']} disabled={(getStatusMenuItems(t)?.length || 0) === 0}>
+                                      <div className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer uppercase border ${
+                                        isDone ? 'bg-green-50 text-green-700 border-green-200' : 
+                                        t.status === 'DOING' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
+                                        'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                      }`}>
+                                        {t.status.replace(/_/g, " ")} 
+                                        <ChevronDownIcon className="w-2.5 h-2.5 inline-block ml-1 mb-0.5" />
+                                      </div>
+                                    </Dropdown>
+                                    
+                                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium w-20">
+                                      {t.dueAt ? (
+                                        <>
+                                          <CalendarIcon className="w-3.5 h-3.5" />
+                                          <span>{dayjs(t.dueAt).format("MMM D")}</span>
+                                        </>
+                                      ) : <span>-</span>}
+                                    </div>
+                                    
+                                    {/* Priority Icon Placeholder */}
+                                    <div className={`w-4 h-4 rounded flex items-center justify-center ${t.priority === 'URGENT' ? 'text-red-500' : t.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-400'}`}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2L14 14H2L8 2Z" /></svg>
+                                    </div>
+
+                                    <Tooltip title={assigneeName}>
+                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ${assigneeName === 'Unassigned' ? 'bg-slate-300' : 'bg-[#172b4d]'}`}>
+                                        {getInitials(assigneeName)}
+                                      </div>
+                                    </Tooltip>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                          <div className="px-4 py-2 text-xs text-slate-500 font-semibold hover:bg-slate-50 cursor-pointer flex items-center gap-2 transition"
+                               onClick={() => navigate('/tasks/create')}>
+                            <PlusIcon className="h-3.5 w-3.5 font-bold" /> Create issue
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Unplanned Backlog */}
+              <div className="mt-8 bg-white rounded border border-slate-200"
+                   onDragOver={onDragOver}
+                   onDrop={async (e) => {
+                     e.preventDefault();
+                     const taskId = e.dataTransfer.getData("taskId");
+                     if (taskId) await handleMoveToSprint(taskId, null);
+                   }}>
+                
+                {/* Backlog Header */}
+                <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-200 flex items-center justify-between group">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setCollapsedSprints(prev => ({ ...prev, backlog: !prev.backlog }))} className="text-slate-500 hover:bg-slate-200 rounded p-0.5 transition">
+                      {collapsedSprints.backlog ? <ChevronRightIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
+                    </button>
+                    <h4 className="font-semibold text-slate-800 text-sm">Backlog</h4>
+                    <span className="text-xs text-slate-500 font-medium ml-2">({backlogTasks.length} work items)</span>
+                  </div>
+                  <button onClick={() => setIsSprintModalOpen(true)} className="px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 text-xs font-semibold rounded transition">Create sprint</button>
+                </div>
+
+                {!collapsedSprints.backlog && (
+                  <div className="min-h-[60px] flex flex-col bg-white">
+                    {backlogTasks.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-lg m-4 bg-slate-50/50">
+                        Your backlog is empty.
+                      </div>
+                    ) : (
+                      backlogTasks.map(t => {
+                        const isDone = t.status === "DONE";
+                        const assigneeName = t.assignments?.[0]?.assigneeName || "Unassigned";
+
+                        return (
+                          <div key={t.id} draggable onDragStart={(e) => onDragStart(e, t)}
+                            className="flex items-center justify-between gap-3 py-2 px-4 bg-white border-b border-slate-100 hover:bg-slate-50 cursor-grab active:cursor-grabbing group">
+                            <div className="flex items-center gap-3 overflow-hidden flex-1">
+                              <input type="checkbox" className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 cursor-pointer" />
+                              <div className="w-4 h-4 rounded-sm bg-blue-500 flex items-center justify-center shrink-0">
+                                <CheckIcon className="w-3 h-3 text-white font-bold" />
+                              </div>
+                              <span className={`text-[11px] font-medium shrink-0 ${isDone ? 'line-through text-slate-400' : 'text-slate-500'}`}>TSK-{t.id.toString().slice(-4).toUpperCase()}</span>
+                              <span className={`text-[13px] truncate hover:underline cursor-pointer ${isDone ? 'line-through text-slate-500' : 'text-slate-800'}`} onClick={() => navigate(`/tasks/${t.id}`)}>{t.title}</span>
+                            </div>
+                            
+                            <div className="flex items-center gap-4 shrink-0">
+                              <Dropdown menu={{ items: getStatusMenuItems(t), onClick: (e) => { e.domEvent.stopPropagation(); handleStatusMenuClick(t.id, e.key, t); } }} trigger={['click']} disabled={(getStatusMenuItems(t)?.length || 0) === 0}>
+                                <div className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer uppercase border ${
+                                  isDone ? 'bg-green-50 text-green-700 border-green-200' : 
+                                  t.status === 'DOING' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
+                                  'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                }`}>
+                                  {t.status.replace(/_/g, " ")} 
+                                  <ChevronDownIcon className="w-2.5 h-2.5 inline-block ml-1 mb-0.5" />
+                                </div>
+                              </Dropdown>
+                              
+                              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium w-20">
+                                {t.dueAt ? (
+                                  <>
+                                    <CalendarIcon className="w-3.5 h-3.5" />
+                                    <span>{dayjs(t.dueAt).format("MMM D")}</span>
+                                  </>
+                                ) : <span>-</span>}
+                              </div>
+                              
+                              <div className={`w-4 h-4 rounded flex items-center justify-center ${t.priority === 'URGENT' ? 'text-red-500' : t.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-400'}`}>
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2L14 14H2L8 2Z" /></svg>
+                              </div>
+
+                              <Tooltip title={assigneeName}>
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ${assigneeName === 'Unassigned' ? 'bg-slate-300' : 'bg-[#172b4d]'}`}>
+                                  {getInitials(assigneeName)}
+                                </div>
+                              </Tooltip>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                    <div className="px-4 py-2 text-xs text-slate-500 font-semibold hover:bg-slate-50 cursor-pointer flex items-center gap-2 transition"
+                         onClick={() => navigate('/tasks/create')}>
+                      <PlusIcon className="h-3.5 w-3.5 font-bold" /> Create issue
+                    </div>
+                  </div>
                 )}
-                {task.reviewerName && (
-                  <span>Reviewer: <span className="font-medium text-slate-600">{task.reviewerName}</span></span>
-                )}
-                <span>By: <span className="font-medium text-slate-600">{task.createdByName}</span></span>
               </div>
             </div>
-          ))}
-        </div>
+          )}
+
+          {/* TAB 4: Analytics */}
+          {activeTab === "analytics" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto pb-12">
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80">
+                <h3 className="text-base font-bold text-slate-800 mb-6">Task Status Distribution</h3>
+                <div className="h-64 flex justify-center">
+                  <Doughnut data={analyticsData.statusData} options={{ maintainAspectRatio: false, cutout: '75%' }} />
+                </div>
+              </div>
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80">
+                <h3 className="text-base font-bold text-slate-800 mb-6">Task Priority Levels</h3>
+                <div className="h-64 flex justify-center">
+                  <Bar data={analyticsData.priorityData} options={{ maintainAspectRatio: false, scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } }} />
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
+
+      {/* Modals */}
+      <Modal title="Create Sprint" open={isSprintModalOpen} onCancel={() => setIsSprintModalOpen(false)} onOk={handleCreateSprint} okText="Create Sprint">
+        <div className="space-y-4 pt-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Sprint Name</label>
+            <Input placeholder="e.g. Sprint 1, Q3 Planning..." value={sprintForm.name} onChange={e => setSprintForm({ ...sprintForm, name: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Start Date</label>
+              <DatePicker className="w-full" value={sprintForm.startDate ? dayjs(sprintForm.startDate) : null} onChange={d => setSprintForm({ ...sprintForm, startDate: d ? d.toDate() : null })} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">End Date</label>
+              <DatePicker className="w-full" value={sprintForm.endDate ? dayjs(sprintForm.endDate) : null} onChange={d => setSprintForm({ ...sprintForm, endDate: d ? d.toDate() : null })} />
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal title="Complete Sprint" open={isEndingSprint} onCancel={() => setIsEndingSprint(false)} onOk={handleCompleteSprint} okText="Complete Sprint" okButtonProps={{ danger: true }}>
+        <p className="text-slate-600 mt-2">Are you sure you want to complete this sprint? All unresolved tasks will be automatically moved to the Backlog pool.</p>
+        <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <p className="text-sm font-bold text-slate-800">Sprint Summary</p>
+          <div className="flex gap-4 mt-2">
+            <div className="flex-1 text-center p-2 bg-white rounded-md border border-slate-100">
+              <span className="block text-xl font-bold text-emerald-500">{analyticsData.activeSprintCompleted}</span>
+              <span className="text-xs text-slate-500">Completed</span>
+            </div>
+            <div className="flex-1 text-center p-2 bg-white rounded-md border border-slate-100">
+              <span className="block text-xl font-bold text-amber-500">{analyticsData.activeSprintTotal - analyticsData.activeSprintCompleted}</span>
+              <span className="text-xs text-slate-500">Incomplete</span>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal title="Submit for Review" open={submitModalOpen} onCancel={() => setSubmitModalOpen(false)} onOk={handleSubmitTask} okText="Submit" cancelText="Cancel">
+        <p className="text-sm text-slate-600 mb-2">Provide any notes or links to your work for the reviewer.</p>
+        <Input.TextArea rows={4} placeholder="Result Note / PR Link..." value={resultNote} onChange={e => setResultNote(e.target.value)} />
+      </Modal>
+
+      <Modal title="Review Task" open={reviewModalOpen} onCancel={() => setReviewModalOpen(false)} footer={null}>
+        <div className="space-y-4 mt-4">
+          <p className="text-sm text-slate-600">Please review the task completion. You can either approve or request rework.</p>
+          <Input.TextArea rows={3} placeholder="Review comment (optional)..." value={reviewComment} onChange={e => setReviewComment(e.target.value)} />
+          <div className="flex items-center gap-3 justify-end pt-2">
+            <Button onClick={() => setReviewModalOpen(false)}>Cancel</Button>
+            <Button danger onClick={() => handleReviewTask("REJECTED")}>Request Rework</Button>
+            <Button type="primary" className="bg-emerald-500 hover:bg-emerald-600 border-none" onClick={() => handleReviewTask("APPROVED")}>Approve & Complete</Button>
+          </div>
+        </div>
+      </Modal>
 
       {toast && <CustomMessage type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
     </div>
