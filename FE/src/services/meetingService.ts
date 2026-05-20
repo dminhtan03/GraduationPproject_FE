@@ -52,6 +52,27 @@ export const meetingService = {
     return extractData(res);
   },
 
+  getMeetingByReservation: async (reservationId: string) => {
+    const res = await api.get(`/api/v1/meetings/by-reservation/${reservationId}`);
+    return extractData(res) as {
+      meetingId: string;
+      title: string;
+      summary: string;
+      transcript: string;
+      status: string;
+      createdAt: string;
+      tasks: {
+        draftId: string;
+        title: string;
+        description: string;
+        priority: string;
+        dueAt: string;
+        aiConfidence: number;
+        createdTaskId: string | null;
+      }[];
+    } | null;
+  },
+
   approveDraft: async (draftId: string) => {
     const res = await api.post(`${DRAFTS}/${draftId}/approve`);
     return extractData(res);

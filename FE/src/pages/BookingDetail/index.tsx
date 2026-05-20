@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Alert, Tag, Typography } from "antd";
 import MeetingRecorder from "../../components/meeting/MeetingRecorder";
+import { meetingService } from "../../services/meetingService";
 import { reservationService } from "../../services/reservationService";
 import { roomService } from "../../services/roomService";
 import { getProfile } from "../../services/authService";
@@ -118,6 +119,7 @@ const BookingDetailPage: React.FC = () => {
   const [eventData, setEventData] = useState<Record<string, unknown> | null>(null);
   const [profileId, setProfileId] = useState<string>("");
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const [existingMeeting, setExistingMeeting] = useState<any | null>(null);
   const [roomImageUrls, setRoomImageUrls] = useState<string[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
   const fetchedDetailIdRef = useRef<string>("");
@@ -182,6 +184,13 @@ const BookingDetailPage: React.FC = () => {
 
     void loadDetail();
   }, [bookingFromState?.id, bookingFromState?.rawData, normalizedBookingId]);
+
+  useEffect(() => {
+    if (!normalizedBookingId) return;
+    meetingService.getMeetingByReservation(normalizedBookingId)
+      .then((data) => setExistingMeeting(data ?? null))
+      .catch(() => setExistingMeeting(null));
+  }, [normalizedBookingId]);
 
   useEffect(() => {
     if (!normalizedBookingId) return;
@@ -623,11 +632,12 @@ const BookingDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Meeting recording — visible only when room is IN_USE */}
-          {String(mergedDetail.status || "").toUpperCase() === "IN_USE" && (
+          {/* Meeting recording — hiển thị khi IN_USE hoặc khi đã có dữ liệu từ trước */}
+          {(String(mergedDetail.status || "").toUpperCase() === "IN_USE" || existingMeeting) && (
             <MeetingRecorder
               reservationId={normalizedBookingId}
               meetingTitle={purposeLabel !== "Not found" ? purposeLabel : undefined}
+              initialData={existingMeeting}
             />
           )}
 
