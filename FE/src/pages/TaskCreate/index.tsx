@@ -17,7 +17,7 @@ const TaskCreatePage: React.FC = () => {
   const [assigneeId, setAssigneeId] = useState("");
   const [reviewerUserId, setReviewerUserId] = useState("");
   const [userResults, setUserResults] = useState<{ id: string; fullName: string; email: string }[]>([]);
-  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ type: MessageType; message: string } | null>(null);
@@ -126,7 +126,8 @@ const TaskCreatePage: React.FC = () => {
         {textarea("Expected Result", "expectedResult", "Expected deliverable...")}
 
         <hr className="border-slate-100" />
-        <p className="text-xs font-semibold uppercase text-slate-400 -mb-2">Optional: Assign on creation</p>
+
+        <p className="text-xs font-semibold uppercase text-slate-400 pt-2 -mb-2">Optional: Assign on creation</p>
 
         <div>
           <label className="mb-1.5 block text-sm font-semibold text-slate-700">Assign to</label>

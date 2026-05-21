@@ -62,7 +62,7 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => clearInterval(timerRef.current), []);

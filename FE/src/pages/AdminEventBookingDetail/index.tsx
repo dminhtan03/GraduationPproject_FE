@@ -15,6 +15,7 @@ import { useAdminEventBookingDetail } from "../../hooks/useAdminEventBookingDeta
 const AdminEventBookingDetailPage: React.FC = () => {
   const {
     navigate,
+    detail,
     eventData,
     loading,
     adminName,
@@ -35,6 +36,12 @@ const AdminEventBookingDetailPage: React.FC = () => {
     startTime,
     endTime,
   } = useAdminEventBookingDetail();
+
+  const [historyOpen, setHistoryOpen] = React.useState(true);
+
+  const reservationStatus = (detail as any)?.status || (detail as any)?.reservation?.status || "UNKNOWN";
+  const confirmPayLoading = false;
+  const handleConfirmPay = () => {};
 
   return (
     <div className="flex min-h-screen bg-slate-50/50">
@@ -242,20 +249,22 @@ const AdminEventBookingDetailPage: React.FC = () => {
                   {historyLines.length}
                 </span>
               )}
-            </div>
-            <div className="p-5">
-              <p className="mb-4 text-sm text-slate-500">
-                Processed orders. Status cannot be changed.
-              </p>
-              <div className="overflow-hidden rounded-xl border border-slate-200">
-                <AdminServiceTable
-                  lines={historyLines}
-                  editable={false}
-                  emptyText="No completed or cancelled orders yet."
-                  showDot={false}
-                />
+            </button>
+            {historyOpen && (
+              <div className="p-5">
+                <p className="mb-4 text-sm text-slate-500">
+                  Processed orders. Status cannot be changed.
+                </p>
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <AdminServiceTable
+                    lines={historyLines}
+                    editable={false}
+                    emptyText="No completed or cancelled orders yet."
+                    showDot={false}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* ── SUMMARY TABLE ── */}
