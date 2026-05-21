@@ -1,10 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Typography, Table, Alert } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import { Alert } from "antd";
 import { useNavigate } from "react-router-dom";
 import { ClockIcon } from "@heroicons/react/24/outline";
 import { roomService } from "../../services/roomService";
-import { ROUTES } from "../../constants";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import DatePickerField from "../../components/common/DatePickerField";
 import AnimatedDropdown, {
@@ -13,75 +11,30 @@ import AnimatedDropdown, {
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
-import { useRealtimeClock } from "../../hooks";
+import { useRoomListFilter } from "../../hooks/useRoomListFilter";
 import {
-  HOUR_OPTIONS,
-  MINUTE_OPTIONS,
   LOCAL_DATE_TIME_PATTERN,
   buildDateTime,
-  clampToRange,
-  getCurrentTimeRange,
   normalizeLocalDateTime,
-  toDateInputValue,
-  toTotalMinutes,
 } from "../../utils";
-
-const { Title, Text } = Typography;
-
-type RoomListStatus = "AVAILABLE" | "UNAVAILABLE" | "BROKEN" | "LEARNING";
-type FilterType = "all" | "available" | "unavailable" | "broken" | "learning";
-
-interface RoomListItem {
-  id: string;
-  roomName: string;
-  building: string;
-  floorInfo?: string;
-  status: RoomListStatus;
-  buildingId: string;
-  floorId: string;
-}
-
-interface RawMapRoom {
-  roomId?: string;
-  id?: string;
-  locationCode?: string;
-  roomName?: string;
-  status?: string;
-}
-
-interface RawMapFloor {
-  floorId: string;
-  floorName?: string;
-  rooms?: RawMapRoom[];
-}
-
-interface RawMapBuilding {
-  buildingId: string;
-  buildingName?: string;
-  floors?: RawMapFloor[];
-}
-
-const PAGE_SIZE = 10;
-
-const roomStatusFilterOptions: Array<AnimatedDropdownOption<FilterType>> = [
-  { value: "all", label: "All" },
-  { value: "available", label: "Available" },
-  { value: "unavailable", label: "Unavailable" },
-  { value: "broken", label: "Maintenance" },
-  { value: "learning", label: "Learning" },
-];
-
-const getStatusBadgeClass = (status: RoomListStatus) => {
-  if (status === "AVAILABLE") return "bg-green-100 text-green-700";
-  if (status === "BROKEN") return "bg-slate-200 text-slate-700";
-  if (status === "LEARNING") return "bg-purple-100 text-purple-700";
-  return "bg-red-100 text-red-600";
-};
+import {
+  buildTimeStatusOverrides,
+  normalizeRoomsMap,
+} from "../../utils/roomList";
+import CustomPagination from "../../components/common/CustomPagination";
+import RoomCard from "../../components/ui/RoomCard";
+import {
+  ROOM_LIST_PAGE_SIZE,
+  roomStatusFilterOptions,
+} from "../../constants/roomList";
+import type {
+  FilterType,
+  RoomListItem,
+  RoomListStatus,
+} from "../../types/roomList";
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const currentTimeRange = useMemo(() => getCurrentTimeRange(), []);
-  const clockTick = useRealtimeClock();
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,12 +42,6 @@ const DashboardPage: React.FC = () => {
   const [filter, setFilter] = useState<FilterType>("all");
   const [selectedBuildingId, setSelectedBuildingId] = useState("all");
   const [selectedFloorId, setSelectedFloorId] = useState("all");
-  const [startDate, setStartDate] = useState(currentTimeRange.startDate);
-  const [startHour, setStartHour] = useState(currentTimeRange.startHour);
-  const [startMinute, setStartMinute] = useState(currentTimeRange.startMinute);
-  const [endDate, setEndDate] = useState(currentTimeRange.endDate);
-  const [endHour, setEndHour] = useState(currentTimeRange.endHour);
-  const [endMinute, setEndMinute] = useState(currentTimeRange.endMinute);
   const [timeFilterActive, setTimeFilterActive] = useState(false);
   const [timeStatusOverrides, setTimeStatusOverrides] = useState<
     Record<string, RoomListStatus>
@@ -113,220 +60,43 @@ const DashboardPage: React.FC = () => {
     }, 3000);
   };
 
-  const nowParts = useMemo(() => {
-    const now = new Date(clockTick);
-    return {
-      date: toDateInputValue(now),
-      hour: String(now.getHours()).padStart(2, "0"),
-      minute: String(now.getMinutes()).padStart(2, "0"),
-    };
-  }, [clockTick]);
-
-  const minStartMinutes = useMemo(
-    () => toTotalMinutes(nowParts.hour, nowParts.minute),
-    [nowParts.hour, nowParts.minute],
-  );
-
-  const minEndDate = useMemo(
-    () => (startDate > nowParts.date ? startDate : nowParts.date),
-    [nowParts.date, startDate],
-  );
-
-  const minEndMinutes = useMemo(() => {
-    const nowMinutes = toTotalMinutes(nowParts.hour, nowParts.minute);
-    const startMinutes = toTotalMinutes(startHour, startMinute);
-
-    if (startDate === nowParts.date && minEndDate === nowParts.date) {
-      return Math.max(nowMinutes, startMinutes);
-    }
-
-    if (minEndDate === nowParts.date) {
-      return nowMinutes;
-    }
-
-    if (minEndDate === startDate) {
-      return startMinutes;
-    }
-
-    return 0;
-  }, [
+  const {
+    startDate,
+    setStartDate,
+    startHour,
+    setStartHour,
+    startMinute,
+    setStartMinute,
+    endDate,
+    setEndDate,
+    endHour,
+    setEndHour,
+    endMinute,
+    setEndMinute,
+    startHourDropdownOptions,
+    startMinuteDropdownOptions,
+    endHourDropdownOptions,
+    endMinuteDropdownOptions,
+    nowParts,
     minEndDate,
-    nowParts.date,
-    nowParts.hour,
-    nowParts.minute,
-    startDate,
-    startHour,
-    startMinute,
-  ]);
+    clearTimeFilter,
+  } = useRoomListFilter();
 
-  const minEndHourValue = useMemo(
-    () => String(Math.floor(minEndMinutes / 60)).padStart(2, "0"),
-    [minEndMinutes],
-  );
-
-  const startHourDropdownOptions = useMemo<
-    Array<AnimatedDropdownOption<string>>
-  >(
-    () =>
-      HOUR_OPTIONS.map((hour) => ({
-        value: hour.value,
-        label: `${hour.value}h`,
-        disabled:
-          startDate === nowParts.date &&
-          Number(hour.value) * 60 < minStartMinutes,
-      })),
-    [minStartMinutes, nowParts.date, startDate],
-  );
-
-  const startMinuteDropdownOptions = useMemo<
-    Array<AnimatedDropdownOption<string>>
-  >(
-    () =>
-      MINUTE_OPTIONS.map((minute) => ({
-        value: minute,
-        label: `${minute}m`,
-        disabled:
-          startDate === nowParts.date &&
-          startHour === nowParts.hour &&
-          Number(minute) < Number(nowParts.minute),
-      })),
-    [nowParts.date, nowParts.hour, nowParts.minute, startDate, startHour],
-  );
-
-  const endHourDropdownOptions = useMemo<Array<AnimatedDropdownOption<string>>>(
-    () =>
-      HOUR_OPTIONS.map((hour) => ({
-        value: hour.value,
-        label: `${hour.value}h`,
-        disabled:
-          endDate === minEndDate && Number(hour.value) * 60 < minEndMinutes,
-      })),
-    [endDate, minEndDate, minEndMinutes],
-  );
-
-  const endMinuteDropdownOptions = useMemo<
-    Array<AnimatedDropdownOption<string>>
-  >(
-    () =>
-      MINUTE_OPTIONS.map((minute) => ({
-        value: minute,
-        label: `${minute}m`,
-        disabled:
-          endDate === minEndDate &&
-          endHour === minEndHourValue &&
-          Number(minute) < minEndMinutes % 60,
-      })),
-    [endDate, endHour, minEndDate, minEndHourValue, minEndMinutes],
-  );
-
-  useEffect(() => {
-    if (startDate < nowParts.date) {
-      setStartDate(nowParts.date);
-      setStartHour(nowParts.hour);
-      setStartMinute(nowParts.minute);
-      return;
+  const loadRooms = useCallback(async (skipLoading = false) => {
+    if (!skipLoading) {
+      setLoading(true);
     }
-
-    if (startDate === nowParts.date) {
-      const startMinutes = toTotalMinutes(startHour, startMinute);
-      if (startMinutes < minStartMinutes) {
-        const safeMinutes = clampToRange(minStartMinutes, 0, 23 * 60 + 59);
-        const nextHour = String(Math.floor(safeMinutes / 60)).padStart(2, "0");
-        const nextMinute = String(safeMinutes % 60).padStart(2, "0");
-        setStartHour(nextHour);
-        setStartMinute(nextMinute);
-      }
+    setError(null);
+    try {
+      const mapData = await roomService.getRoomsMap();
+      setRooms(normalizeRoomsMap(mapData));
+    } catch (e: unknown) {
+      setError(extractApiMessage(e, "Unable to load room data"));
+      setRooms([]);
+    } finally {
+      setLoading(false);
     }
-  }, [
-    minStartMinutes,
-    nowParts.date,
-    nowParts.hour,
-    nowParts.minute,
-    startDate,
-    startHour,
-    startMinute,
-  ]);
-
-  useEffect(() => {
-    if (endDate < minEndDate) {
-      setEndDate(minEndDate);
-      const safeMinutes = clampToRange(minEndMinutes, 0, 23 * 60 + 59);
-      setEndHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
-      setEndMinute(String(safeMinutes % 60).padStart(2, "0"));
-      return;
-    }
-
-    if (endDate === minEndDate) {
-      const endMinutes = toTotalMinutes(endHour, endMinute);
-      if (endMinutes < minEndMinutes) {
-        const safeMinutes = clampToRange(minEndMinutes, 0, 23 * 60 + 59);
-        setEndHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
-        setEndMinute(String(safeMinutes % 60).padStart(2, "0"));
-      }
-    }
-  }, [endDate, endHour, endMinute, minEndDate, minEndMinutes]);
-
-  const normalizeRoomsMap = useCallback((mapData: unknown): RoomListItem[] => {
-    const buildings: RawMapBuilding[] = Array.isArray(
-      (mapData as { buildingResponse?: unknown })?.buildingResponse,
-    )
-      ? ((mapData as { buildingResponse?: unknown })
-          .buildingResponse as RawMapBuilding[])
-      : [];
-
-    const flattened: RoomListItem[] = [];
-    buildings.forEach((building) => {
-      const floors = Array.isArray(building.floors) ? building.floors : [];
-      floors.forEach((floor) => {
-        const floorRooms = Array.isArray(floor.rooms) ? floor.rooms : [];
-        floorRooms.forEach((room) => {
-          const roomId = room.roomId || room.id;
-          if (!roomId) return;
-
-          const rawStatus = String(room.status || "").toUpperCase();
-          const normalizedStatus: RoomListStatus =
-            rawStatus === "BROKEN"
-              ? "BROKEN"
-              : rawStatus === "UNAVAILABLE"
-                ? "UNAVAILABLE"
-                : rawStatus === "LEARNING"
-                  ? "LEARNING"
-                  : "AVAILABLE";
-
-          flattened.push({
-            id: roomId,
-            roomName: room.locationCode || room.roomName || "",
-            building: building.buildingName || "",
-            floorInfo: floor.floorName || "",
-            status: normalizedStatus,
-            buildingId: building.buildingId,
-            floorId: floor.floorId,
-          });
-        });
-      });
-    });
-
-    return flattened;
   }, []);
-
-  const loadRooms = useCallback(
-    async (skipLoading = false) => {
-      if (!skipLoading) {
-        setLoading(true);
-      }
-      setError(null);
-      try {
-        const mapData = await roomService.getRoomsMap();
-        setRooms(normalizeRoomsMap(mapData));
-      } catch (e: unknown) {
-        setError(extractApiMessage(e, "Unable to load room data"));
-        setRooms([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [normalizeRoomsMap],
-  );
 
   useEffect(() => {
     const cached = roomService.getRoomsMapCached();
@@ -338,65 +108,9 @@ const DashboardPage: React.FC = () => {
     }
 
     loadRooms(hasCached);
-  }, [loadRooms, normalizeRoomsMap]);
+  }, [loadRooms]);
 
-  const columns: ColumnsType<RoomListItem> = [
-    {
-      title: "ROOM NAME",
-      dataIndex: "roomName",
-      key: "roomName",
-      render: (name: string, record: RoomListItem) => (
-        <div>
-          <div className="font-semibold text-gray-800">{name}</div>
-          {record.floorInfo && (
-            <div className="text-xs text-gray-500">{record.floorInfo}</div>
-          )}
-        </div>
-      ),
-      width: "40%",
-    },
-    {
-      title: "BUILDING",
-      dataIndex: "building",
-      key: "building",
-      width: "35%",
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      width: "20%",
-      render: (status: RoomListStatus) => (
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeClass(status)}`}
-        >
-          {status === "LEARNING" ? "LEARNING" : status}
-        </span>
-      ),
-    },
-    {
-      title: "ACTION",
-      key: "action",
-      width: "15%",
-      render: (_: unknown, record: RoomListItem) => {
-        return (
-          <button
-            type="button"
-            className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-4 py-1 text-xs font-semibold text-orange-700 transition hover:bg-orange-100"
-            onClick={() => {
-              navigate(ROUTES.ROOM_DETAIL.replace(":roomId", record.id), {
-                state: { room: record },
-              });
-            }}
-          >
-            View
-          </button>
-        );
-      },
-    },
-  ];
-
-  // Search state for table
+  // Search state
   const [tableSearch, setTableSearch] = useState("");
   const buildingOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -492,30 +206,19 @@ const DashboardPage: React.FC = () => {
   );
 
   const pagedRooms = filteredRooms.slice(
-    page * PAGE_SIZE,
-    (page + 1) * PAGE_SIZE,
+    page * ROOM_LIST_PAGE_SIZE,
+    (page + 1) * ROOM_LIST_PAGE_SIZE,
   );
 
   const totalFiltered = filteredRooms.length;
-  const start = totalFiltered === 0 ? 0 : page * PAGE_SIZE + 1;
-  const end = Math.min((page + 1) * PAGE_SIZE, totalFiltered);
-  const totalPages = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalFiltered / ROOM_LIST_PAGE_SIZE),
+  );
 
   useEffect(() => {
     setPage((prev) => Math.min(prev, Math.max(0, totalPages - 1)));
   }, [totalPages]);
-
-  const visiblePages = useMemo(() => {
-    if (totalPages <= 5) {
-      return Array.from({ length: totalPages }, (_, index) => index);
-    }
-
-    const startPage = Math.max(0, Math.min(page - 2, totalPages - 5));
-    return Array.from({ length: 5 }, (_, index) => startPage + index);
-  }, [page, totalPages]);
-
-  const canGoPrev = page > 0;
-  const canGoNext = page < totalPages - 1;
 
   const isBackendDateTime = (value: string) => {
     if (!LOCAL_DATE_TIME_PATTERN.test(value)) return false;
@@ -578,7 +281,10 @@ const DashboardPage: React.FC = () => {
             key: `${pair.buildingId}|${pair.floorId}`,
             message: searchResult.message,
             statusMap: new Map(
-              searchResult.items.map((room) => [room.roomId, room.status]),
+              searchResult.items.map((room) => [
+                room.roomId,
+                room.status as RoomListStatus,
+              ]),
             ),
           };
         }),
@@ -588,22 +294,10 @@ const DashboardPage: React.FC = () => {
         floorResults.map((item) => [item.key, item.statusMap]),
       );
 
-      const overrides: Record<string, RoomListStatus> = {};
-      scopedRooms.forEach((room) => {
-        if (room.status === "BROKEN") {
-          overrides[room.id] = "BROKEN";
-          return;
-        }
-
-        const key = `${room.buildingId}|${room.floorId}`;
-        const statusMap = floorAvailability.get(key);
-
-        if (statusMap?.has(room.id)) {
-          overrides[room.id] = statusMap.get(room.id) as RoomListStatus;
-        } else {
-          overrides[room.id] = "UNAVAILABLE";
-        }
-      });
+      const overrides = buildTimeStatusOverrides(
+        scopedRooms,
+        floorAvailability,
+      );
 
       setTimeStatusOverrides(overrides);
       setTimeFilterActive(true);
@@ -623,19 +317,16 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 py-5 sm:py-10">
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <Title level={2} className="!mb-1 text-gray-800 font-semibold">
-            Campus Room Inventory
-          </Title>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-end gap-4">
+        <div className="w-full flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => navigate("/room-map")}
+            className="w-full sm:w-auto sm:self-start px-4 py-2.5 rounded-lg bg-orange-500 text-white text-sm font-semibold shadow hover:bg-orange-600 transition"
+          >
+            Show Room Map
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate("/room-map")}
-          className="w-full sm:w-auto sm:self-start px-4 py-2 rounded-lg bg-orange-500 text-white text-sm font-medium shadow hover:bg-orange-600"
-        >
-          Show Room Map
-        </button>
       </div>
 
       {/* Filter + Search */}
@@ -809,13 +500,7 @@ const DashboardPage: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              const nextRange = getCurrentTimeRange();
-              setStartDate(nextRange.startDate);
-              setEndDate(nextRange.endDate);
-              setStartHour(nextRange.startHour);
-              setStartMinute(nextRange.startMinute);
-              setEndHour(nextRange.endHour);
-              setEndMinute(nextRange.endMinute);
+              clearTimeFilter();
               setPage(0);
               setTimeFilterActive(false);
               setTimeStatusOverrides({});
@@ -837,181 +522,81 @@ const DashboardPage: React.FC = () => {
         />
       )}
 
-      <div className="md:hidden space-y-3 mb-4">
-        {pagedRooms.map((room) => {
-          const isAvailable = room.status === "AVAILABLE";
-          return (
-            <article
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={`room-skeleton-${index}`}
+              className="rounded-[20px] border border-gray-200 bg-white shadow-sm overflow-hidden room-card-enter"
+              style={{ animationDelay: `${80 + index * 60}ms` }}
+            >
+              <div className="h-48 bg-slate-200 room-card-skeleton" />
+              <div className="p-5 space-y-3">
+                <div className="h-5 w-2/3 bg-slate-200 rounded-md room-card-skeleton" />
+                <div className="h-4 w-1/3 bg-slate-200 rounded-md room-card-skeleton" />
+                <div className="h-4 w-full bg-slate-200 rounded-md room-card-skeleton" />
+                <div className="h-10 w-full bg-slate-200 rounded-xl room-card-skeleton" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          {pagedRooms.map((room, index) => (
+            <div
               key={room.id}
-              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4"
+              className="room-card-enter"
+              style={{ animationDelay: `${80 + index * 60}ms` }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-base font-semibold text-gray-800">
-                    {room.roomName}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-0.5">
-                    {room.floorInfo || "-"}
-                  </div>
-                </div>
-                <span
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${getStatusBadgeClass(room.status)}`}
-                >
-                  {room.status}
-                </span>
-              </div>
-
-              <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-600">
-                <div className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-2">
-                  <div className="text-[11px] text-gray-500">Building</div>
-                  <div className="font-medium text-gray-700">
-                    {room.building}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                className={`mt-3 w-full px-4 py-2 rounded-xl text-sm font-semibold transition ${
-                  isAvailable
-                    ? "bg-orange-500 text-white hover:bg-orange-600"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                onClick={() => {
-                  const targetRoute = ROUTES.ROOM_DETAIL;
-                  if (isAvailable && timeFilterActive) {
-                    navigate(targetRoute.replace(":roomId", room.id), {
-                      state: {
-                        room,
-                        timeRange: {
-                          startDate,
-                          startHour,
-                          startMinute,
-                          endDate,
-                          endHour,
-                          endMinute,
-                        },
-                      },
-                    });
-                  } else {
-                    navigate(targetRoute.replace(":roomId", room.id), {
-                      state: { room },
-                    });
-                  }
+              <RoomCard
+                room={room}
+                timeFilterActive={timeFilterActive}
+                timeRange={{
+                  startDate,
+                  startHour,
+                  startMinute,
+                  endDate,
+                  endHour,
+                  endMinute,
                 }}
-              >
-                View
-              </button>
-            </article>
-          );
-        })}
-
-        {!loading && pagedRooms.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center text-sm text-gray-500">
-            No rooms match your current filters.
-          </div>
-        )}
-      </div>
-
-      <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table<RoomListItem>
-            columns={columns}
-            dataSource={pagedRooms}
-            rowKey="id"
-            loading={loading}
-            pagination={false}
-            scroll={{ x: 800 }}
-          />
+              />
+            </div>
+          ))}
         </div>
-      </div>
+      )}
 
-      <div className="mt-6 rounded-2xl border border-orange-100 bg-white/90 px-3 py-3 shadow-sm sm:px-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Text className="text-center text-sm text-slate-600 sm:text-left">
-            Showing{" "}
-            <span className="font-semibold text-slate-800">
-              {loading ? 0 : start}
-            </span>
-            -
-            <span className="font-semibold text-slate-800">
-              {loading ? 0 : end}
-            </span>{" "}
-            of{" "}
-            <span className="font-semibold text-slate-800">
-              {totalFiltered}
-            </span>
-          </Text>
-
-          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:justify-end">
-            <button
-              type="button"
-              disabled={!canGoPrev}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Prev
-            </button>
-
-            {visiblePages[0] > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setPage(0)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
-                >
-                  1
-                </button>
-                {visiblePages[0] > 1 && (
-                  <span className="px-1 text-sm text-slate-400">...</span>
-                )}
-              </>
-            )}
-
-            {visiblePages.map((pageNumber) => {
-              const active = pageNumber === page;
-              return (
-                <button
-                  key={pageNumber}
-                  type="button"
-                  onClick={() => setPage(pageNumber)}
-                  className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border text-sm font-semibold transition ${
-                    active
-                      ? "border-orange-500 bg-orange-500 text-white shadow-sm"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
-                  }`}
-                >
-                  {pageNumber + 1}
-                </button>
-              );
-            })}
-
-            {visiblePages[visiblePages.length - 1] < totalPages - 1 && (
-              <>
-                {visiblePages[visiblePages.length - 1] < totalPages - 2 && (
-                  <span className="px-1 text-sm text-slate-400">...</span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setPage(totalPages - 1)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
-                >
-                  {totalPages}
-                </button>
-              </>
-            )}
-
-            <button
-              type="button"
-              disabled={!canGoNext}
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-              className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next
-            </button>
+      {!loading && pagedRooms.length === 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center flex flex-col items-center">
+          <svg
+            className="w-12 h-12 text-slate-300 mb-3"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
+            />
+          </svg>
+          <div className="text-base font-semibold text-slate-700">
+            No rooms found
+          </div>
+          <div className="text-sm text-slate-500 mt-1">
+            Try adjusting your filters or search terms.
           </div>
         </div>
-      </div>
+      )}
+
+      <CustomPagination
+        currentPage={page + 1}
+        totalPages={totalPages}
+        onPageChange={(p) => setPage(p - 1)}
+        totalItems={totalFiltered}
+        pageSize={ROOM_LIST_PAGE_SIZE}
+        className="mt-6 rounded-2xl border border-orange-100 bg-white/90 px-3 py-3 shadow-sm sm:px-4"
+      />
 
       {toastPopup && (
         <CustomMessage

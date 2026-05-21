@@ -63,10 +63,8 @@ const BookRoomEventPage: React.FC = () => {
   );
 
   // Initialize start/end time from real current hour
-  const currentHour = (() => {
-    const h = new Date().getHours();
-    return `${String(h).padStart(2, "00")}:00`;
-  })();
+  const now = new Date();
+  const currentHour = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   const [startDate, setStartDate] = useState(todayInput());
   const [startTime, setStartTime] = useState(currentHour);
   const [endDate, setEndDate] = useState(todayInput());
@@ -102,6 +100,35 @@ const BookRoomEventPage: React.FC = () => {
   } | null>(null);
   const [timeValidationError, setTimeValidationError] = useState("");
 
+  // Min hour/minute for today's start time
+  const minStartHour = useMemo(() => {
+    if (startDate !== todayInput()) return 0;
+    return new Date().getHours();
+  }, [startDate]);
+
+  const minStartMinute = useMemo(() => {
+    if (startDate !== todayInput()) return 0;
+    const n = new Date();
+    return n.getHours() === parseInt(getHH(startTime), 10) ? n.getMinutes() : 0;
+  }, [startDate, startTime]);
+
+  const startHourOptions = useMemo(() =>
+    TIME_HOURS.map((opt) => ({
+      ...opt,
+      disabled: startDate === todayInput() && parseInt(opt.value, 10) < new Date().getHours(),
+    })),
+  [startDate]);
+
+  const startMinuteOptions = useMemo(() => {
+    const nowH = new Date().getHours();
+    const nowM = new Date().getMinutes();
+    const selectedH = parseInt(getHH(startTime), 10);
+    return TIME_MINUTES.map((opt) => ({
+      ...opt,
+      disabled: startDate === todayInput() && selectedH === nowH && parseInt(opt.value, 10) < nowM,
+    }));
+  }, [startDate, startTime]);
+
   const validateDateTime = (
     sDate: string,
     sTime: string,
@@ -117,6 +144,10 @@ const BookRoomEventPage: React.FC = () => {
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
       setTimeValidationError("");
       return true;
+    }
+    if (start <= new Date()) {
+      setTimeValidationError("Start time must be in the future.");
+      return false;
     }
     if (end <= start) {
       setTimeValidationError("End time must be after start time");
@@ -221,6 +252,10 @@ const BookRoomEventPage: React.FC = () => {
     const endD = new Date(`${end}:00`);
     if (Number.isNaN(startD.getTime()) || Number.isNaN(endD.getTime())) {
       showPopup("warning", "Invalid time format.");
+      return;
+    }
+    if (startD <= new Date()) {
+      showPopup("warning", "Start time must be in the future.");
       return;
     }
     if (endD <= startD) {
@@ -338,6 +373,9 @@ const BookRoomEventPage: React.FC = () => {
                         validateDateTime(v, startTime, endDate, endTime);
                       }}
                       minDate={todayInput()}
+                      onInvalidSelect={(reason) => {
+                        if (reason === "past") showPopup("warning", "Start date cannot be in the past.");
+                      }}
                     />
                   </div>
 
@@ -348,14 +386,14 @@ const BookRoomEventPage: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <AnimatedDropdown<string>
                         value={getHH(startTime)}
-                        options={TIME_HOURS}
+                        options={startHourOptions}
                         onChange={(h) => handleStartTimeChange(`${h}:${getMM(startTime)}`)}
                         buttonClassName="h-[38px] px-2.5 text-xs font-semibold tabular-nums"
                         ariaLabel="Start hour"
                       />
                       <AnimatedDropdown<string>
                         value={getMM(startTime)}
-                        options={TIME_MINUTES}
+                        options={startMinuteOptions}
                         onChange={(m) => handleStartTimeChange(`${getHH(startTime)}:${m}`)}
                         buttonClassName="h-[38px] px-2.5 text-xs font-semibold tabular-nums"
                         ariaLabel="Start minute"

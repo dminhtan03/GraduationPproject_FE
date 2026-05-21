@@ -11,13 +11,16 @@ import {
 } from "../store";
 
 // Lazy load components để optimize performance
+const HomePage = React.lazy(() => import("../pages/Home"));
 const MainLayout = React.lazy(() => import("../components/Layout/MainLayout"));
 const LoginPage = React.lazy(() => import("../pages/Login"));
 const ForgotPasswordPage = React.lazy(() => import("../pages/ForgotPassword"));
 const DashboardPage = React.lazy(() => import("../pages/RoomList"));
 const RoomDetailPage = React.lazy(() => import("../pages/RoomDetail"));
 const BookRoomPage = React.lazy(() => import("../pages/BookRoom"));
-const BookRoomRecurringPage = React.lazy(() => import("../pages/BookRoomRecurring"));
+const BookRoomRecurringPage = React.lazy(
+  () => import("../pages/BookRoomRecurring"),
+);
 const BookRoomEventPage = React.lazy(() => import("../pages/BookRoomEvent"));
 const RoomMapPage = React.lazy(() => import("../pages/RoomMap"));
 const AboutPage = React.lazy(() => import("../pages/About"));
@@ -33,7 +36,9 @@ const ChangePasswordPage = React.lazy(
 const AIAssistantPage = React.lazy(() => import("../pages/AIAssistant"));
 const NotificationsPage = React.lazy(() => import("../pages/Notifications"));
 const QrCheckInPage = React.lazy(() => import("../pages/QrCheckIn"));
-const MyRecurringSeriesPage = React.lazy(() => import("../pages/MyRecurringSeries"));
+const MyRecurringSeriesPage = React.lazy(
+  () => import("../pages/MyRecurringSeries"),
+);
 // const EventDemoPage = React.lazy(() => import("../pages/EventDemo"));
 const EventSetupPage = React.lazy(() => import("../pages/EventSetup"));
 const EventLivePage = React.lazy(() => import("../pages/EventLive"));
@@ -45,7 +50,7 @@ const AdminAllBookingListPage = React.lazy(
   () => import("../pages/AdminAllBookingList"),
 );
 const AdminBookingDetailPage = React.lazy(
-  () => import("../pages/AdminBookingDetail"),
+  () => import("../pages/AdminAllBookingList/AdminBookingDetail"),
 );
 const AdminBuildingManagementPage = React.lazy(
   () => import("../pages/AdminBuildingManagement"),
@@ -82,6 +87,11 @@ const AdminRecurringSeriesPage = React.lazy(
 const AdminFeedbackManagementPage = React.lazy(
   () => import("../pages/AdminFeedbackManagement"),
 );
+const TaskListPage = React.lazy(() => import("../pages/TaskList"));
+const TaskCreatePage = React.lazy(() => import("../pages/TaskCreate"));
+const TaskDetailPage = React.lazy(() => import("../pages/TaskDetail"));
+const MeetingListPage = React.lazy(() => import("../pages/MeetingList"));
+const MeetingDetailPage = React.lazy(() => import("../pages/MeetingDetail"));
 const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
 const NotFoundPage = React.lazy(() => import("../pages/NotFound"));
 
@@ -402,7 +412,11 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <RoleRedirect />,
+        element: (
+          <SuspenseWrapper>
+            <HomePage />
+          </SuspenseWrapper>
+        ),
       },
       {
         path: ROUTES.ROOM_LIST,
@@ -570,6 +584,28 @@ export const router = createBrowserRouter([
           </SuspenseWrapper>
         ),
         // end+ chức năng sự kiện đang diễn ra (route live)
+      },
+      // Task Management
+      {
+        path: ROUTES.TASKS,
+        element: <SuspenseWrapper><TaskListPage /></SuspenseWrapper>,
+      },
+      {
+        path: ROUTES.TASK_CREATE,
+        element: <SuspenseWrapper><TaskCreatePage /></SuspenseWrapper>,
+      },
+      {
+        path: ROUTES.TASK_DETAIL,
+        element: <SuspenseWrapper><TaskDetailPage /></SuspenseWrapper>,
+      },
+      // Meeting Management
+      {
+        path: ROUTES.MEETINGS,
+        element: <SuspenseWrapper><MeetingListPage /></SuspenseWrapper>,
+      },
+      {
+        path: ROUTES.MEETING_DETAIL,
+        element: <SuspenseWrapper><MeetingDetailPage /></SuspenseWrapper>,
       },
     ],
   },

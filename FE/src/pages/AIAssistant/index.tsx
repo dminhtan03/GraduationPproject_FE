@@ -7,8 +7,12 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDownIcon, TrashIcon } from "@heroicons/react/24/outline";
+// Backend AI integration (kept for later use).
+// import { aiService } from "../../services/aiService";
+// import type { AiChatResponseDto } from "../../types/api";
+// import { extractApiMessage } from "../../utils/errorHandlers";
 import { aiService } from "../../services/aiService";
-import type { AiChatResponseDto, AiRoomSuggestion } from "../../types/api";
+import type { AiChatResponseDto, AiMenuOption, AiRoomSuggestion } from "../../types/api";
 import type { UserProfile } from "../../types";
 import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
@@ -19,7 +23,6 @@ import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
 import { extractApiMessage } from "../../utils/errorHandlers";
-
 import type { ChatMessage, ChatSessionSummary } from "../../types/chat";
 import type {
   SpeechRecognitionEventLike,
@@ -125,7 +128,8 @@ const deriveStoredSessions = (
     })
     .sort(
       (left, right) =>
-        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+        new Date(right.createdAt).getTime() -
+        new Date(left.createdAt).getTime(),
     );
 
 const mergeSessionsById = (
@@ -147,6 +151,7 @@ const mergeSessionsById = (
   );
 };
 
+
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -161,8 +166,11 @@ const AIAssistantPage: React.FC = () => {
   const [sessions, setSessions] = useState<ChatSessionSummary[]>(
     () => initialStoredSessions,
   );
-  const [selectedSessionId, setSelectedSessionId] = useState<string>(() =>
-    storedAssistantState?.selectedSessionId || initialStoredSessions[0]?.id || "",
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(
+    () =>
+      storedAssistantState?.selectedSessionId ||
+      initialStoredSessions[0]?.id ||
+      "",
   );
   const [messagesBySession, setMessagesBySession] = useState<
     Record<string, ChatMessage[]>
@@ -189,6 +197,7 @@ const AIAssistantPage: React.FC = () => {
   );
   const [collapsedSuggestionMessageId, setCollapsedSuggestionMessageId] =
     useState<string | null>(null);
+  const [activeMenuOptions, setActiveMenuOptions] = useState<AiMenuOption[]>([]);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const manualStopRef = useRef(false);
@@ -232,7 +241,9 @@ const AIAssistantPage: React.FC = () => {
           const nextSelectedSessionId =
             mergedSessions.find(
               (session) => session.id === storedSelectedSessionId,
-            )?.id || mergedSessions[0]?.id || "";
+            )?.id ||
+            mergedSessions[0]?.id ||
+            "";
 
           setSessions(mergedSessions);
           setSelectedSessionId(nextSelectedSessionId);
@@ -243,7 +254,9 @@ const AIAssistantPage: React.FC = () => {
           const nextSelectedSessionId =
             initialStoredSessions.find(
               (session) => session.id === storedSelectedSessionId,
-            )?.id || initialStoredSessions[0]?.id || "";
+            )?.id ||
+            initialStoredSessions[0]?.id ||
+            "";
 
           setSessions(initialStoredSessions);
           setSelectedSessionId(nextSelectedSessionId);
@@ -265,8 +278,11 @@ const AIAssistantPage: React.FC = () => {
         if (initialStoredSessions.length > 0) {
           const nextSelectedSessionId =
             initialStoredSessions.find(
-              (session) => session.id === storedAssistantState?.selectedSessionId,
-            )?.id || initialStoredSessions[0]?.id || "";
+              (session) =>
+                session.id === storedAssistantState?.selectedSessionId,
+            )?.id ||
+            initialStoredSessions[0]?.id ||
+            "";
 
           setSessions(initialStoredSessions);
           setSelectedSessionId(nextSelectedSessionId);
@@ -319,7 +335,6 @@ const AIAssistantPage: React.FC = () => {
     fetchProfile();
   }, []);
 
-  // Persist AI conversation state across reloads and navigation.
   useEffect(() => {
     if (!isHydrated) return;
 
@@ -484,9 +499,7 @@ const AIAssistantPage: React.FC = () => {
           const shouldUpdateTitle = session.title === DEFAULT_CHAT_TITLE;
           return {
             ...session,
-            title: shouldUpdateTitle
-              ? content.slice(0, 36) + (content.length > 36 ? "..." : "")
-              : session.title,
+            title: shouldUpdateTitle ? toSessionTitle(content) : session.title,
             subtitle: content,
           };
         }),
@@ -507,6 +520,7 @@ const AIAssistantPage: React.FC = () => {
           intent: response.intent,
           suggestionType: response.suggestionType,
           suggestions: response.suggestions,
+          menuOptions: response.menuOptions,
           roomDetail: response.roomDetail,
           reservation: response.reservation,
           reservationCreated: response.reservationCreated,
@@ -530,9 +544,14 @@ const AIAssistantPage: React.FC = () => {
             };
           }),
         );
+
+        // Update the active menu options if the response includes them
+        if (response.menuOptions && response.menuOptions.length > 0) {
+          setActiveMenuOptions(response.menuOptions);
+        }
       } catch (error: unknown) {
         const fallbackMessage =
-          "I cannot reach the AI service right now. Please try again in a moment.";
+          "AI service is unavailable. Please try again later.";
         const botMessage: ChatMessage = {
           id: createId(),
           sender: "bot",
@@ -562,6 +581,14 @@ const AIAssistantPage: React.FC = () => {
       await sendMessageToAi(content, "chat");
     },
     [inputValue, sendMessageToAi],
+  );
+
+  const handleSelectAction = useCallback(
+    async (menuOption: AiMenuOption) => {
+      if (isSending || !selectedSession) return;
+      await sendMessageToAi(menuOption.label, "chat");
+    },
+    [isSending, selectedSession, sendMessageToAi],
   );
 
   const handleMicClick = useCallback(() => {
@@ -658,10 +685,6 @@ const AIAssistantPage: React.FC = () => {
     recognition.start();
   }, [isListening, isSending, selectedSession, sendMessageToAi]);
 
-  const handleQuickAction = (prompt: string) => {
-    void handleSend(prompt);
-  };
-
   useEffect(() => {
     if (!messagesEndRef.current) return;
     messagesEndRef.current.scrollIntoView({
@@ -721,10 +744,10 @@ const AIAssistantPage: React.FC = () => {
           className={`flex items-end gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}
         >
           <div
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${
+            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
               isUser
                 ? "bg-orange-500 text-white"
-                : "bg-orange-100 text-orange-700"
+                : "bg-orange-50 border border-orange-400 text-orange-600 shadow-sm"
             }`}
           >
             {isUser ? userInitials : "AI"}
@@ -732,8 +755,8 @@ const AIAssistantPage: React.FC = () => {
           <div
             className={`max-w-[85vw] sm:max-w-[70vw] xl:max-w-[44rem] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
               isUser
-                ? "rounded-br-md bg-orange-500 text-orange-50"
-                : "rounded-bl-md border border-orange-200 bg-white text-orange-900"
+                ? "rounded-br-md bg-orange-500 text-white font-medium"
+                : "rounded-bl-md bg-slate-100 text-slate-700"
             }`}
           >
             <div>{message.text}</div>
@@ -1020,6 +1043,25 @@ const AIAssistantPage: React.FC = () => {
                     Reservation has been created successfully.
                   </div>
                 )}
+              </div>
+            )}
+
+            {!isUser && message.menuOptions && message.menuOptions.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-1.5">
+                {message.menuOptions.map((option) => (
+                  <button
+                    key={option.code}
+                    type="button"
+                    onClick={() => void handleSelectAction(option)}
+                    disabled={isSending}
+                    className="flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700">
+                      {option.code}
+                    </span>
+                    <span>{option.label}</span>
+                  </button>
+                ))}
               </div>
             )}
 
@@ -1326,17 +1368,41 @@ const AIAssistantPage: React.FC = () => {
     setIsCreatingChat(true);
     try {
       const newSession = await createEmptySession();
-      loadedSessionDetailsRef.current.add(newSession.id);
 
       setSessions((prev) => [
         newSession,
         ...prev.filter((session) => session.id !== newSession.id),
       ]);
       setSelectedSessionId(newSession.id);
-      setMessagesBySession((prev) => ({
-        ...prev,
-        [newSession.id]: [createWelcomeMessage()],
-      }));
+
+      // Fetch the initial AI menu by sending an empty message to the backend
+      try {
+        const menuResponse = await aiService.chat({
+          message: "",
+          sessionId: newSession.aiSessionId,
+        });
+        const welcomeMsg: ChatMessage = {
+          id: createId(),
+          sender: "bot",
+          text: menuResponse.reply,
+          createdAt: new Date().toISOString(),
+          intent: menuResponse.intent,
+          menuOptions: menuResponse.menuOptions,
+        };
+        setMessagesBySession((prev) => ({
+          ...prev,
+          [newSession.id]: [welcomeMsg],
+        }));
+        if (menuResponse.menuOptions && menuResponse.menuOptions.length > 0) {
+          setActiveMenuOptions(menuResponse.menuOptions);
+        }
+      } catch {
+        setMessagesBySession((prev) => ({
+          ...prev,
+          [newSession.id]: [createWelcomeMessage()],
+        }));
+      }
+
       setInputValue("");
     } catch {
       // Keep current chat if creating a new chat fails.
@@ -1380,29 +1446,14 @@ const AIAssistantPage: React.FC = () => {
     }
 
     setIsDeletingSession(true);
-    let deleteResult: {
-      sessionId: string;
-      deletedMessages: number;
-      message?: string;
-    } | null = null;
     try {
-      deleteResult = await aiService.deleteChat(sessionId);
-    } catch (error) {
-      showDeleteToast(
-        "error",
-        extractApiMessage(error, "Unable to delete conversation."),
-      );
-      return;
+      await aiService.deleteChat(sessionId);
+      showDeleteToast("success", "Conversation deleted successfully.");
+    } catch {
+      showDeleteToast("error", "Failed to delete conversation. Please try again.");
     } finally {
       setIsDeletingSession(false);
     }
-
-    showDeleteToast(
-      "success",
-      toText(deleteResult?.message) || "Conversation deleted successfully.",
-    );
-
-    loadedSessionDetailsRef.current.delete(targetSession.id);
 
     const remainingSessions = sessions.filter(
       (item) => item.id !== targetSession.id,
@@ -1436,13 +1487,13 @@ const AIAssistantPage: React.FC = () => {
   ]);
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-amber-50 to-white p-3 sm:p-6">
-      <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-orange-200/45 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-12 right-10 h-48 w-48 rounded-full bg-amber-200/50 blur-3xl" />
+    <section className="ai-assistant-enter relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:p-6">
+      <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-slate-200/45 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-12 right-10 h-48 w-48 rounded-full bg-slate-200/50 blur-3xl" />
 
       <div className="relative grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-12">
         <aside className="hidden xl:col-span-4 xl:block 2xl:col-span-3">
-          <div className="flex max-h-[280px] min-h-0 flex-col rounded-2xl border border-orange-200 bg-white/90 p-4 shadow-sm backdrop-blur-sm sm:max-h-[340px] sm:p-5 xl:max-h-none xl:min-h-[620px]">
+          <div className="flex max-h-[280px] min-h-0 flex-col rounded-2xl bg-white/90 p-4 shadow-sm backdrop-blur-sm sm:max-h-[340px] sm:p-5 xl:max-h-none xl:min-h-[620px]">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-orange-700">
@@ -1528,7 +1579,7 @@ const AIAssistantPage: React.FC = () => {
         </aside>
 
         <main className="xl:col-span-8 2xl:col-span-9">
-          <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-2xl border border-orange-200 bg-white/95 shadow-sm sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px]">
+          <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-2xl bg-white/95 shadow-sm sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px]">
             <header className="border-b border-orange-100 bg-gradient-to-r from-orange-500 to-amber-950 px-4 py-4 text-white sm:px-6">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -1542,16 +1593,18 @@ const AIAssistantPage: React.FC = () => {
                   >
                     Conversations
                   </button>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[11px] font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Live
+                  </span>
                   <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[11px] font-medium">
-                    {selectedSession?.aiSessionId
-                      ? "Session Synced"
-                      : "New Session"}
+                    {selectedSession ? "Active Session" : "New Session"}
                   </span>
                 </div>
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-orange-50/40 px-4 py-5 sm:px-6">
+            <div className="flex-1 overflow-y-auto bg-white px-4 py-5 sm:px-6">
               {isSelectedSessionLoading && (
                 <div className="mb-5 flex justify-center">
                   <div className="rounded-xl border border-orange-200 bg-white px-4 py-2 text-xs font-medium text-orange-600">
@@ -1642,25 +1695,60 @@ const AIAssistantPage: React.FC = () => {
             )}
 
             <div className="sticky bottom-0 z-10 border-t border-orange-100 bg-white px-4 py-3 sm:px-6">
-              <div className="mb-3 flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleQuickAction("Suggest available rooms right now")
+              <div className="relative mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 px-3 py-3 shadow-sm">
+                <div className="pointer-events-none absolute -right-12 -top-10 h-24 w-24 rounded-full bg-sky-200/40 blur-2xl" />
+                <div className="pointer-events-none absolute -left-10 bottom-0 h-16 w-16 rounded-full bg-teal-200/40 blur-2xl" />
+
+                <div className="relative flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700">
+                      Quick actions
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-600">
+                      Choose an action and UniBot will assist you.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="relative mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {activeMenuOptions.length > 0
+                    ? activeMenuOptions.map((option) => (
+                        <button
+                          key={option.code}
+                          type="button"
+                          onClick={() => void handleSelectAction(option)}
+                          disabled={isSending || !selectedSession}
+                          className="group relative flex flex-col items-start rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-left text-[11px] font-semibold text-slate-900 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1">
+                            {option.code}
+                          </span>
+                          <span className="text-xs font-semibold">{option.label}</span>
+                          <span className="mt-1 h-0.5 w-6 rounded-full bg-sky-400/60 transition-all duration-200 group-hover:w-9" />
+                        </button>
+                      ))
+                    : [
+                        { code: "1", label: "Book room", intent: "BOOK_ROOM" },
+                        { code: "2", label: "Cancel room", intent: "CANCEL_RESERVATION" },
+                        { code: "3", label: "Extend time", intent: "EXTEND_RESERVATION" },
+                        { code: "4", label: "Lookup", intent: "LOOKUP" },
+                      ].map((option) => (
+                        <button
+                          key={option.code}
+                          type="button"
+                          onClick={() => void handleSelectAction(option)}
+                          disabled={isSending || !selectedSession}
+                          className="group relative flex flex-col items-start rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-left text-[11px] font-semibold text-slate-900 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1">
+                            {option.code}
+                          </span>
+                          <span className="text-xs font-semibold">{option.label}</span>
+                          <span className="mt-1 h-0.5 w-6 rounded-full bg-sky-400/60 transition-all duration-200 group-hover:w-9" />
+                        </button>
+                      ))
                   }
-                  className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-                >
-                  Suggest rooms
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleQuickAction("I want to reserve a room for 10 people")
-                  }
-                  className="shrink-0 rounded-full border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-                >
-                  Quick reserve
-                </button>
+                </div>
               </div>
 
               <div className="flex items-end gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-2.5">
@@ -1674,8 +1762,7 @@ const AIAssistantPage: React.FC = () => {
                     }
                   }}
                   placeholder="Type your message for UniBot..."
-                  rows={1}
-                  className="max-h-28 min-h-10 flex-1 resize-y border-none bg-transparent text-sm text-orange-950 outline-none placeholder:text-orange-400"
+                  className="max-h-28 min-h-10 flex-1 resize-none border-none bg-transparent text-sm text-orange-950 outline-none placeholder:text-orange-400"
                 />
 
                 <button
@@ -1743,9 +1830,20 @@ const AIAssistantPage: React.FC = () => {
                   type="button"
                   onClick={() => handleSend()}
                   disabled={isSending || !inputValue.trim() || !selectedSession}
-                  className="inline-flex h-10 items-center rounded-xl bg-orange-500 px-4 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300 shadow-sm"
+                  aria-label="Send"
                 >
-                  {isSending ? "Sending..." : "Send"}
+                  {isSending ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="h-5 w-5"
+                    >
+                      <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+                    </svg>
+                  )}
                 </button>
               </div>
 

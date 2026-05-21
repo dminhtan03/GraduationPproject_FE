@@ -57,6 +57,11 @@ type BackendChatbotResponse = {
     imageUrl?: string;
     availableTimeSlots?: string[];
   }>;
+  menuOptions?: Array<{
+    code?: string;
+    label?: string;
+    intent?: string;
+  }>;
   reservationCreated?: boolean;
   reservation?: AiChatResponseDto["reservation"];
   roomDetail?: {
@@ -254,12 +259,24 @@ const normalizeChatResponse = (
           ...mapRoomsToSuggestions(raw.alternativeRooms),
         ];
 
+  const menuOptions =
+    Array.isArray(raw.menuOptions) && raw.menuOptions.length > 0
+      ? raw.menuOptions
+          .filter((item) => item.code || item.label)
+          .map((item) => ({
+            code: item.code || "",
+            label: item.label || "",
+            intent: item.intent || "",
+          }))
+      : undefined;
+
   return {
     sessionId: raw.sessionId,
     reply: raw.reply || "I could not generate a response. Please try again.",
     intent: raw.intent,
     suggestionType,
     suggestions: mappedSuggestions,
+    menuOptions,
     roomDetail,
     reservationCreated: raw.reservationCreated ?? Boolean(raw.reservation),
     reservation: raw.reservation ?? null,

@@ -93,6 +93,12 @@ export interface AiChatRequestDto {
   capacity?: number;
 }
 
+export interface AiMenuOption {
+  code: string;
+  label: string;
+  intent: string;
+}
+
 export interface AiRoomSuggestion {
   roomId: string;
   locationCode: string;
@@ -130,6 +136,7 @@ export interface AiChatResponseDto {
   intent?: string;
   suggestionType?: "available" | "alternative" | "suggested";
   suggestions?: AiRoomSuggestion[];
+  menuOptions?: AiMenuOption[];
   roomDetail?: AiRoomDetailDto | null;
   reservationCreated: boolean;
   reservation?: Reservation | null;

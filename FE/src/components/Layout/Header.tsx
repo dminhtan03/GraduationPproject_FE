@@ -27,6 +27,11 @@ import { logout } from "../../services/authService";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNotifications } from "../../context/NotificationContext";
 import {
+  formatNotificationTime,
+  getNotificationCategoryClass,
+  getNotificationCategoryLabel,
+} from "../../utils/notificationHelpers";
+import {
   formatReservationStatusLabel,
   getReservationStatusClass,
 } from "../../utils/reservationStatusStyles";
@@ -35,26 +40,6 @@ const { Header: AntHeader } = Layout;
 const { Text } = Typography;
 
 const APP_NAME = "UniBooking";
-
-const formatNotificationTime = (iso: string): string => {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / (60 * 1000));
-
-  if (diffMinutes < 1) return "Just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString();
-};
 
 const Header: React.FC = () => {
   const navigate = useNavigate();
@@ -135,26 +120,6 @@ const Header: React.FC = () => {
 
   const latestNotifications = notifications.slice(0, 3);
 
-  const getCategoryBadgeClass = (category?: string) => {
-    if (category === "booking") {
-      return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
-    }
-    if (category === "ai") {
-      return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
-    }
-    return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
-  };
-
-  const getCategoryLabel = (category?: string) => {
-    if (category === "booking") {
-      return "Booking";
-    }
-    if (category === "ai") {
-      return "AI";
-    }
-    return "System";
-  };
-
   const handleBellClick = () => {
     setIsNotificationOpen((prev) => !prev);
   };
@@ -172,9 +137,14 @@ const Header: React.FC = () => {
 
     setIsNotificationOpen(false);
 
-    if (notification?.category === "event" || notification?.eventReservationId) {
+    if (
+      notification?.category === "event" ||
+      notification?.eventReservationId
+    ) {
       const resId = notification.eventReservationId || bookingId;
-      navigate(ROUTES.EVENT_LIVE.replace(":reservationId", encodeURIComponent(resId)));
+      navigate(
+        ROUTES.EVENT_LIVE.replace(":reservationId", encodeURIComponent(resId)),
+      );
       return;
     }
 
@@ -237,16 +207,18 @@ const Header: React.FC = () => {
             type="text"
             icon={
               <BellOutlined
-                className={`text-lg transition ${
-                  unreadCount > 0 ? "text-orange-500" : "text-slate-700"
-                }`}
+                className={`text-lg transition-colors duration-200 ${
+                  isNotificationOpen ? "notification-bell-bounce" : ""
+                } ${unreadCount > 0 ? "text-orange-500" : "text-slate-700"}`}
               />
             }
             onClick={handleBellClick}
-            className={isNotificationOpen ? "bg-orange-50" : ""}
+            className={`transition-colors duration-200 ${
+              isNotificationOpen ? "bg-orange-50" : ""
+            }`}
           />
           {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-semibold text-white ring-2 ring-white">
+            <span className="absolute top-0 right-0 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-semibold text-white ring-2 ring-white">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
@@ -304,7 +276,7 @@ const Header: React.FC = () => {
       </div>
 
       {isNotificationOpen && (
-        <div className="absolute right-2 top-14 z-50 w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:right-4 sm:top-16 sm:w-[380px] md:w-[420px]">
+        <div className="notification-popup absolute right-2 top-14 z-50 w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:right-4 sm:top-16 sm:w-[380px] md:w-[420px]">
           <div className="border-b border-slate-100 bg-gradient-to-r from-orange-50 to-white px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -371,11 +343,11 @@ const Header: React.FC = () => {
 
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span
-                      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-none ${getCategoryBadgeClass(
+                      className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium leading-none ${getNotificationCategoryClass(
                         n.category,
                       )}`}
                     >
-                      {getCategoryLabel(n.category)}
+                      {getNotificationCategoryLabel(n.category)}
                     </span>
 
                     {n.reservationStatusAtNow && (

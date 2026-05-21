@@ -202,12 +202,12 @@ export const getProfile = async (): Promise<ApiResponse<unknown>> => {
  * Trả về route mặc định sau khi login theo role (BE: ROLE_ADMIN, ROLE_USER, ROLE_MAKE...)
  */
 export const getDefaultRouteByRole = (user: User | null): string => {
-  if (!user?.role && !user?.roles?.length) return ROUTES.ROOM_LIST;
+  if (!user?.role && !user?.roles?.length) return ROUTES.HOME;
   const roles = user.roles ?? (user.role ? [user.role] : []);
   if (roles.some((r) => r === "ROLE_ADMIN" || r === "ADMIN")) {
     return ROUTES.ADMIN_DASHBOARD;
   }
-  return ROUTES.ROOM_LIST;
+  return ROUTES.HOME;
 };
 
 export const isAdminUser = (user: User | null): boolean => {

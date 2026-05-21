@@ -10,6 +10,7 @@ export const API_CONFIG = {
 
 // Routes constants
 export const ROUTES = {
+  HOME: "/",
   LOGIN: "/login",
   FORBIDDEN: "/403",
   NOT_FOUND: "/404",
@@ -59,6 +60,13 @@ export const ROUTES = {
   // end+ chức năng đặt phòng theo sự kiện (setup + màn hình sự kiện đang diễn ra)
   // end+ chức năng CRUD dịch vụ đi kèm + check-in QR + đặt phòng lặp lại
   // end add admin building routes
+  // Task Management
+  TASKS: "/tasks",
+  TASK_CREATE: "/tasks/create",
+  TASK_DETAIL: "/tasks/:taskId",
+  // Meeting Management
+  MEETINGS: "/meetings",
+  MEETING_DETAIL: "/meetings/:meetingId",
 } as const;
 
 // LocalStorage keys

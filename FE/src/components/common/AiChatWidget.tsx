@@ -645,12 +645,12 @@ export const AiChatWidget: React.FC = () => {
                       className={`flex items-end gap-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}
                     >
                       <div
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${isUser ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-700"}`}
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${isUser ? "bg-orange-500 text-white" : "bg-orange-50 border border-orange-400 text-orange-600 shadow-sm"}`}
                       >
                         {isUser ? userInitials : "AI"}
                       </div>
                       <div
-                        className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-sm transition-all ${isUser ? "rounded-br-none bg-orange-500 text-white" : "rounded-bl-none border border-orange-200 bg-white text-slate-800"}`}
+                        className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-sm transition-all ${isUser ? "rounded-br-none bg-orange-500 text-white font-medium" : "rounded-bl-none bg-slate-100 text-slate-700"}`}
                       >
                         {m.text}
 
@@ -1090,24 +1090,7 @@ export const AiChatWidget: React.FC = () => {
 
           {/* Input */}
           <div className="border-t border-orange-200 bg-white px-3 py-2">
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() =>
-                  handleSend("Suggest available rooms this afternoon")
-                }
-                className="rounded-full border border-orange-200 px-2.5 py-1 text-[11px] font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-              >
-                Suggest Rooms
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSend("I want to book a room for 8 people")}
-                className="rounded-full border border-orange-200 px-2.5 py-1 text-[11px] font-medium text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-              >
-                Quick Booking
-              </button>
-            </div>
+
 
             <div className="flex items-end gap-2">
               <textarea
@@ -1120,8 +1103,7 @@ export const AiChatWidget: React.FC = () => {
                   }
                 }}
                 rows={1}
-                placeholder="Ask UniBot..."
-                className="min-h-9 max-h-24 flex-1 resize-y rounded-lg border border-orange-200 px-2.5 py-2 text-xs text-orange-950 outline-none placeholder:text-orange-400 focus:border-orange-300"
+                className="min-h-9 max-h-24 flex-1 resize-none rounded-lg border border-orange-200 px-2.5 py-2 text-xs text-orange-950 outline-none placeholder:text-orange-400 focus:border-orange-300"
               />
 
               <button
@@ -1189,9 +1171,16 @@ export const AiChatWidget: React.FC = () => {
                 type="button"
                 onClick={() => handleSend()}
                 disabled={isSending || !inputValue.trim()}
-                className="inline-flex h-9 items-center rounded-lg bg-orange-500 px-3 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300 shadow-sm"
+                aria-label="Send"
               >
-                {isSending ? "Sending..." : "Send"}
+                {isSending ? (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                    <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+                  </svg>
+                )}
               </button>
             </div>
 

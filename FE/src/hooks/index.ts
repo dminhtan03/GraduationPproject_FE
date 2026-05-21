@@ -9,3 +9,5 @@ export {
   useLocalStorageSync,
   useSessionStorage,
 } from "./useLocalStorage";
+export { useDashboard } from "./useDashboard";
+export type { UseDashboardReturn } from "./useDashboard";

@@ -108,8 +108,8 @@ const TaskListPage: React.FC = () => {
     try {
       await taskService.createSprint({
         name: sprintForm.name,
-        startDate: sprintForm.startDate ? dayjs(sprintForm.startDate).format("YYYY-MM-DD") : undefined,
-        endDate: sprintForm.endDate ? dayjs(sprintForm.endDate).format("YYYY-MM-DD") : undefined,
+        startDate: sprintForm.startDate ? sprintForm.startDate.toISOString() : undefined,
+        endDate: sprintForm.endDate ? sprintForm.endDate.toISOString() : undefined,
       });
       show("success", "Sprint created");
       setIsSprintModalOpen(false);

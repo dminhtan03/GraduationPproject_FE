@@ -1,567 +1,47 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Client, type IMessage } from "@stomp/stompjs";
-import SockJS from "sockjs-client";
-import { Table, Badge } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import React from "react";
+import { Badge } from "antd";
 import {
   ArrowLeftIcon,
   SparklesIcon,
   CheckCircleIcon,
   QueueListIcon,
 } from "@heroicons/react/24/outline";
-import { api } from "../../services/api";
-import { reservationService } from "../../services/reservationService";
-import { API_ENDPOINTS, buildUrl } from "../../constants/endpoints";
-import { API_CONFIG, ROUTES } from "../../constants";
 import AdminSidebar from "../../components/Layout/AdminSidebar";
-import CustomMessage, {
-  type MessageType,
-} from "../../components/common/CustomMessage";
-import { logout } from "../../services/authService";
+import CustomMessage from "../../components/common/CustomMessage";
 import { formatDateTime24 } from "../../utils/helpers";
-
-type Amenity = { id: string; name: string };
-
-type RoomNode = {
-  amenities?: Amenity[];
-  locationCode?: string | null;
-  roomCode?: string | null;
-  roomName?: string | null;
-  code?: string | null;
-};
-
-type ReservationNode = {
-  serviceItems?: ServiceLine[];
-  room?: RoomNode | null;
-  startTime?: string | null;
-  endTime?: string | null;
-};
-
-type ReservationDetail = {
-  serviceItems?: ServiceLine[];
-  reservation?: ReservationNode | null;
-  room?: RoomNode | null;
-  startTime?: string | null;
-  endTime?: string | null;
-} & Record<string, unknown>;
-
-type EventData = {
-  title?: string | null;
-  visibility?: string | null;
-  description?: string | null;
-} & Record<string, unknown>;
-
-type ServiceLine = {
-  id: string;
-  serviceItemId: string;
-  name: string;
-  unit?: string | null;
-  priceSnapshot?: number | null;
-  quantity: number;
-  note?: string | null;
-  status?: string | null;
-  createdAt?: string | null;
-};
-
-// start+ chức năng service item status
-type ServiceStatus =
-  | "PENDING"
-  | "CONFIRMED"
-  | "IN_PROGRESS"
-  | "DONE"
-  | "CANCELLED";
-
-const ACTIVE_STATUSES: ServiceStatus[] = [
-  "PENDING",
-  "CONFIRMED",
-  "IN_PROGRESS",
-];
-const HISTORY_STATUSES: ServiceStatus[] = ["DONE", "CANCELLED"];
-
-const statusConfig: Record<ServiceStatus, { label: string }> = {
-  PENDING: { label: "Pending" },
-  CONFIRMED: { label: "Confirmed" },
-  IN_PROGRESS: { label: "In Progress" },
-  DONE: { label: "Done" },
-  CANCELLED: { label: "Cancelled" },
-};
-
-const StatusBadge: React.FC<{ status?: string | null; showDot?: boolean }> = ({
-  status,
-  showDot = true,
-}) => {
-  const normalized = String(status || "PENDING").toUpperCase();
-  const label = statusConfig[normalized as ServiceStatus]?.label ?? status;
-
-  const cls =
-    normalized === "DONE"
-      ? "bg-emerald-50 text-emerald-700"
-      : normalized === "CONFIRMED" || normalized === "IN_PROGRESS"
-        ? "bg-blue-50 text-blue-700"
-        : normalized === "CANCELLED"
-          ? "bg-red-50 text-red-600"
-          : normalized === "PENDING"
-            ? "bg-amber-50 text-amber-700"
-            : "bg-slate-100 text-slate-500";
-  const dotCls =
-    normalized === "DONE"
-      ? "bg-emerald-500"
-      : normalized === "CONFIRMED" || normalized === "IN_PROGRESS"
-        ? "bg-blue-500"
-        : normalized === "CANCELLED"
-          ? "bg-red-500"
-          : normalized === "PENDING"
-            ? "bg-amber-500"
-            : "bg-slate-400";
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}
-    >
-      {showDot && <span className={`h-1.5 w-1.5 rounded-full ${dotCls}`} />}
-      {label}
-    </span>
-  );
-};
-// end+ chức năng service item status
-
-const fmtServiceTime = (value?: string | null) => {
-  if (!value) return "-";
-  const normalized = value.includes("T") ? value : value.replace(" ", "T");
-  const d = new Date(normalized);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString([], { hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-};
-
-const normalizeSockJsUrl = () => {
-  const fallback = "http://localhost:8080/websocket";
-  const input = (API_CONFIG.WEBSOCKET_URL || fallback).trim();
-  try {
-    if (/^wss?:\/\//i.test(input)) return input.replace(/^ws/i, "http");
-    return input;
-  } catch {
-    return fallback;
-  }
-};
-
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error && typeof error === "object") {
-    const maybeError = error as {
-      message?: unknown;
-      response?: { data?: { message?: unknown } };
-    };
-
-    const responseMessage = maybeError.response?.data?.message;
-    if (typeof responseMessage === "string" && responseMessage.trim()) {
-      return responseMessage;
-    }
-
-    if (typeof maybeError.message === "string" && maybeError.message.trim()) {
-      return maybeError.message;
-    }
-  }
-
-  return fallback;
-};
+import AdminServiceTable from "../../components/ui/AdminServiceTable";
+import { useAdminEventBookingDetail } from "../../hooks/useAdminEventBookingDetail";
 
 const AdminEventBookingDetailPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { reservationId } = useParams();
-  const [detail, setDetail] = useState<ReservationDetail | null>(null);
-  const [eventData, setEventData] = useState<EventData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [adminName, setAdminName] = useState("Admin User");
-  const [adminEmail, setAdminEmail] = useState("");
-  const [toast, setToast] = useState<{
-    type: MessageType;
-    message: string;
-  } | null>(null);
-  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
-  // start+ reason modal for CANCELLED
-  const [historyOpen, setHistoryOpen] = useState(true);
-  const [confirmPayLoading, setConfirmPayLoading] = useState(false);
+  const {
+    navigate,
+    detail,
+    eventData,
+    loading,
+    adminName,
+    adminEmail,
+    toast,
+    setToast,
+    updatingStatus,
+    cancelModal,
+    setCancelModal,
+    handleUpdateStatus,
+    confirmCancel,
+    activeLines,
+    historyLines,
+    summaryRows,
+    amenities,
+    roomCode,
+    handleLogout,
+    startTime,
+    endTime,
+  } = useAdminEventBookingDetail();
 
-  const [cancelModal, setCancelModal] = useState<{
-    item: ServiceLine;
-    reason: string;
-  } | null>(null);
-  // end+ reason modal
+  const [historyOpen, setHistoryOpen] = React.useState(true);
 
-  const loadAdminProfile = useCallback(async () => {
-    try {
-      const res = await api.get<unknown>(API_ENDPOINTS.AUTH.PROFILE);
-      const payload = res.data as { data?: unknown } | undefined;
-      const data = (payload?.data ?? payload ?? {}) as {
-        firstName?: string;
-        lastName?: string;
-        email?: string;
-      };
-      const fullName = [data.firstName, data.lastName]
-        .filter(Boolean)
-        .join(" ");
-      setAdminName(fullName || "Admin User");
-      setAdminEmail(data.email || "");
-    } catch {
-      setAdminName("Admin User");
-      setAdminEmail("");
-    }
-  }, []);
-
-  const loadReservationDetail = useCallback(async () => {
-    if (!reservationId) return;
-    try {
-      const res = await reservationService.getBookingDetail(reservationId);
-      setDetail(res as ReservationDetail);
-    } catch (err) {
-      console.error("Failed to load reservation detail", err);
-    }
-  }, [reservationId]);
-
-  const loadEvent = useCallback(async () => {
-    if (!reservationId) return;
-    try {
-      const res = await api.get<unknown>(
-        buildUrl(API_ENDPOINTS.EVENTS.BY_RESERVATION, { reservationId }),
-      );
-      const payload = res.data as { data?: unknown } | undefined;
-      const data = (payload?.data ?? payload ?? {}) as EventData;
-      setEventData(data);
-    } catch {
-      setEventData(null);
-    }
-  }, [reservationId]);
-
-  useEffect(() => {
-    loadAdminProfile();
-    setLoading(true);
-    Promise.all([loadReservationDetail(), loadEvent()]).finally(() =>
-      setLoading(false),
-    );
-  }, [loadAdminProfile, loadEvent, loadReservationDetail]);
-
-  useEffect(() => {
-    if (!reservationId) return;
-    const websocketUrl = normalizeSockJsUrl();
-    const client = new Client({
-      webSocketFactory: () => new SockJS(websocketUrl),
-      reconnectDelay: 5000,
-      onConnect: () => {
-        client.subscribe(
-          `/topic/reservations/${reservationId}/services`,
-          (frame: IMessage) => {
-            if (frame.body === "UPDATED") {
-              setToast({
-                type: "info",
-                message: "User updated services! Refreshing data...",
-              });
-              loadReservationDetail();
-            }
-          },
-        );
-      },
-    });
-    client.activate();
-    return () => {
-      client.deactivate();
-    };
-  }, [loadReservationDetail, reservationId]);
-
-  const doUpdateStatus = async (
-    item: ServiceLine,
-    newStatus: string,
-    reason?: string,
-  ) => {
-    if (!reservationId) return;
-    setUpdatingStatus(item.id);
-    try {
-      await api.put(
-        buildUrl(API_ENDPOINTS.ROOMS.RESERVATION_SERVICE_ITEM_STATUS, {
-          reservationId,
-          itemId: item.id,
-        }),
-        { status: newStatus, reason: reason?.trim() || null },
-      );
-      setToast({
-        type: "success",
-        message: `Status updated to "${statusConfig[newStatus as ServiceStatus]?.label ?? newStatus}"`,
-      });
-      await loadReservationDetail();
-    } catch (err: unknown) {
-      setToast({
-        type: "error",
-        message: getErrorMessage(err, "Update failed"),
-      });
-    } finally {
-      setUpdatingStatus(null);
-    }
-  };
-
-  // start+ intercept CANCELLED to collect reason first
-  const handleUpdateStatus = (item: ServiceLine, newStatus: string) => {
-    if (newStatus === "CANCELLED") {
-      setCancelModal({ item, reason: "" });
-    } else {
-      doUpdateStatus(item, newStatus);
-    }
-  };
-
-  const confirmCancel = async () => {
-    if (!cancelModal) return;
-    if (cancelModal.reason.trim().length < 2) {
-      setToast({
-        type: "error",
-        message: "Reason must be at least 2 characters",
-      });
-      return;
-    }
-    await doUpdateStatus(cancelModal.item, "CANCELLED", cancelModal.reason);
-    setCancelModal(null);
-  };
-  // end+ intercept CANCELLED
-
-  const allServiceLines: ServiceLine[] = useMemo(() => {
-    const raw = detail?.serviceItems ?? detail?.reservation?.serviceItems ?? [];
-    return Array.isArray(raw) ? (raw as ServiceLine[]) : [];
-  }, [detail]);
-
-  // start+ chức năng tách active / history
-  const activeLines = useMemo(
-    () =>
-      allServiceLines.filter((l) =>
-        ACTIVE_STATUSES.includes(
-          (l.status || "PENDING").toUpperCase() as ServiceStatus,
-        ),
-      ),
-    [allServiceLines],
-  );
-  const historyLines = useMemo(
-    () =>
-      allServiceLines
-        .filter((l) =>
-          HISTORY_STATUSES.includes(
-            (l.status || "PENDING").toUpperCase() as ServiceStatus,
-          ),
-        )
-        .sort((a, b) => {
-          const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-          return tb - ta;
-        }),
-    [allServiceLines],
-  );
-
-  // Bảng tổng số: gộp tất cả các dòng theo tên dịch vụ
-  type SummaryRow = {
-    name: string;
-    unit: string | null;
-    priceSnapshot: number | null;
-    totalQty: number;
-    activeQty: number;
-    doneQty: number;
-    cancelledQty: number;
-    estimatedTotal: number | null;
-  };
-
-  const summaryRows: SummaryRow[] = useMemo(() => {
-    const map = new Map<string, SummaryRow>();
-    for (const l of allServiceLines) {
-      const key = l.name;
-      if (!map.has(key)) {
-        map.set(key, {
-          name: l.name,
-          unit: l.unit ?? null,
-          priceSnapshot: l.priceSnapshot ?? null,
-          totalQty: 0,
-          activeQty: 0,
-          doneQty: 0,
-          cancelledQty: 0,
-          estimatedTotal: null,
-        });
-      }
-      const row = map.get(key)!;
-      const st = (l.status || "PENDING").toUpperCase() as ServiceStatus;
-      row.totalQty += l.quantity;
-      if (ACTIVE_STATUSES.includes(st)) row.activeQty += l.quantity;
-      if (st === "DONE") row.doneQty += l.quantity;
-      if (st === "CANCELLED") row.cancelledQty += l.quantity;
-      if (l.priceSnapshot != null) {
-        row.estimatedTotal =
-          (row.estimatedTotal ?? 0) + l.priceSnapshot * l.quantity;
-      }
-    }
-    return [...map.values()];
-  }, [allServiceLines]);
-  // end+ chức năng tách active / history
-
-  const amenities: Amenity[] = useMemo(() => {
-    const room = detail?.room ?? detail?.reservation?.room;
-    return Array.isArray(room?.amenities) ? room.amenities : [];
-  }, [detail]);
-
-  const roomCode = useMemo(() => {
-    const room = detail?.room ?? detail?.reservation?.room;
-    return room?.locationCode || room?.roomCode || room?.code || "-";
-  }, [detail]);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate(ROUTES.LOGIN);
-  };
-
-  const reservationNode = detail?.reservation ?? detail;
-  const startTime = reservationNode?.startTime || "";
-  const endTime = reservationNode?.endTime || "";
-  const reservationStatus = String((reservationNode as any)?.status || "").toUpperCase();
-
-  const handleConfirmPay = async () => {
-    if (!reservationId) return;
-    setConfirmPayLoading(true);
-    try {
-      await api.put(buildUrl(API_ENDPOINTS.ROOMS.CONFIRM_PAY, { reservationId }));
-      setToast({ type: "success", message: "Payment confirmed. User service ordering is now unlocked." });
-      await loadReservationDetail();
-    } catch (err: unknown) {
-      setToast({ type: "error", message: getErrorMessage(err, "Failed to confirm payment") });
-    } finally {
-      setConfirmPayLoading(false);
-    }
-  };
-
-  const ServiceTable: React.FC<{
-    lines: ServiceLine[];
-    editable: boolean;
-    emptyText: string;
-    showDot?: boolean;
-  }> = ({ lines, editable, emptyText, showDot = true }) => {
-    const columns: ColumnsType<ServiceLine> = [
-      {
-        title: "Service",
-        dataIndex: "name",
-        key: "name",
-        render: (text: string) => <span className="font-medium">{text}</span>,
-      },
-      {
-        title: "Qty",
-        dataIndex: "quantity",
-        key: "quantity",
-        width: 60,
-        align: "center",
-      },
-      {
-        title: "Note",
-        dataIndex: "note",
-        key: "note",
-        render: (text: string | undefined) => text || "-",
-      },
-      ...(!editable
-        ? [
-            {
-              title: "Created At",
-              dataIndex: "createdAt",
-              key: "createdAt",
-              width: 160,
-              render: (v: string | undefined) => (
-                <span className="whitespace-nowrap text-xs text-slate-500">
-                  {fmtServiceTime(v)}
-                </span>
-              ),
-            },
-          ]
-        : []),
-      {
-        title: "Status",
-        dataIndex: "status",
-        key: "status",
-        render: (status: string | undefined) => (
-          <StatusBadge status={status} showDot={showDot} />
-        ),
-      },
-      ...(editable
-        ? [
-            {
-              title: "Update",
-              key: "action",
-              width: 220,
-              align: "center" as const,
-              render: (_: unknown, record: ServiceLine) => {
-                const st = (record.status || "PENDING").toUpperCase();
-                return (
-                  <div className="flex flex-wrap items-center justify-center gap-1.5">
-                    {st === "PENDING" && (
-                      <>
-                        <button
-                          type="button"
-                          disabled={updatingStatus === record.id}
-                          onClick={() =>
-                            handleUpdateStatus(record, "CONFIRMED")
-                          }
-                          className="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-50"
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          type="button"
-                          disabled={updatingStatus === record.id}
-                          onClick={() =>
-                            handleUpdateStatus(record, "CANCELLED")
-                          }
-                          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
-                        >
-                          Cancelled
-                        </button>
-                      </>
-                    )}
-                    {st === "CONFIRMED" && (
-                      <button
-                        type="button"
-                        disabled={updatingStatus === record.id}
-                        onClick={() =>
-                          handleUpdateStatus(record, "IN_PROGRESS")
-                        }
-                        className="rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-50"
-                      >
-                        In Progress
-                      </button>
-                    )}
-                    {st === "IN_PROGRESS" && (
-                      <button
-                        type="button"
-                        disabled={updatingStatus === record.id}
-                        onClick={() => handleUpdateStatus(record, "DONE")}
-                        className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-50"
-                      >
-                        Done
-                      </button>
-                    )}
-                    {(st === "CONFIRMED" || st === "IN_PROGRESS") && (
-                      <button
-                        type="button"
-                        disabled={updatingStatus === record.id}
-                        onClick={() => handleUpdateStatus(record, "CANCELLED")}
-                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
-                      >
-                        Cancelled
-                      </button>
-                    )}
-                  </div>
-                );
-              },
-            },
-          ]
-        : []),
-    ];
-
-    return (
-      <Table<ServiceLine>
-        rowKey={(record) => record.id}
-        dataSource={lines}
-        columns={columns}
-        pagination={false}
-        locale={{ emptyText }}
-      />
-    );
-  };
+  const reservationStatus = (detail as any)?.status || (detail as any)?.reservation?.status || "UNKNOWN";
+  const confirmPayLoading = false;
+  const handleConfirmPay = () => {};
 
   return (
     <div className="flex min-h-screen bg-slate-50/50">
@@ -739,10 +219,12 @@ const AdminEventBookingDetailPage: React.FC = () => {
                 <span className="text-slate-400">Loading...</span>
               ) : (
                 <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <ServiceTable
+                  <AdminServiceTable
                     lines={activeLines}
                     editable={true}
                     emptyText="No active service orders."
+                    updatingStatus={updatingStatus}
+                    onUpdateStatus={handleUpdateStatus}
                   />
                 </div>
               )}
@@ -761,18 +243,12 @@ const AdminEventBookingDetailPage: React.FC = () => {
                 <p className="text-base font-semibold text-slate-900">
                   Completed / Cancelled History
                 </p>
-                {historyLines.length > 0 && (
-                  <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-bold text-white">
-                    {historyLines.length}
-                  </span>
-                )}
               </div>
-              <svg
-                className={`h-5 w-5 text-slate-400 transition-transform duration-200 ${historyOpen ? "rotate-180" : ""}`}
-                viewBox="0 0 20 20" fill="currentColor"
-              >
-                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
+              {historyLines.length > 0 && (
+                <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-bold text-white">
+                  {historyLines.length}
+                </span>
+              )}
             </button>
             {historyOpen && (
               <div className="p-5">
@@ -780,7 +256,7 @@ const AdminEventBookingDetailPage: React.FC = () => {
                   Processed orders. Status cannot be changed.
                 </p>
                 <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <ServiceTable
+                  <AdminServiceTable
                     lines={historyLines}
                     editable={false}
                     emptyText="No completed or cancelled orders yet."
@@ -792,7 +268,7 @@ const AdminEventBookingDetailPage: React.FC = () => {
           </div>
 
           {/* ── SUMMARY TABLE ── */}
-          {allServiceLines.length > 0 && (
+          {summaryRows.length > 0 && (
             <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm mb-6">
               <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
                 <QueueListIcon className="h-5 w-5 text-orange-500" />
