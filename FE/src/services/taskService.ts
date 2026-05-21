@@ -1,3 +1,4 @@
+import axios from "axios";
 import { api } from "./api";
 
 const BASE = "/api/v1/tasks";
@@ -137,6 +138,18 @@ export const taskService = {
 
   deleteComment: async (taskId: string, commentId: string) => {
     await api.delete(`${BASE}/${taskId}/comments/${commentId}`);
+  },
+
+  // ── File upload ──────────────────────────────────────────────────────────
+  uploadFile: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const baseURL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+    const token = localStorage.getItem("user_token") ?? "";
+    const res = await axios.post(`${baseURL}/api/v1/upload`, form, {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    return (res?.data?.data ?? res?.data) as { url: string; name: string };
   },
 
   // ── Sprints ───────────────────────────────────────────────────────────────

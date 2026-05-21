@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Tag, Spin, Modal, Input, Select, DatePicker, Button, Tooltip } from "antd";
+import { Tag, Spin, Modal, Input, Select, DatePicker, Button, Tooltip, Upload } from "antd";
 import {
   ArrowLeftIcon,
   CalendarIcon,
@@ -11,11 +11,13 @@ import {
   ChatBubbleLeftRightIcon,
   ListBulletIcon,
   TrashIcon,
-  PaperAirplaneIcon
+  PaperAirplaneIcon,
+  PaperClipIcon,
 } from "@heroicons/react/24/outline";
 import { taskService } from "../../services/taskService";
 import { userService } from "../../services/userService";
 import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
+import { useTaskNotifications } from "../../hooks/useTaskNotifications";
 import dayjs from "dayjs";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -77,6 +79,8 @@ const TaskDetailPage: React.FC = () => {
   const [resultNote, setResultNote] = useState("");
   const [reviewDecision, setReviewDecision] = useState<"APPROVED" | "REJECTED">("APPROVED");
   const [reviewComment, setReviewComment] = useState("");
+  const [attachedFiles, setAttachedFiles] = useState<{ url: string; name: string }[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   // User search
   const [userSearch, setUserSearch] = useState("");
@@ -114,6 +118,14 @@ const TaskDetailPage: React.FC = () => {
   useEffect(() => {
     void loadAllDetails();
   }, [loadAllDetails]);
+
+  // Real-time: reload khi có notification liên quan đến task này
+  useTaskNotifications(me?.id, (n) => {
+    if (n.content?.includes(task?.title ?? "___NEVER___")) {
+      void loadAllDetails();
+    }
+    show("info" as MessageType, n.title + ": " + n.content);
+  });
 
   const doAction = async (fn: () => Promise<any>, successMsg: string) => {
     setBusy(true);
@@ -156,11 +168,47 @@ const TaskDetailPage: React.FC = () => {
       setSupporterModal(false); setSelectedUserId("");
     }, "Supporter added");
 
+  const handleFileAttach = async (file: File) => {
+    setUploadingFile(true);
+    try {
+      const res = await taskService.uploadFile(file);
+      setAttachedFiles(prev => [...prev, res]);
+    } catch { show("error", "Upload file thất bại"); }
+    finally { setUploadingFile(false); }
+    return false; // prevent antd auto-upload
+  };
+
   const handleSubmit = () =>
     doAction(async () => {
-      await taskService.submitForReview(taskId!, resultNote);
-      setSubmitModal(false); setResultNote("");
+      const fileLinks = attachedFiles.map(f => `📎 [${f.name}](${f.url})`).join("\n");
+      const fullNote = resultNote + (fileLinks ? "\n\n" + fileLinks : "");
+      await taskService.submitForReview(taskId!, fullNote);
+      setSubmitModal(false); setResultNote(""); setAttachedFiles([]);
     }, "Submitted for review");
+
+  const handleDeleteSubtask = async (e: React.MouseEvent, subtaskId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm("Xóa subtask này?")) return;
+    setBusy(true);
+    try {
+      await taskService.cancelTask(subtaskId);
+      show("success", "Đã xóa subtask");
+      await loadAllDetails();
+    } catch {
+      show("error", "Không thể xóa subtask");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSubtaskStatusChange = async (subtaskId: string, newStatus: string) => {
+    try {
+      await taskService.changeStatus(subtaskId, newStatus);
+      show("success", "Cập nhật trạng thái thành công");
+      void loadAllDetails();
+    } catch { show("error", "Không thể đổi trạng thái"); }
+  };
 
   const handleReview = () =>
     doAction(async () => {
@@ -327,7 +375,7 @@ const TaskDetailPage: React.FC = () => {
           {/* Subtasks Section */}
           <Section title="Subtasks Breakdown"
             extra={
-              (isCreator || myAssignment?.status === "ACCEPTED") && task.status !== "DONE" && task.status !== "CANCELLED" && (
+              task.status !== "DONE" && task.status !== "CANCELLED" && (
                 <button type="button" onClick={() => setSubtaskModal(true)}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 transition">
                   <PlusIcon className="h-3.5 w-3.5" /> Add Subtask
@@ -340,22 +388,53 @@ const TaskDetailPage: React.FC = () => {
                   No subtasks broken down yet. Break large tasks into subtasks to distribute work.
                 </div>
               ) : (
-                task.subtasks.map((sub: any) => (
-                  <div key={sub.id} onClick={() => navigate(`/tasks/${sub.id}`)}
-                    className="cursor-pointer border border-slate-200 rounded-xl p-3.5 bg-slate-50/50 hover:bg-white hover:border-orange-200 hover:shadow-sm transition flex justify-between items-center gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-800 text-sm leading-snug truncate">{sub.title}</p>
-                      <div className="flex gap-2.5 items-center text-[10px] text-slate-400 mt-1">
-                        <span>Assignee: <span className="font-semibold text-slate-600">{sub.assignments?.[0]?.assigneeName || "Unassigned"}</span></span>
-                        <span>Due: {fmt(sub.dueAt)}</span>
+                task.subtasks.map((sub: any) => {
+                  const isSubCreator = me?.id === task.createdById;
+                  const isSubAssignee = sub.assignments?.some((a: any) => a.assigneeId === me?.id && a.status === "ACCEPTED");
+                  const canChangeSubStatus = isSubCreator || isSubAssignee;
+                  return (
+                    <div key={sub.id}
+                      className="border border-slate-200 rounded-xl p-3.5 bg-slate-50/50 hover:bg-white hover:border-orange-200 hover:shadow-sm transition flex justify-between items-center gap-3 group">
+                      <div className="min-w-0 flex-1 cursor-pointer"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/tasks/${sub.id}`); }}>
+                        <p className="font-semibold text-slate-800 text-sm leading-snug truncate">{sub.title}</p>
+                        <div className="flex gap-2.5 items-center text-[10px] text-slate-400 mt-1">
+                          <span>Assignee: <span className="font-semibold text-slate-600">{sub.assignments?.[0]?.assigneeName || "Unassigned"}</span></span>
+                          <span>Due: {fmt(sub.dueAt)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Tag color={PRIORITY_COLOR[sub.priority]} className="m-0 text-[9px]">{sub.priority}</Tag>
+                        {canChangeSubStatus ? (
+                          <Select
+                            size="small"
+                            value={sub.status}
+                            onChange={(v) => handleSubtaskStatusChange(sub.id, v)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[9px]"
+                            style={{ width: 110 }}
+                            options={[
+                              { value: "TODO", label: "TO DO" },
+                              { value: "DOING", label: "IN PROGRESS" },
+                              { value: "WAITING_REVIEW", label: "IN REVIEW" },
+                              { value: "DONE", label: "DONE" },
+                              { value: "REWORK", label: "REWORK" },
+                            ]}
+                          />
+                        ) : (
+                          <Tag color={STATUS_COLOR[sub.status]} className="m-0 text-[9px]">{sub.status?.replace(/_/g, " ")}</Tag>
+                        )}
+                        {isSubCreator && (
+                          <button type="button"
+                            onClick={(e) => handleDeleteSubtask(e, sub.id)}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition">
+                            <XCircleIcon className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Tag color={PRIORITY_COLOR[sub.priority]} className="m-0 text-[9px]">{sub.priority}</Tag>
-                      <Tag color={STATUS_COLOR[sub.status]} className="m-0 text-[9px]">{sub.status?.replace(/_/g, " ")}</Tag>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </Section>
@@ -622,11 +701,40 @@ const TaskDetailPage: React.FC = () => {
       </Modal>
 
       {/* Submit for review modal */}
-      <Modal title="Submit Work Results" open={submitModal} onCancel={() => setSubmitModal(false)}
-        onOk={handleSubmit} confirmLoading={busy} okText="Submit" okButtonProps={{ className: "bg-blue-600 hover:bg-blue-700 border-none" }}>
-        <p className="text-sm text-slate-500 mb-3">Provide delivered outcomes and summaries:</p>
-        <Input.TextArea rows={4} value={resultNote} onChange={(e) => setResultNote(e.target.value)}
-          placeholder="Deliverable links, summaries, and outcome notes..." />
+      <Modal title="Submit Work Results" open={submitModal} onCancel={() => { setSubmitModal(false); setAttachedFiles([]); }}
+        onOk={handleSubmit} confirmLoading={busy || uploadingFile} okText="Submit"
+        okButtonProps={{ className: "bg-blue-600 hover:bg-blue-700 border-none" }}>
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">Provide delivered outcomes and summaries:</p>
+          <Input.TextArea rows={4} value={resultNote} onChange={(e) => setResultNote(e.target.value)}
+            placeholder="Deliverable links, summaries, and outcome notes..." />
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-1.5">Đính kèm file (gửi đến reviewer + task owner)</p>
+            <Upload
+              beforeUpload={handleFileAttach}
+              showUploadList={false}
+              multiple
+              disabled={uploadingFile}
+            >
+              <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+                <PaperClipIcon className="h-3.5 w-3.5" />
+                {uploadingFile ? "Đang upload..." : "Chọn file"}
+              </button>
+            </Upload>
+            {attachedFiles.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {attachedFiles.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg px-2 py-1">
+                    <PaperClipIcon className="h-3 w-3 text-blue-400 shrink-0" />
+                    <a href={f.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline truncate">{f.name}</a>
+                    <button type="button" onClick={() => setAttachedFiles(prev => prev.filter((_, j) => j !== i))}
+                      className="ml-auto text-red-400 hover:text-red-600"><XCircleIcon className="h-3.5 w-3.5" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </Modal>
 
       {/* Review modal */}

@@ -18,6 +18,8 @@ import {
 import dayjs from "dayjs";
 import { taskService } from "../../services/taskService";
 import { getProfile } from "../../services/authService";
+import { userService } from "../../services/userService";
+import { useTaskNotifications } from "../../hooks/useTaskNotifications";
 import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
 import { Chart as ChartJS, ArcElement, Tooltip as ChartTooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
@@ -60,6 +62,11 @@ const TaskListPage: React.FC = () => {
   const [isEndingSprint, setIsEndingSprint] = useState(false);
   const [collapsedSprints, setCollapsedSprints] = useState<Record<string, boolean>>({});
   const [userId, setUserId] = useState<string | null>(null);
+
+  // Backlog filters
+  const [backlogAssigneeFilter, setBacklogAssigneeFilter] = useState("");
+  const [backlogDateFrom, setBacklogDateFrom] = useState<any>(null);
+  const [backlogDateTo, setBacklogDateTo] = useState<any>(null);
   
   // Review & Submit Modals
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
@@ -91,9 +98,60 @@ const TaskListPage: React.FC = () => {
 
   useEffect(() => { void loadData(); }, [loadData]);
 
+  // Load current user ID for role-based status menu
+  useEffect(() => {
+    userService.getMe().then(me => setUserId(me?.id ?? null)).catch(() => {});
+  }, []);
+
+  // Auto-reload khi có task notification
+  useTaskNotifications(userId, () => { void loadData(); });
+
   const activeSprint = useMemo(() => sprints.find(s => s.status === "ACTIVE"), [sprints]);
   const backlogTasks = useMemo(() => tasks.filter(t => !t.sprintId), [tasks]);
-  
+
+  // Workplace List: chỉ task cá nhân (do mình tạo), gần deadline lên đầu
+  const workplaceTasks = useMemo(() => {
+    const now = new Date();
+    const threeDays = 3 * 24 * 60 * 60 * 1000;
+    const personal = tasks.filter(t => {
+      const matchStatus = statusFilter === "ALL" || t.status === statusFilter;
+      const matchSearch = !searchQuery || t.title?.toLowerCase().includes(searchQuery.toLowerCase());
+      const isPersonal = !t.sprintId && t.status !== "DONE" && t.status !== "CANCELLED";
+      return matchStatus && matchSearch && isPersonal;
+    });
+    return personal.sort((a, b) => {
+      const aDue = a.dueAt ? new Date(a.dueAt).getTime() : Infinity;
+      const bDue = b.dueAt ? new Date(b.dueAt).getTime() : Infinity;
+      const aNear = aDue - now.getTime() <= threeDays && aDue > now.getTime();
+      const bNear = bDue - now.getTime() <= threeDays && bDue > now.getTime();
+      if (aNear && !bNear) return -1;
+      if (!aNear && bNear) return 1;
+      return aDue - bDue;
+    });
+  }, [tasks, statusFilter, searchQuery]);
+
+  const applyBacklogFilters = (taskList: any[]) => {
+    return taskList.filter(t => {
+      const assigneeName = t.assignments?.[0]?.assigneeName || "";
+      const matchAssignee = !backlogAssigneeFilter || assigneeName.toLowerCase().includes(backlogAssigneeFilter.toLowerCase());
+      const dueTs = t.dueAt ? new Date(t.dueAt).getTime() : null;
+      const matchFrom = !backlogDateFrom || (dueTs && dueTs >= backlogDateFrom.startOf("day").valueOf());
+      const matchTo = !backlogDateTo || (dueTs && dueTs <= backlogDateTo.endOf("day").valueOf());
+      return matchAssignee && matchFrom && matchTo;
+    });
+  };
+
+  const isNearDeadline = (dueAt?: string) => {
+    if (!dueAt) return false;
+    const ms = new Date(dueAt).getTime() - Date.now();
+    return ms > 0 && ms <= 3 * 24 * 60 * 60 * 1000;
+  };
+
+  const isOverdue = (dueAt?: string, status?: string) => {
+    if (!dueAt || status === "DONE" || status === "CANCELLED") return false;
+    return new Date(dueAt).getTime() < Date.now();
+  };
+
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
       const matchStatus = statusFilter === "ALL" || t.status === statusFilter;
@@ -386,44 +444,52 @@ const TaskListPage: React.FC = () => {
                 <span className="text-sm font-medium text-slate-500">{filteredTasks.length} total tasks</span>
               </div>
 
-              {filteredTasks.length === 0 ? (
+              {workplaceTasks.length === 0 ? (
                 <Empty className="py-20 bg-white rounded-3xl border border-slate-100 shadow-sm"
                   image={<ClipboardDocumentListIcon className="h-16 w-16 text-slate-200 mx-auto" />}
-                  description="No tasks match your filters." />
+                  description="Không có nhiệm vụ cá nhân nào." />
               ) : (
                 <div className="grid gap-3.5">
-                  {filteredTasks.map((task) => (
-                    <div key={task.id} onClick={() => navigate(`/tasks/${task.id}`)}
-                      className="cursor-pointer rounded-2xl border border-slate-200/75 bg-white p-5 shadow-sm hover:border-orange-200 hover:shadow-md hover:-translate-y-0.5 transition duration-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-1.5">
-                          <p className="font-bold text-slate-900 text-base truncate">{task.title}</p>
-                          <Tag color={PRIORITY_COLOR[task.priority]} className="m-0 text-xs font-bold px-2 py-0.5 border-0 rounded-md bg-opacity-20">{task.priority}</Tag>
+                  {workplaceTasks.map((task) => {
+                    const near = isNearDeadline(task.dueAt);
+                    const over = isOverdue(task.dueAt, task.status);
+                    return (
+                      <div key={task.id} onClick={() => navigate(`/tasks/${task.id}`)}
+                        className={`cursor-pointer rounded-2xl border p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition duration-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${
+                          over ? "border-red-300 bg-red-50/60" : near ? "border-orange-300 bg-orange-50/40" : "border-slate-200/75 bg-white"
+                        }`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-1.5">
+                            <p className="font-bold text-slate-900 text-base truncate">{task.title}</p>
+                            <Tag color={PRIORITY_COLOR[task.priority]} className="m-0 text-xs font-bold px-2 py-0.5 border-0 rounded-md">{task.priority}</Tag>
+                            {over && <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">QUÁ HẠN</span>}
+                            {near && !over && <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">GẦN HẠN</span>}
+                          </div>
+                          {task.description && <p className="text-sm text-slate-500 line-clamp-1">{task.description}</p>}
+                          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-slate-500">
+                            <span className={`flex items-center gap-1.5 ${over ? "text-red-600 font-bold" : near ? "text-orange-600 font-bold" : ""}`}>
+                              <div className={`w-2 h-2 rounded-full ${over ? "bg-red-400" : near ? "bg-orange-400" : "bg-slate-300"}`} />
+                              Hạn: <span>{fmt(task.dueAt)}</span>
+                            </span>
+                            {task.assignments?.[0] && <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-300" />Giao cho: <span className="text-slate-700">{task.assignments[0].assigneeName}</span></span>}
+                            {task.reviewerName && <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-300" />Reviewer: <span className="text-slate-700">{task.reviewerName}</span></span>}
+                          </div>
                         </div>
-                        {task.description && <p className="text-sm text-slate-500 line-clamp-1">{task.description}</p>}
-                        
-                        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-slate-500">
-                          <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-slate-300"></div>Due: <span className="text-slate-700">{fmt(task.dueAt)}</span></span>
-                          {task.assignments?.[0] && <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-300"></div>Assignee: <span className="text-slate-700">{task.assignments[0].assigneeName}</span></span>}
-                          {task.reviewerName && <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-300"></div>Reviewer: <span className="text-slate-700">{task.reviewerName}</span></span>}
-                          <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-orange-300"></div>Creator: <span className="text-slate-700">{task.createdByName}</span></span>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <Dropdown
+                            menu={{ items: getStatusMenuItems(task), onClick: (e) => { e.domEvent.stopPropagation(); handleStatusMenuClick(task.id, e.key, task); } }}
+                            trigger={['click']}
+                            disabled={(getStatusMenuItems(task)?.length || 0) === 0}
+                          >
+                            <Tag color={STATUS_COLOR[task.status]} onClick={e => e.stopPropagation()}
+                              className={`m-0 text-xs uppercase font-bold px-3 py-1.5 border-0 shadow-sm rounded-lg ${(getStatusMenuItems(task)?.length || 0) > 0 ? "cursor-pointer hover:opacity-80" : ""}`}>
+                              {task.status?.replace(/_/g, " ")}
+                            </Tag>
+                          </Dropdown>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-3 shrink-0">
-                        <Dropdown 
-                          menu={{ items: getStatusMenuItems(task), onClick: (e) => { e.domEvent.stopPropagation(); handleStatusMenuClick(task.id, e.key, task); } }} 
-                          trigger={['click']}
-                          disabled={(getStatusMenuItems(task)?.length || 0) === 0}
-                        >
-                          <Tag color={STATUS_COLOR[task.status]} onClick={e => e.stopPropagation()} className={`m-0 text-xs uppercase font-bold px-3 py-1.5 border-0 shadow-sm rounded-lg ${(getStatusMenuItems(task)?.length || 0) > 0 ? "cursor-pointer hover:opacity-80" : ""}`}>
-                            {task.status?.replace(/_/g, " ")}
-                          </Tag>
-                        </Dropdown>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -558,17 +624,32 @@ const TaskListPage: React.FC = () => {
           {/* TAB 3: Jira-Style Backlog & Sprints Organizer */}
           {activeTab === "backlog" && (
             <div className="space-y-6 max-w-[1200px] mx-auto pb-12">
-              {/* Backlog Header */}
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h3 className="font-bold text-slate-800 text-xl">Backlog</h3>
+              {/* Backlog Header + Filters */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <h3 className="font-bold text-slate-800 text-xl">Backlog</h3>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Input
+                    placeholder="Filter by assignee..."
+                    value={backlogAssigneeFilter}
+                    onChange={e => setBacklogAssigneeFilter(e.target.value)}
+                    allowClear className="w-44" size="small"
+                    prefix={<span className="text-[10px] text-slate-400">Assignee</span>}
+                  />
+                  <DatePicker placeholder="From date" size="small" className="w-32"
+                    value={backlogDateFrom} onChange={setBacklogDateFrom} allowClear />
+                  <DatePicker placeholder="To date" size="small" className="w-32"
+                    value={backlogDateTo} onChange={setBacklogDateTo} allowClear />
+                  {(backlogAssigneeFilter || backlogDateFrom || backlogDateTo) && (
+                    <button type="button" onClick={() => { setBacklogAssigneeFilter(""); setBacklogDateFrom(null); setBacklogDateTo(null); }}
+                      className="text-xs text-red-500 hover:underline">Clear filters</button>
+                  )}
                 </div>
               </div>
 
               {/* Sprints List */}
               <div className="space-y-8">
                 {sprints.map(sprint => {
-                  const sprintTasks = tasks.filter(t => t.sprintId === sprint.id);
+                  const sprintTasks = applyBacklogFilters(tasks.filter(t => t.sprintId === sprint.id));
                   const isCollapsed = collapsedSprints[sprint.id];
                   
                   // Task counts
@@ -719,7 +800,7 @@ const TaskListPage: React.FC = () => {
                         Your backlog is empty.
                       </div>
                     ) : (
-                      backlogTasks.map(t => {
+                      applyBacklogFilters(backlogTasks).map(t => {
                         const isDone = t.status === "DONE";
                         const assigneeName = t.assignments?.[0]?.assigneeName || "Unassigned";
 
