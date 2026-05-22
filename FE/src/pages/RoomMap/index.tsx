@@ -23,26 +23,19 @@ import {
   splitRoomsForMap,
   getStatusStyles,
   sortFloorsByLevel,
-  HOUR_OPTIONS,
-  MINUTE_OPTIONS,
-  LOCAL_DATE_TIME_PATTERN,
   buildDateTime,
-  clampToRange,
-  getCurrentTimeRange,
+  isBackendDateTime,
   normalizeLocalDateTime,
-  toDateInputValue,
-  toTotalMinutes,
 } from "../../utils";
 import DatePickerField from "../../components/common/DatePickerField";
-import AnimatedDropdown, {
-  type AnimatedDropdownOption,
-} from "../../components/common/AnimatedDropdown";
+import AnimatedDropdown from "../../components/common/AnimatedDropdown";
 import BookingLockCountdown from "../../components/common/BookingLockCountdown";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
 import { extractApiMessage } from "../../utils/errorHandlers";
-import { useRealtimeClock, useRoomStatusWebSocket } from "../../hooks";
+import { useRoomStatusWebSocket } from "../../hooks";
+import { useRoomListFilter } from "../../hooks/useRoomListFilter";
 import type { UserProfile } from "../../types";
 import RoomTile from "../../components/common/RoomTile";
 import {
@@ -70,8 +63,6 @@ import {
 
 const RoomMapPage: React.FC = () => {
   const navigate = useNavigate();
-  const currentTimeRange = useMemo(() => getCurrentTimeRange(), []);
-  const clockTick = useRealtimeClock();
 
   const [buildings, setBuildings] = useState<RoomsMapBuilding[]>([]);
   const [decorations, setDecorations] = useState<FloorDecoration[]>([]);
@@ -103,12 +94,6 @@ const RoomMapPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<"ALL" | MapRoomStatus>(
     "ALL",
   );
-  const [startDate, setStartDate] = useState(currentTimeRange.startDate);
-  const [startHour, setStartHour] = useState(currentTimeRange.startHour);
-  const [startMinute, setStartMinute] = useState(currentTimeRange.startMinute);
-  const [endDate, setEndDate] = useState(currentTimeRange.endDate);
-  const [endHour, setEndHour] = useState(currentTimeRange.endHour);
-  const [endMinute, setEndMinute] = useState(currentTimeRange.endMinute);
   const [filterLoading, setFilterLoading] = useState(false);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [overrideStatuses, setOverrideStatuses] = useState<
@@ -181,156 +166,26 @@ const RoomMapPage: React.FC = () => {
     },
   });
 
-  const nowParts = useMemo(() => {
-    const now = new Date(clockTick);
-    return {
-      date: toDateInputValue(now),
-      hour: String(now.getHours()).padStart(2, "0"),
-      minute: String(now.getMinutes()).padStart(2, "0"),
-    };
-  }, [clockTick]);
-
-  const minStartMinutes = useMemo(
-    () => toTotalMinutes(nowParts.hour, nowParts.minute),
-    [nowParts.hour, nowParts.minute],
-  );
-
-  const minEndDate = useMemo(
-    () => (startDate > nowParts.date ? startDate : nowParts.date),
-    [nowParts.date, startDate],
-  );
-
-  const minEndMinutes = useMemo(() => {
-    const nowMinutes = toTotalMinutes(nowParts.hour, nowParts.minute);
-    const startMinutes = toTotalMinutes(startHour, startMinute);
-
-    if (startDate === nowParts.date && minEndDate === nowParts.date) {
-      return Math.max(nowMinutes, startMinutes);
-    }
-
-    if (minEndDate === nowParts.date) {
-      return nowMinutes;
-    }
-
-    if (minEndDate === startDate) {
-      return startMinutes;
-    }
-
-    return 0;
-  }, [
+  const {
+    startDate,
+    setStartDate,
+    startHour,
+    setStartHour,
+    startMinute,
+    setStartMinute,
+    endDate,
+    setEndDate,
+    endHour,
+    setEndHour,
+    endMinute,
+    setEndMinute,
+    startHourDropdownOptions,
+    startMinuteDropdownOptions,
+    endHourDropdownOptions,
+    endMinuteDropdownOptions,
+    nowParts,
     minEndDate,
-    nowParts.date,
-    nowParts.hour,
-    nowParts.minute,
-    startDate,
-    startHour,
-    startMinute,
-  ]);
-
-  const minEndHourValue = useMemo(
-    () => String(Math.floor(minEndMinutes / 60)).padStart(2, "0"),
-    [minEndMinutes],
-  );
-
-  const startHourDropdownOptions = useMemo<
-    Array<AnimatedDropdownOption<string>>
-  >(
-    () =>
-      HOUR_OPTIONS.map((hour) => ({
-        value: hour.value,
-        label: `${hour.value}h`,
-        disabled:
-          startDate === nowParts.date &&
-          Number(hour.value) * 60 < minStartMinutes,
-      })),
-    [minStartMinutes, nowParts.date, startDate],
-  );
-
-  const startMinuteDropdownOptions = useMemo<
-    Array<AnimatedDropdownOption<string>>
-  >(
-    () =>
-      MINUTE_OPTIONS.map((minute) => ({
-        value: minute,
-        label: `${minute}m`,
-        disabled:
-          startDate === nowParts.date &&
-          startHour === nowParts.hour &&
-          Number(minute) < Number(nowParts.minute),
-      })),
-    [nowParts.date, nowParts.hour, nowParts.minute, startDate, startHour],
-  );
-
-  const endHourDropdownOptions = useMemo<Array<AnimatedDropdownOption<string>>>(
-    () =>
-      HOUR_OPTIONS.map((hour) => ({
-        value: hour.value,
-        label: `${hour.value}h`,
-        disabled:
-          endDate === minEndDate && Number(hour.value) * 60 < minEndMinutes,
-      })),
-    [endDate, minEndDate, minEndMinutes],
-  );
-
-  const endMinuteDropdownOptions = useMemo<
-    Array<AnimatedDropdownOption<string>>
-  >(
-    () =>
-      MINUTE_OPTIONS.map((minute) => ({
-        value: minute,
-        label: `${minute}m`,
-        disabled:
-          endDate === minEndDate &&
-          endHour === minEndHourValue &&
-          Number(minute) < minEndMinutes % 60,
-      })),
-    [endDate, endHour, minEndDate, minEndHourValue, minEndMinutes],
-  );
-
-  useEffect(() => {
-    if (startDate < nowParts.date) {
-      setStartDate(nowParts.date);
-      setStartHour(nowParts.hour);
-      setStartMinute(nowParts.minute);
-      return;
-    }
-
-    if (startDate === nowParts.date) {
-      const startMinutes = toTotalMinutes(startHour, startMinute);
-      if (startMinutes < minStartMinutes) {
-        const safeMinutes = clampToRange(minStartMinutes, 0, 23 * 60 + 59);
-        setStartHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
-        setStartMinute(String(safeMinutes % 60).padStart(2, "0"));
-      }
-    }
-  }, [
-    minStartMinutes,
-    nowParts.date,
-    nowParts.hour,
-    nowParts.minute,
-    startDate,
-    startHour,
-    startMinute,
-  ]);
-
-  useEffect(() => {
-    if (endDate < minEndDate) {
-      setEndDate(minEndDate);
-      const safeMinutes = clampToRange(minEndMinutes, 0, 23 * 60 + 59);
-      setEndHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
-      setEndMinute(String(safeMinutes % 60).padStart(2, "0"));
-      return;
-    }
-
-    if (endDate === minEndDate) {
-      const endMinutes = toTotalMinutes(endHour, endMinute);
-      if (endMinutes < minEndMinutes) {
-        const safeMinutes = clampToRange(minEndMinutes, 0, 23 * 60 + 59);
-        setEndHour(String(Math.floor(safeMinutes / 60)).padStart(2, "0"));
-        setEndMinute(String(safeMinutes % 60).padStart(2, "0"));
-      }
-    }
-  }, [endDate, endHour, endMinute, minEndDate, minEndMinutes]);
+  } = useRoomListFilter();
 
   useEffect(() => {
     try {
@@ -677,11 +532,6 @@ const RoomMapPage: React.FC = () => {
       showToast("warning", nextError);
       return;
     }
-
-    const isBackendDateTime = (value: string) => {
-      if (!LOCAL_DATE_TIME_PATTERN.test(value)) return false;
-      return !Number.isNaN(new Date(value).getTime());
-    };
 
     if (!isBackendDateTime(startTime) || !isBackendDateTime(endTime)) {
       const nextError =
@@ -1131,7 +981,10 @@ const RoomMapPage: React.FC = () => {
           </div>
 
           {/* Map canvas */}
-          <div className="relative flex-1 min-h-[400px] sm:min-h-[500px] bg-slate-50 rounded-2xl flex items-center justify-start sm:justify-center overflow-x-auto overflow-y-hidden px-2">
+          <div
+            key={`${selectedBuildingId || "none"}-${selectedFloorId || "none"}`}
+            className="relative flex-1 min-h-[400px] sm:min-h-[500px] bg-slate-50 rounded-2xl flex items-center justify-start sm:justify-center overflow-x-auto overflow-y-hidden px-2 room-map-animate"
+          >
             {loading && (
               <div className="text-sm text-slate-500">Loading map...</div>
             )}
@@ -1369,7 +1222,10 @@ const RoomMapPage: React.FC = () => {
         </div>
 
         {/* Room details panel */}
-        <aside className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 flex flex-col gap-4">
+        <aside
+          key={selectedRoom?.roomId || "empty"}
+          className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4 sm:p-6 flex flex-col gap-4 room-detail-animate"
+        >
           <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
             Room details
           </div>

@@ -7,12 +7,12 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDownIcon, TrashIcon } from "@heroicons/react/24/outline";
-// Backend AI integration (kept for later use).
-// import { aiService } from "../../services/aiService";
-// import type { AiChatResponseDto } from "../../types/api";
-// import { extractApiMessage } from "../../utils/errorHandlers";
 import { aiService } from "../../services/aiService";
-import type { AiChatResponseDto, AiMenuOption, AiRoomSuggestion } from "../../types/api";
+import type {
+  AiChatResponseDto,
+  AiMenuOption,
+  AiRoomSuggestion,
+} from "../../types/api";
 import type { UserProfile } from "../../types";
 import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
@@ -28,6 +28,20 @@ import type {
   SpeechRecognitionEventLike,
   SpeechRecognitionLike,
 } from "../../types/speech.d";
+import {
+  BOOKING_DURATION_OPTIONS,
+  BOOKING_ITEM_FALLBACK_IMAGE,
+} from "../../constants/aiAssistant";
+import {
+  buildAssistantStorageKey,
+  buildCapacityOptions,
+  buildBookingTimeOptions,
+  deriveStoredSessions,
+  getStoredAssistantState,
+  mergeSessionsById,
+  resolveBookingRoomCode,
+  resolveQuickActionLabel,
+} from "../../utils/aiAssistant";
 import {
   createId,
   createWelcomeMessage,
@@ -48,114 +62,21 @@ import {
   DEFAULT_CHAT_SUBTITLE,
   toRecord,
 } from "../../utils/chatHelpers";
-
-const AI_ASSISTANT_STORAGE_KEY = "ai_assistant_messages_v2";
+import { normalizeRoomsMap } from "../../utils/roomList";
 const EMPTY_MESSAGES_BY_SESSION: Record<string, ChatMessage[]> = {};
-
-interface StoredAssistantState {
-  messagesBySession: Record<string, ChatMessage[]>;
-  selectedSessionId: string | null;
-}
-
-const isMessageArrayRecord = (
-  value: unknown,
-): value is Record<string, ChatMessage[]> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  return Object.values(value as Record<string, unknown>).every((entry) =>
-    Array.isArray(entry),
-  );
-};
-
-const getStoredAssistantState = (): StoredAssistantState | null => {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.localStorage.getItem(AI_ASSISTANT_STORAGE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as unknown;
-    if (isMessageArrayRecord(parsed)) {
-      return {
-        messagesBySession: parsed,
-        selectedSessionId: null,
-      };
-    }
-
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return null;
-    }
-
-    const candidate = parsed as {
-      messagesBySession?: unknown;
-      selectedSessionId?: unknown;
-      messages?: unknown;
-    };
-
-    const messagesBySession = candidate.messagesBySession ?? candidate.messages;
-    if (!isMessageArrayRecord(messagesBySession)) {
-      return null;
-    }
-
-    return {
-      messagesBySession,
-      selectedSessionId:
-        typeof candidate.selectedSessionId === "string" &&
-        candidate.selectedSessionId.trim()
-          ? candidate.selectedSessionId.trim()
-          : null,
-    };
-  } catch {
-    return null;
-  }
-};
-
-const deriveStoredSessions = (
-  messagesBySession: Record<string, ChatMessage[]>,
-): ChatSessionSummary[] =>
-  Object.entries(messagesBySession)
-    .filter(([, messages]) => Array.isArray(messages) && messages.length > 0)
-    .map(([sessionId, messages]) => {
-      const lastMessage = messages[messages.length - 1];
-      const lastText = toText(lastMessage?.text);
-
-      return {
-        id: sessionId,
-        title: toSessionTitle(lastText),
-        subtitle: toSessionSubtitle(lastText),
-        createdAt: messages[0]?.createdAt || new Date().toISOString(),
-        aiSessionId: sessionId,
-      };
-    })
-    .sort(
-      (left, right) =>
-        new Date(right.createdAt).getTime() -
-        new Date(left.createdAt).getTime(),
-    );
-
-const mergeSessionsById = (
-  primarySessions: ChatSessionSummary[],
-  secondarySessions: ChatSessionSummary[],
-): ChatSessionSummary[] => {
-  const merged = [...primarySessions];
-  const knownIds = new Set(primarySessions.map((session) => session.id));
-
-  for (const session of secondarySessions) {
-    if (!knownIds.has(session.id)) {
-      merged.push(session);
-    }
-  }
-
-  return merged.sort(
-    (left, right) =>
-      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
-  );
-};
-
-
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
-  const storedAssistantState = useMemo(() => getStoredAssistantState(), []);
+  const storageKey = useMemo(
+    () => buildAssistantStorageKey(profile),
+    [profile],
+  );
+
+  const storedAssistantState = useMemo(
+    () => getStoredAssistantState(storageKey),
+    [storageKey],
+  );
   const initialStoredMessagesBySession =
     storedAssistantState?.messagesBySession ?? EMPTY_MESSAGES_BY_SESSION;
   const initialStoredSessions = useMemo(
@@ -191,13 +112,17 @@ const AIAssistantPage: React.FC = () => {
     type: MessageType;
     message: string;
   } | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isHydrated, setIsHydrated] = useState(
     Object.keys(initialStoredMessagesBySession).length > 0,
   );
   const [collapsedSuggestionMessageId, setCollapsedSuggestionMessageId] =
     useState<string | null>(null);
-  const [activeMenuOptions, setActiveMenuOptions] = useState<AiMenuOption[]>([]);
+  const [activeMenuOptions, setActiveMenuOptions] = useState<AiMenuOption[]>(
+    [],
+  );
+  const [bookingImageByCode, setBookingImageByCode] = useState<
+    Record<string, string>
+  >({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const manualStopRef = useRef(false);
@@ -206,6 +131,24 @@ const AIAssistantPage: React.FC = () => {
   const loadedSessionDetailsRef = useRef<Set<string>>(
     new Set(Object.keys(initialStoredMessagesBySession)),
   );
+
+  useEffect(() => {
+    const stored = getStoredAssistantState(storageKey);
+    const nextMessagesBySession =
+      stored?.messagesBySession ?? EMPTY_MESSAGES_BY_SESSION;
+    const nextSessions = deriveStoredSessions(nextMessagesBySession);
+
+    setSessions(nextSessions);
+    setSelectedSessionId(
+      stored?.selectedSessionId || nextSessions[0]?.id || "",
+    );
+    setMessagesBySession(nextMessagesBySession);
+    setIsHydrated(Object.keys(nextMessagesBySession).length > 0);
+    loadedSessionDetailsRef.current = new Set(
+      Object.keys(nextMessagesBySession),
+    );
+    setActiveMenuOptions([]);
+  }, [storageKey]);
 
   const createEmptySession = useCallback(async () => {
     const aiSessionId = await aiService.addChat();
@@ -340,7 +283,7 @@ const AIAssistantPage: React.FC = () => {
 
     try {
       window.localStorage.setItem(
-        AI_ASSISTANT_STORAGE_KEY,
+        storageKey,
         JSON.stringify({
           messagesBySession,
           selectedSessionId: selectedSessionId || null,
@@ -349,7 +292,7 @@ const AIAssistantPage: React.FC = () => {
     } catch {
       // Ignore storage quota errors
     }
-  }, [isHydrated, messagesBySession, selectedSessionId]);
+  }, [isHydrated, messagesBySession, selectedSessionId, storageKey]);
 
   const selectedSession = useMemo(() => {
     return sessions.find((s) => s.id === selectedSessionId) ?? null;
@@ -358,6 +301,60 @@ const AIAssistantPage: React.FC = () => {
   const selectedMessages = useMemo(() => {
     return messagesBySession[selectedSessionId] ?? [];
   }, [messagesBySession, selectedSessionId]);
+
+  const bookingRoomCodes = useMemo(() => {
+    const codes = new Set<string>();
+    selectedMessages.forEach((message) => {
+      (message.bookingItems || []).forEach((item) => {
+        const roomCode = resolveBookingRoomCode(item);
+        if (roomCode) {
+          codes.add(roomCode);
+        }
+      });
+    });
+    return Array.from(codes);
+  }, [selectedMessages]);
+
+  const missingBookingCodes = useMemo(
+    () => bookingRoomCodes.filter((code) => !bookingImageByCode[code]),
+    [bookingRoomCodes, bookingImageByCode],
+  );
+
+  useEffect(() => {
+    if (missingBookingCodes.length === 0) return;
+
+    let cancelled = false;
+
+    const loadImages = async () => {
+      try {
+        const cached = roomService.getRoomsMapCached();
+        const mapData = cached ?? (await roomService.getRoomsMap());
+        const rooms = normalizeRoomsMap(mapData);
+        const nextImages: Record<string, string> = {};
+
+        missingBookingCodes.forEach((code) => {
+          const match = rooms.find(
+            (room) => room.roomName.toLowerCase() === code.toLowerCase(),
+          );
+          if (match?.roomImage) {
+            nextImages[code] = match.roomImage;
+          }
+        });
+
+        if (!cancelled && Object.keys(nextImages).length > 0) {
+          setBookingImageByCode((prev) => ({ ...prev, ...nextImages }));
+        }
+      } catch {
+        // Ignore image lookup errors
+      }
+    };
+
+    void loadImages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [missingBookingCodes]);
 
   const isSelectedSessionLoading =
     !!selectedSession &&
@@ -521,6 +518,7 @@ const AIAssistantPage: React.FC = () => {
           suggestionType: response.suggestionType,
           suggestions: response.suggestions,
           menuOptions: response.menuOptions,
+          bookingItems: response.bookingItems,
           roomDetail: response.roomDetail,
           reservation: response.reservation,
           reservationCreated: response.reservationCreated,
@@ -587,6 +585,14 @@ const AIAssistantPage: React.FC = () => {
     async (menuOption: AiMenuOption) => {
       if (isSending || !selectedSession) return;
       await sendMessageToAi(menuOption.label, "chat");
+    },
+    [isSending, selectedSession, sendMessageToAi],
+  );
+
+  const handleQuickActionSelect = useCallback(
+    async (menuOption: AiMenuOption) => {
+      if (isSending || !selectedSession) return;
+      await sendMessageToAi(resolveQuickActionLabel(menuOption), "chat");
     },
     [isSending, selectedSession, sendMessageToAi],
   );
@@ -707,6 +713,14 @@ const AIAssistantPage: React.FC = () => {
 
   const renderMessage = (message: ChatMessage) => {
     const isUser = message.sender === "user";
+    const normalizedIntent = String(message.intent || "").toUpperCase();
+    const bookingActionLabel =
+      normalizedIntent === "CANCEL_RESERVATION"
+        ? "Hủy phòng"
+        : normalizedIntent === "EXTEND_RESERVATION"
+          ? "Gia hạn phòng"
+          : "";
+    const bookingItems = message.bookingItems || [];
     const roomDetail = message.roomDetail;
     const roomDetailImage =
       Array.isArray(roomDetail?.images) && roomDetail.images.length > 0
@@ -735,6 +749,25 @@ const AIAssistantPage: React.FC = () => {
       toText(message.reservation?.id) ||
       toText(message.reservation?.rawData?.reservationId);
 
+    const textNormalized = message.text.toLowerCase();
+    const bookingTimeOptions = buildBookingTimeOptions(message.id);
+    const capacityOptions = buildCapacityOptions(
+      roomDetailCapacity ?? undefined,
+    );
+    const inlineOptions = textNormalized.includes("muốn đặt khi nào")
+      ? bookingTimeOptions
+      : textNormalized.includes("trong bao lâu") ||
+          textNormalized.includes("thêm bao lâu")
+        ? BOOKING_DURATION_OPTIONS
+        : textNormalized.includes("bao nhiêu người")
+          ? capacityOptions
+          : [];
+    const inlineOptionsLayout =
+      textNormalized.includes("trong bao lâu") ||
+      textNormalized.includes("thêm bao lâu")
+        ? "mt-3 grid grid-cols-3 gap-2"
+        : "mt-3 grid grid-cols-2 gap-2";
+
     return (
       <div
         key={message.id}
@@ -760,6 +793,80 @@ const AIAssistantPage: React.FC = () => {
             }`}
           >
             <div>{message.text}</div>
+
+            {!isUser && inlineOptions.length > 0 && (
+              <div className={inlineOptionsLayout}>
+                {inlineOptions.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() => void sendMessageToAi(option.message, "chat")}
+                    disabled={isSending || !selectedSession}
+                    className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!isUser && bookingItems.length > 0 && (
+              <div className="mt-3 space-y-3">
+                {bookingItems.map((item) => {
+                  const roomCode = resolveBookingRoomCode(item);
+                  const labelRange = item.label?.split("|")[1]?.trim() || "";
+                  const timeRange =
+                    item.startTime && item.endTime
+                      ? `${item.startTime} - ${item.endTime}`
+                      : labelRange;
+                  const imageUrl =
+                    (roomCode && bookingImageByCode[roomCode]) ||
+                    BOOKING_ITEM_FALLBACK_IMAGE;
+
+                  return (
+                    <div
+                      key={`${item.id}-${roomCode}`}
+                      className="overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-sm"
+                    >
+                      <div className="relative h-32 w-full overflow-hidden bg-orange-50">
+                        <img
+                          src={imageUrl}
+                          alt={roomCode || "Room"}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent" />
+                        <div className="absolute bottom-3 left-3">
+                          <div className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-slate-800">
+                            {roomCode || "Room"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-3">
+                        <div className="text-xs font-semibold text-slate-800">
+                          {timeRange || item.label || ""}
+                        </div>
+                        {bookingActionLabel && roomCode && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void sendMessageToAi(
+                                `${bookingActionLabel} ${roomCode}`,
+                                "chat",
+                              )
+                            }
+                            disabled={isSending || !selectedSession}
+                            className="mt-2 inline-flex items-center justify-center rounded-lg border border-orange-200 bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {bookingActionLabel}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {!isUser && roomDetail && (
               <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-md hover:shadow-lg transition-shadow">
@@ -1046,24 +1153,26 @@ const AIAssistantPage: React.FC = () => {
               </div>
             )}
 
-            {!isUser && message.menuOptions && message.menuOptions.length > 0 && (
-              <div className="mt-3 grid grid-cols-2 gap-1.5">
-                {message.menuOptions.map((option) => (
-                  <button
-                    key={option.code}
-                    type="button"
-                    onClick={() => void handleSelectAction(option)}
-                    disabled={isSending}
-                    className="flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700">
-                      {option.code}
-                    </span>
-                    <span>{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {!isUser &&
+              message.menuOptions &&
+              message.menuOptions.length > 0 && (
+                <div className="mt-3 grid grid-cols-2 gap-1.5">
+                  {message.menuOptions.map((option) => (
+                    <button
+                      key={option.code}
+                      type="button"
+                      onClick={() => void handleSelectAction(option)}
+                      disabled={isSending}
+                      className="flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700">
+                        {option.code}
+                      </span>
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
             <div className="mt-2 flex items-center gap-1 text-[11px] opacity-70">
               <span>•</span>
@@ -1450,7 +1559,10 @@ const AIAssistantPage: React.FC = () => {
       await aiService.deleteChat(sessionId);
       showDeleteToast("success", "Conversation deleted successfully.");
     } catch {
-      showDeleteToast("error", "Failed to delete conversation. Please try again.");
+      showDeleteToast(
+        "error",
+        "Failed to delete conversation. Please try again.",
+      );
     } finally {
       setIsDeletingSession(false);
     }
@@ -1705,7 +1817,8 @@ const AIAssistantPage: React.FC = () => {
                       Quick actions
                     </p>
                     <p className="mt-0.5 text-[11px] text-slate-600">
-                      Choose an action and UniBot will assist you.
+                      Vui lòng chọn chức năng: (1) Đặt phòng, (2) Hủy phòng, (3)
+                      Gia hạn thời gian, (4) Tra cứu.
                     </p>
                   </div>
                 </div>
@@ -1716,38 +1829,49 @@ const AIAssistantPage: React.FC = () => {
                         <button
                           key={option.code}
                           type="button"
-                          onClick={() => void handleSelectAction(option)}
+                          onClick={() => void handleQuickActionSelect(option)}
                           disabled={isSending || !selectedSession}
                           className="group relative flex flex-col items-start rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-left text-[11px] font-semibold text-slate-900 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1">
                             {option.code}
                           </span>
-                          <span className="text-xs font-semibold">{option.label}</span>
+                          <span className="text-xs font-semibold">
+                            {resolveQuickActionLabel(option)}
+                          </span>
                           <span className="mt-1 h-0.5 w-6 rounded-full bg-sky-400/60 transition-all duration-200 group-hover:w-9" />
                         </button>
                       ))
                     : [
-                        { code: "1", label: "Book room", intent: "BOOK_ROOM" },
-                        { code: "2", label: "Cancel room", intent: "CANCEL_RESERVATION" },
-                        { code: "3", label: "Extend time", intent: "EXTEND_RESERVATION" },
-                        { code: "4", label: "Lookup", intent: "LOOKUP" },
+                        { code: "1", label: "Đặt phòng", intent: "BOOK_ROOM" },
+                        {
+                          code: "2",
+                          label: "Hủy phòng",
+                          intent: "CANCEL_RESERVATION",
+                        },
+                        {
+                          code: "3",
+                          label: "Gia hạn thời gian",
+                          intent: "EXTEND_RESERVATION",
+                        },
+                        { code: "4", label: "Tra cứu", intent: "LOOKUP" },
                       ].map((option) => (
                         <button
                           key={option.code}
                           type="button"
-                          onClick={() => void handleSelectAction(option)}
+                          onClick={() => void handleQuickActionSelect(option)}
                           disabled={isSending || !selectedSession}
                           className="group relative flex flex-col items-start rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-left text-[11px] font-semibold text-slate-900 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1">
                             {option.code}
                           </span>
-                          <span className="text-xs font-semibold">{option.label}</span>
+                          <span className="text-xs font-semibold">
+                            {option.label}
+                          </span>
                           <span className="mt-1 h-0.5 w-6 rounded-full bg-sky-400/60 transition-all duration-200 group-hover:w-9" />
                         </button>
-                      ))
-                  }
+                      ))}
                 </div>
               </div>
 

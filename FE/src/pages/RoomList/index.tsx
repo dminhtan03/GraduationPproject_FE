@@ -13,8 +13,8 @@ import CustomMessage, {
 } from "../../components/common/CustomMessage";
 import { useRoomListFilter } from "../../hooks/useRoomListFilter";
 import {
-  LOCAL_DATE_TIME_PATTERN,
   buildDateTime,
+  isBackendDateTime,
   normalizeLocalDateTime,
 } from "../../utils";
 import {
@@ -219,11 +219,6 @@ const DashboardPage: React.FC = () => {
   useEffect(() => {
     setPage((prev) => Math.min(prev, Math.max(0, totalPages - 1)));
   }, [totalPages]);
-
-  const isBackendDateTime = (value: string) => {
-    if (!LOCAL_DATE_TIME_PATTERN.test(value)) return false;
-    return !Number.isNaN(new Date(value).getTime());
-  };
 
   const handleApplyTimeFilter = async () => {
     setPage(0);

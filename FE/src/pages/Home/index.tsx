@@ -1,20 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ROUTES } from "../../constants";
-import { roomService } from "../../services/roomService";
-import type { RawMapBuilding } from "../../types/roomList";
+import { useHomeOverview } from "../../hooks/useHomeOverview";
+import { formatNumber } from "../../utils/helpers";
+import type { Room } from "../../types";
+import type { RoomListItem, RoomListStatus } from "../../types/roomList";
 
-interface FeaturedRoom {
-  id: number | string;
-  name: string;
-  capacity: number;
-  status: string;
-  desc: string;
-  img: string;
-}
+const FALLBACK_ROOM_IMAGE =
+  "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800";
 
-const getRoomStatusBadge = (status: string) => {
-  const normalized = String(status || "").toUpperCase();
+const getRoomStatusBadge = (status: RoomListStatus) => {
+  const normalized = status.toUpperCase();
 
   if (normalized === "AVAILABLE") {
     return { label: "AVAILABLE", className: "bg-emerald-500" };
@@ -34,81 +30,41 @@ const getRoomStatusBadge = (status: string) => {
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const [featuredRooms, setFeaturedRooms] = useState<FeaturedRoom[]>([]);
-  const [loadingRooms, setLoadingRooms] = useState(true);
+  const { featuredRooms, loading: loadingRooms, stats } = useHomeOverview();
 
-  useEffect(() => {
-    const fetchRooms = async () => {
-      try {
-        const mapData = await roomService.getRoomsMap();
-        const buildings: RawMapBuilding[] = Array.isArray(
-          (mapData as { buildingResponse?: unknown })?.buildingResponse,
-        )
-          ? ((mapData as { buildingResponse?: unknown })
-              .buildingResponse as RawMapBuilding[])
-          : [];
+  const buildRoomState = (room: RoomListItem): { room: Room } => ({
+    room: {
+      id: room.id,
+      roomName: room.roomName,
+      building: room.building,
+      floorInfo: room.floorInfo,
+      slot: room.capacity ?? 0,
+      status: room.status,
+    },
+  });
 
-        const allRooms: FeaturedRoom[] = [];
-        buildings.forEach((building) => {
-          const floors = Array.isArray(building.floors) ? building.floors : [];
-          floors.forEach((floor) => {
-            const floorRooms = Array.isArray(floor.rooms) ? floor.rooms : [];
-            floorRooms.forEach((room) => {
-              const roomId = room.roomId || room.id;
-              if (!roomId) return;
-
-              let roomImage = "";
-              if (Array.isArray(room.images) && room.images.length > 0) {
-                const firstImage = room.images[0];
-                roomImage =
-                  firstImage?.imageUrl ||
-                  firstImage?.url ||
-                  firstImage?.image ||
-                  firstImage?.path ||
-                  "";
-              } else if (typeof room.imageUrl === "string") {
-                roomImage = room.imageUrl;
-              } else if (typeof room.image === "string") {
-                roomImage = room.image;
-              } else if (typeof room.roomImage === "string") {
-                roomImage = room.roomImage;
-              }
-
-              const rawStatus = String(room.status || "").toUpperCase();
-              const normalizedStatus =
-                rawStatus === "BROKEN"
-                  ? "BROKEN"
-                  : rawStatus === "UNAVAILABLE"
-                    ? "UNAVAILABLE"
-                    : rawStatus === "LEARNING"
-                      ? "LEARNING"
-                      : "AVAILABLE";
-
-              allRooms.push({
-                id: roomId,
-                name: room.locationCode || room.roomName || "Unnamed Room",
-                capacity: room.capacity || room.slot || 0,
-                status: normalizedStatus,
-                desc: `${building.buildingName || "Building"}, ${floor.floorName || "Floor"}`,
-                img:
-                  roomImage ||
-                  "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800", // Fallback image
-              });
-            });
-          });
-        });
-
-        setFeaturedRooms(allRooms.slice(0, 3));
-      } catch (error) {
-        console.error("Failed to fetch featured rooms:", error);
-        setFeaturedRooms([]);
-      } finally {
-        setLoadingRooms(false);
-      }
-    };
-
-    fetchRooms();
-  }, []);
+  const statCards = [
+    {
+      value: loadingRooms ? "--" : formatNumber(stats.availableRooms),
+      label: "Rooms Available",
+      accent: true,
+    },
+    {
+      value: loadingRooms ? "--" : formatNumber(stats.occupiedRooms),
+      label: "Rooms In Use",
+      accent: true,
+    },
+    {
+      value: loadingRooms ? "--" : `${stats.occupancyRate}%`,
+      label: "Occupancy Rate",
+      accent: false,
+    },
+    {
+      value: loadingRooms ? "--" : formatNumber(stats.totalRooms),
+      label: "Total Rooms",
+      accent: false,
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col overflow-x-hidden">
@@ -293,12 +249,7 @@ const HomePage: React.FC = () => {
         {/* ─── stat strip ─── */}
         <div className="absolute -bottom-12 left-0 right-0 max-w-5xl mx-auto px-4 sm:px-6 z-20">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { value: "500+", label: "Rooms Available", accent: true },
-              { value: "12k", label: "Happy Students", accent: true },
-              { value: "98%", label: "Occupancy Rate", accent: false },
-              { value: "24/7", label: "Support", accent: false },
-            ].map((stat, index) => (
+            {statCards.map((stat, index) => (
               <div
                 key={stat.label}
                 className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-xl px-6 py-6 flex flex-col items-center justify-center gap-1 transition-transform hover:-translate-y-1 border border-slate-100/50 home-rise-in"
@@ -368,6 +319,12 @@ const HomePage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {featuredRooms.map((room, index) => {
               const badge = getRoomStatusBadge(room.status);
+              const roomImage = room.roomImage || FALLBACK_ROOM_IMAGE;
+              const roomTitle = room.roomName || "Unnamed Room";
+              const roomDesc = `${room.building || "Building"}, ${
+                room.floorInfo || "Floor"
+              }`;
+              const roomCapacity = room.capacity ?? 0;
 
               return (
                 <div
@@ -377,8 +334,8 @@ const HomePage: React.FC = () => {
                 >
                   <div className="relative h-48 overflow-hidden bg-slate-200">
                     <img
-                      src={room.img}
-                      alt={room.name}
+                      src={roomImage}
+                      alt={roomTitle}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                     <div
@@ -390,7 +347,7 @@ const HomePage: React.FC = () => {
                   <div className="p-6 flex-1 flex flex-col">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <h3 className="text-xl font-bold text-slate-900 leading-tight">
-                        {room.name}
+                        {roomTitle}
                       </h3>
                       <div className="flex items-center gap-1 text-slate-500 bg-slate-100 px-2 py-1 rounded-md text-xs font-semibold shrink-0">
                         <svg
@@ -400,19 +357,17 @@ const HomePage: React.FC = () => {
                         >
                           <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
                         </svg>
-                        {room.capacity}
+                        {roomCapacity}
                       </div>
                     </div>
                     <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-1">
-                      {room.desc}
+                      {roomDesc}
                     </p>
                     <button
                       onClick={() =>
                         navigate(
-                          ROUTES.ROOM_DETAIL.replace(
-                            ":roomId",
-                            String(room.id),
-                          ),
+                          ROUTES.ROOM_DETAIL.replace(":roomId", room.id),
+                          { state: buildRoomState(room) },
                         )
                       }
                       className="w-full py-2.5 rounded-xl border-2 border-orange-200 text-orange-500 font-bold hover:bg-orange-50 hover:border-orange-500 transition-colors"

@@ -1,5 +1,10 @@
 // ===== AI Chat Types =====
-import type { AiChatResponseDto, AiMenuOption, AiRoomSuggestion } from "./api";
+import type {
+  AiBookingItem,
+  AiChatResponseDto,
+  AiMenuOption,
+  AiRoomSuggestion,
+} from "./api";
 import type { Reservation } from ".";
 
 export type Sender = "user" | "bot";
@@ -13,6 +18,7 @@ export interface ChatMessage {
   suggestionType?: AiChatResponseDto["suggestionType"];
   suggestions?: AiRoomSuggestion[];
   menuOptions?: AiMenuOption[];
+  bookingItems?: AiBookingItem[];
   roomDetail?: AiChatResponseDto["roomDetail"];
   reservation?: Reservation | null;
   reservationCreated?: boolean;
