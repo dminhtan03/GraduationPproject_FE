@@ -29,12 +29,12 @@ import type {
   SpeechRecognitionLike,
 } from "../../types/speech.d";
 import {
-  BOOKING_CAPACITY_OPTIONS,
   BOOKING_DURATION_OPTIONS,
   BOOKING_ITEM_FALLBACK_IMAGE,
 } from "../../constants/aiAssistant";
 import {
   buildAssistantStorageKey,
+  buildCapacityOptions,
   buildBookingTimeOptions,
   deriveStoredSessions,
   getStoredAssistantState,
@@ -70,7 +70,7 @@ const AIAssistantPage: React.FC = () => {
 
   const storageKey = useMemo(
     () => buildAssistantStorageKey(profile),
-    [profile?.id, profile?.email],
+    [profile],
   );
 
   const storedAssistantState = useMemo(
@@ -751,16 +751,22 @@ const AIAssistantPage: React.FC = () => {
 
     const textNormalized = message.text.toLowerCase();
     const bookingTimeOptions = buildBookingTimeOptions(message.id);
+    const capacityOptions = buildCapacityOptions(
+      roomDetailCapacity ?? undefined,
+    );
     const inlineOptions = textNormalized.includes("muốn đặt khi nào")
       ? bookingTimeOptions
-      : textNormalized.includes("trong bao lâu")
+      : textNormalized.includes("trong bao lâu") ||
+          textNormalized.includes("thêm bao lâu")
         ? BOOKING_DURATION_OPTIONS
         : textNormalized.includes("bao nhiêu người")
-          ? BOOKING_CAPACITY_OPTIONS
+          ? capacityOptions
           : [];
-    const inlineOptionsLayout = textNormalized.includes("trong bao lâu")
-      ? "mt-3 grid grid-cols-3 gap-2"
-      : "mt-3 grid grid-cols-2 gap-2";
+    const inlineOptionsLayout =
+      textNormalized.includes("trong bao lâu") ||
+      textNormalized.includes("thêm bao lâu")
+        ? "mt-3 grid grid-cols-3 gap-2"
+        : "mt-3 grid grid-cols-2 gap-2";
 
     return (
       <div

@@ -4,6 +4,7 @@ import type { ChatMessage, ChatSessionSummary } from "../types/chat";
 import {
   AI_ASSISTANT_STORAGE_KEY,
   AI_ASSISTANT_GUEST_KEY,
+  BOOKING_CAPACITY_OPTIONS,
   QUICK_ACTION_LABELS,
 } from "../constants/aiAssistant";
 import {
@@ -67,6 +68,7 @@ export const buildBookingTimeOptions = (seed: string) => {
   base.setMinutes(0, 0, 0);
   base.setHours(base.getHours() + 1);
   const baseTime = formatHourMinute(base);
+  const nowTime = formatHourMinute(new Date());
 
   const buildOption = (
     label: string,
@@ -84,13 +86,39 @@ export const buildBookingTimeOptions = (seed: string) => {
 
   const randomTimeToday = buildRandomTime(`${seed}-today`, baseTime);
   const randomTimeOther = buildRandomTime(`${seed}-other`, baseTime);
+  const randomTimeExtra = buildRandomTime(`${seed}-extra`, baseTime);
+  const extraTime =
+    randomTimeExtra === nowTime
+      ? buildRandomTime(`${seed}-extra-alt`, baseTime)
+      : randomTimeExtra;
 
   return [
+    buildOption("Hôm nay", 0, nowTime),
     buildOption("Hôm nay", 0, baseTime),
     buildOption("Ngày mai", 1, baseTime),
     buildOption("Hôm nay", 0, randomTimeToday),
     buildOption("Ngày kia", 2, randomTimeOther),
+    buildOption("Ngày mai", 0, extraTime),
   ];
+};
+
+export const buildCapacityOptions = (capacity?: number) => {
+  const maxCap =
+    typeof capacity === "number" && Number.isFinite(capacity) && capacity > 0
+      ? Math.round(capacity)
+      : 0;
+  if (!maxCap) return BOOKING_CAPACITY_OPTIONS;
+
+  const step = Math.max(1, Math.round(maxCap / 4));
+  const rawValues = [step, step * 2, step * 3, maxCap];
+  const values = Array.from(
+    new Set(rawValues.filter((value) => value > 0 && value <= maxCap)),
+  );
+
+  return values.map((people) => ({
+    label: `${people} người`,
+    message: `${people} người`,
+  }));
 };
 
 export const resolveBookingRoomCode = (item: {
