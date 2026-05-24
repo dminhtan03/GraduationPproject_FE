@@ -65,7 +65,7 @@ const TaskDetailPage: React.FC = () => {
   const [reviewModal, setReviewModal] = useState(false);
   const [inviteReviewerModal, setInviteReviewerModal] = useState(false);
   const [assignModal, setAssignModal] = useState(false);
-  const [supporterModal, setSupporterModal] = useState(false);
+  const [editDueDate, setEditDueDate] = useState(false);
 
   // Subtask modal state
   const [subtaskModal, setSubtaskModal] = useState(false);
@@ -162,11 +162,13 @@ const TaskDetailPage: React.FC = () => {
       setInviteReviewerModal(false); setSelectedUserId("");
     }, "Reviewer invited");
 
-  const handleAddSupporter = () =>
+  const handleDueDateChange = (date: dayjs.Dayjs | null) => {
+    if (!date) return;
     doAction(async () => {
-      await taskService.addSupporter(taskId!, selectedUserId);
-      setSupporterModal(false); setSelectedUserId("");
-    }, "Supporter added");
+      await taskService.updateTask(taskId!, { dueAt: date.toISOString() });
+      setEditDueDate(false);
+    }, "Due date updated");
+  };
 
   const handleFileAttach = async (file: File) => {
     setUploadingFile(true);
@@ -309,7 +311,35 @@ const TaskDetailPage: React.FC = () => {
             <h1 className="text-xl font-bold text-slate-900 truncate leading-snug">{task.title}</h1>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <Tag color={PRIORITY_COLOR[task.priority]}>{task.priority}</Tag>
-              <Tag color={STATUS_COLOR[task.status]}>{task.status?.replace(/_/g, " ")}</Tag>
+              {(isCreator || myAssignment?.status === "ACCEPTED") ? (
+                <Select
+                  size="small"
+                  value={task.status}
+                  disabled={busy}
+                  onChange={(v) => doAction(() => taskService.changeStatus(taskId!, v), "Status updated")}
+                  style={{ minWidth: 130 }}
+                  options={
+                    isCreator
+                      ? [
+                          { value: "TODO", label: "TO DO" },
+                          { value: "DOING", label: "IN PROGRESS" },
+                          { value: "WAITING_REVIEW", label: "IN REVIEW" },
+                          { value: "DONE", label: "DONE" },
+                          { value: "REWORK", label: "REWORK" },
+                          { value: "CANCELLED", label: "CANCELLED" },
+                        ]
+                      : [
+                          { value: "TODO", label: "TO DO" },
+                          { value: "DOING", label: "IN PROGRESS" },
+                          ...(task.reviewerUserId
+                            ? [{ value: "WAITING_REVIEW", label: "SUBMIT FOR REVIEW" }]
+                            : [{ value: "DONE", label: "MARK AS DONE" }]),
+                        ]
+                  }
+                />
+              ) : (
+                <Tag color={STATUS_COLOR[task.status]}>{task.status?.replace(/_/g, " ")}</Tag>
+              )}
               {task.sprintName && (
                 <span className="px-2 py-0.5 text-xs bg-orange-50 text-orange-600 rounded-lg border border-orange-100 font-bold">{task.sprintName}</span>
               )}
@@ -356,8 +386,32 @@ const TaskDetailPage: React.FC = () => {
               )}
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100 text-xs">
-                <InfoItem icon={<CalendarIcon className="h-4 w-4 text-orange-400" />}
-                  label="Deadline" value={fmt(task.dueAt)} />
+                {isCreator ? (
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <CalendarIcon className="h-4 w-4 text-orange-400 shrink-0" />
+                    {editDueDate ? (
+                      <DatePicker
+                        size="small"
+                        defaultValue={task.dueAt ? dayjs(task.dueAt) : undefined}
+                        autoFocus
+                        onChange={(d) => handleDueDateChange(d)}
+                        onOpenChange={(open) => { if (!open) setEditDueDate(false); }}
+                      />
+                    ) : (
+                      <span
+                        className="cursor-pointer hover:text-orange-500 transition"
+                        onClick={() => setEditDueDate(true)}
+                        title="Click to edit due date"
+                      >
+                        Deadline: <span className="font-semibold text-slate-800">{fmt(task.dueAt)}</span>
+                        <span className="ml-1 text-orange-400">[edit]</span>
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <InfoItem icon={<CalendarIcon className="h-4 w-4 text-orange-400" />}
+                    label="Deadline" value={fmt(task.dueAt)} />
+                )}
                 <InfoItem icon={<UserIcon className="h-4 w-4 text-blue-400" />}
                   label="Creator" value={task.createdByName} />
                 {task.submittedAt && (
@@ -648,12 +702,6 @@ const TaskDetailPage: React.FC = () => {
                 ))
               )}
 
-              {(isCreator || myAssignment?.status === "ACCEPTED") && task.status !== "DONE" && task.status !== "CANCELLED" && (
-                <button type="button" onClick={() => { setSelectedUserId(""); setSupporterModal(true); }}
-                  className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition w-full bg-white shadow-sm mt-1">
-                  <PlusIcon className="h-3.5 w-3.5" /> Add Supporter
-                </button>
-              )}
             </div>
           </Section>
         </div>
@@ -771,7 +819,6 @@ const TaskDetailPage: React.FC = () => {
           </div>
         )},
         { open: inviteReviewerModal, title: "Invite Reviewer", onOk: handleInviteReviewer, onCancel: () => setInviteReviewerModal(false), extra: null },
-        { open: supporterModal, title: "Add Supporter", onOk: handleAddSupporter, onCancel: () => setSupporterModal(false), extra: null },
       ].map(({ open, title, onOk, onCancel, extra }) => (
         <Modal key={title} title={title} open={open} onCancel={onCancel}
           onOk={onOk} confirmLoading={busy} okText="Confirm"

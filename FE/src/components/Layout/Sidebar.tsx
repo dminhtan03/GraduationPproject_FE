@@ -80,11 +80,11 @@ const Sidebar: React.FC = () => {
       icon: <CheckSquareOutlined />,
       label: "Tasks",
     },
-    {
-      key: ROUTES.MEETINGS,
-      icon: <VideoCameraOutlined />,
-      label: "Meetings",
-    },
+    // {
+    //   key: ROUTES.MEETINGS,
+    //   icon: <VideoCameraOutlined />,
+    //   label: "Meetings",
+    // },
   ];
 
   const handleMenuClick = ({ key }: { key: string }) => {

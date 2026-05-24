@@ -116,7 +116,8 @@ const TaskListPage: React.FC = () => {
     const personal = tasks.filter(t => {
       const matchStatus = statusFilter === "ALL" || t.status === statusFilter;
       const matchSearch = !searchQuery || t.title?.toLowerCase().includes(searchQuery.toLowerCase());
-      const isPersonal = !t.sprintId && t.status !== "DONE" && t.status !== "CANCELLED";
+      // Khi không lọc cụ thể, ẩn DONE/CANCELLED; khi chọn status cụ thể thì hiển thị đúng status đó
+      const isPersonal = !t.sprintId && (statusFilter !== "ALL" || (t.status !== "DONE" && t.status !== "CANCELLED"));
       return matchStatus && matchSearch && isPersonal;
     });
     return personal.sort((a, b) => {
@@ -166,8 +167,8 @@ const TaskListPage: React.FC = () => {
     try {
       await taskService.createSprint({
         name: sprintForm.name,
-        startDate: sprintForm.startDate ? sprintForm.startDate.toISOString() : undefined,
-        endDate: sprintForm.endDate ? sprintForm.endDate.toISOString() : undefined,
+        startDate: sprintForm.startDate ? dayjs(sprintForm.startDate).format("YYYY-MM-DD") : undefined,
+        endDate: sprintForm.endDate ? dayjs(sprintForm.endDate).format("YYYY-MM-DD") : undefined,
       });
       show("success", "Sprint created");
       setIsSprintModalOpen(false);
