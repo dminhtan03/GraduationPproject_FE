@@ -24,10 +24,6 @@ import CustomMessage, {
 } from "../../components/common/CustomMessage";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import type { ChatMessage, ChatSessionSummary } from "../../types/chat";
-import type {
-  SpeechRecognitionEventLike,
-  SpeechRecognitionLike,
-} from "../../types/speech.d";
 import {
   BOOKING_DURATION_OPTIONS,
   BOOKING_ITEM_FALLBACK_IMAGE,
@@ -53,7 +49,6 @@ import {
   statusClass,
   bookingStatusClass,
   getBookingCardData,
-  getSpeechRecognitionCtor,
   toText,
   toPositiveNumber,
   toSessionTitle,
@@ -64,6 +59,43 @@ import {
 } from "../../utils/chatHelpers";
 import { normalizeRoomsMap } from "../../utils/roomList";
 const EMPTY_MESSAGES_BY_SESSION: Record<string, ChatMessage[]> = {};
+
+type LookupMode = "NONE" | "DETAIL" | "CAPACITY";
+
+type LookupOption = {
+  id: "HISTORY" | "AVAILABLE" | "DETAIL" | "CAPACITY";
+  label: string;
+  message?: string;
+};
+
+const LOOKUP_OPTIONS: LookupOption[] = [
+  {
+    id: "HISTORY",
+    label: "Lịch sử đặt phòng của tôi",
+    message: "Lịch sử đặt phòng của tôi",
+  },
+  {
+    id: "AVAILABLE",
+    label: "Phòng còn trống",
+    message: "Phòng còn trống",
+  },
+  {
+    id: "DETAIL",
+    label: "Chi tiết phòng",
+  },
+  {
+    id: "CAPACITY",
+    label: "Tìm kiếm theo sức chứa",
+  },
+];
+
+const CAPACITY_RANGE_OPTIONS = [
+  { id: "CAP_5_20", label: "5 - 20 người", message: "5 - 20 người" },
+  { id: "CAP_20_40", label: "20 - 40 người", message: "20 - 40 người" },
+  { id: "CAP_40_60", label: "40 - 60 người", message: "40 - 60 người" },
+  { id: "CAP_60_80", label: "60 - 80 người", message: "60 - 80 người" },
+  { id: "CAP_80_100", label: "80 - 100 người", message: "80 - 100 người" },
+];
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -97,9 +129,7 @@ const AIAssistantPage: React.FC = () => {
     Record<string, ChatMessage[]>
   >(() => initialStoredMessagesBySession);
 
-  const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -120,14 +150,13 @@ const AIAssistantPage: React.FC = () => {
   const [activeMenuOptions, setActiveMenuOptions] = useState<AiMenuOption[]>(
     [],
   );
+  const [showLookupOptions, setShowLookupOptions] = useState(false);
+  const [lookupMode, setLookupMode] = useState<LookupMode>("NONE");
+  const [lookupLocationCode, setLookupLocationCode] = useState("");
   const [bookingImageByCode, setBookingImageByCode] = useState<
     Record<string, string>
   >({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const manualStopRef = useRef(false);
-  const keepListeningRef = useRef(false);
-  const transcriptRef = useRef("");
   const loadedSessionDetailsRef = useRef<Set<string>>(
     new Set(Object.keys(initialStoredMessagesBySession)),
   );
@@ -148,6 +177,9 @@ const AIAssistantPage: React.FC = () => {
       Object.keys(nextMessagesBySession),
     );
     setActiveMenuOptions([]);
+    setShowLookupOptions(false);
+    setLookupMode("NONE");
+    setLookupLocationCode("");
   }, [storageKey]);
 
   const createEmptySession = useCallback(async () => {
@@ -467,6 +499,12 @@ const AIAssistantPage: React.FC = () => {
     }
   }
 
+  const isLookupAction = useCallback((option: AiMenuOption) => {
+    const intent = String(option.intent || "").toUpperCase();
+    const label = resolveQuickActionLabel(option).toLowerCase();
+    return intent === "LOOKUP" || label.includes("tra cứu");
+  }, []);
+
   const sendMessageToAi = useCallback(
     async (content: string, _mode: "chat" | "voice") => {
       void _mode;
@@ -570,17 +608,6 @@ const AIAssistantPage: React.FC = () => {
     [isSending, selectedSession],
   );
 
-  const handleSend = useCallback(
-    async (text?: string) => {
-      const content = (text ?? inputValue).trim();
-      if (!content) return;
-
-      if (!text) setInputValue("");
-      await sendMessageToAi(content, "chat");
-    },
-    [inputValue, sendMessageToAi],
-  );
-
   const handleSelectAction = useCallback(
     async (menuOption: AiMenuOption) => {
       if (isSending || !selectedSession) return;
@@ -589,107 +616,75 @@ const AIAssistantPage: React.FC = () => {
     [isSending, selectedSession, sendMessageToAi],
   );
 
-  const handleQuickActionSelect = useCallback(
-    async (menuOption: AiMenuOption) => {
+  const handleLookupOptionSelect = useCallback(
+    async (option: LookupOption) => {
       if (isSending || !selectedSession) return;
-      await sendMessageToAi(resolveQuickActionLabel(menuOption), "chat");
+
+      if (option.id === "DETAIL") {
+        setLookupMode("DETAIL");
+        setShowLookupOptions(true);
+        return;
+      }
+
+      if (option.id === "CAPACITY") {
+        setLookupMode("CAPACITY");
+        setShowLookupOptions(true);
+        return;
+      }
+
+      if (option.message) {
+        await sendMessageToAi(option.message, "chat");
+      }
+
+      setShowLookupOptions(false);
+      setLookupMode("NONE");
+      setLookupLocationCode("");
     },
     [isSending, selectedSession, sendMessageToAi],
   );
 
-  const handleMicClick = useCallback(() => {
+  const handleCapacityRangeSelect = useCallback(
+    async (label: string) => {
+      if (isSending || !selectedSession) return;
+
+      await sendMessageToAi(
+        `T\u00ecm ki\u1ebfm theo s\u1ee9c ch\u1ee9a ${label}`,
+        "chat",
+      );
+      setShowLookupOptions(false);
+      setLookupMode("NONE");
+    },
+    [isSending, selectedSession, sendMessageToAi],
+  );
+
+  const handleLookupDetailSubmit = useCallback(async () => {
     if (isSending || !selectedSession) return;
+    const code = lookupLocationCode.trim();
+    if (!code) return;
 
-    if (isListening) {
-      manualStopRef.current = true;
-      keepListeningRef.current = false;
-      recognitionRef.current?.stop();
-      return;
-    }
+    await sendMessageToAi(`Chi tiết phòng ${code}`, "chat");
+    setLookupLocationCode("");
+    setShowLookupOptions(false);
+    setLookupMode("NONE");
+  }, [isSending, lookupLocationCode, selectedSession, sendMessageToAi]);
 
-    const RecognitionCtor = getSpeechRecognitionCtor();
-    if (!RecognitionCtor) {
-      setMessagesBySession((prev) => ({
-        ...prev,
-        [selectedSession.id]: [
-          ...(prev[selectedSession.id] ?? []),
-          {
-            id: createId(),
-            sender: "bot",
-            text: "Speech recognition is not supported in this browser.",
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      }));
-      return;
-    }
-
-    const recognition = new RecognitionCtor();
-    recognitionRef.current = recognition;
-    recognition.lang = "en-US";
-    recognition.interimResults = true;
-    recognition.continuous = true;
-
-    transcriptRef.current = "";
-    manualStopRef.current = false;
-    keepListeningRef.current = true;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onresult = (event: SpeechRecognitionEventLike) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i += 1) {
-        transcript += event.results[i][0].transcript;
-      }
-
-      const normalizedTranscript = transcript.trim();
-      if (normalizedTranscript) {
-        transcriptRef.current = normalizedTranscript;
-        setInputValue(normalizedTranscript);
-      }
-    };
-
-    recognition.onerror = () => {
-      keepListeningRef.current = false;
-      manualStopRef.current = false;
-      transcriptRef.current = "";
-      setIsListening(false);
-      recognitionRef.current = null;
-    };
-
-    recognition.onend = () => {
-      if (manualStopRef.current) {
-        manualStopRef.current = false;
-        keepListeningRef.current = false;
-        setIsListening(false);
-        recognitionRef.current = null;
-
-        const spokenText = transcriptRef.current.trim();
-        transcriptRef.current = "";
-        if (!spokenText) return;
-
-        setInputValue("");
-        void sendMessageToAi(spokenText, "voice");
+  const handleQuickActionSelect = useCallback(
+    async (menuOption: AiMenuOption) => {
+      if (isSending || !selectedSession) return;
+      if (isLookupAction(menuOption)) {
+        setShowLookupOptions(true);
+        setLookupMode("NONE");
+        setLookupLocationCode("");
         return;
       }
 
-      if (keepListeningRef.current && recognitionRef.current) {
-        try {
-          recognitionRef.current.start();
-          return;
-        } catch {
-          keepListeningRef.current = false;
-        }
-      }
-
-      setIsListening(false);
-      recognitionRef.current = null;
-    };
-
-    recognition.start();
-  }, [isListening, isSending, selectedSession, sendMessageToAi]);
+      setShowLookupOptions(false);
+      setLookupMode("NONE");
+      setLookupLocationCode("");
+      await sendMessageToAi(resolveQuickActionLabel(menuOption), "chat");
+    },
+    [isLookupAction, isSending, selectedSession, sendMessageToAi],
+  );
 
   useEffect(() => {
     if (!messagesEndRef.current) return;
@@ -698,18 +693,6 @@ const AIAssistantPage: React.FC = () => {
       block: "end",
     });
   }, [selectedMessages, isSending]);
-
-  useEffect(() => {
-    return () => {
-      keepListeningRef.current = false;
-      manualStopRef.current = false;
-      transcriptRef.current = "";
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      }
-    };
-  }, []);
 
   const renderMessage = (message: ChatMessage) => {
     const isUser = message.sender === "user";
@@ -1511,8 +1494,6 @@ const AIAssistantPage: React.FC = () => {
           [newSession.id]: [createWelcomeMessage()],
         }));
       }
-
-      setInputValue("");
     } catch {
       // Keep current chat if creating a new chat fails.
     } finally {
@@ -1873,109 +1854,95 @@ const AIAssistantPage: React.FC = () => {
                         </button>
                       ))}
                 </div>
+
+                {showLookupOptions && (
+                  <div className="relative mt-3 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
+                        Tra cứu
+                      </p>
+                      {lookupMode !== "NONE" && (
+                        <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
+                          {lookupMode === "DETAIL"
+                            ? "Chi tiết phòng"
+                            : "Theo sức chứa"}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {LOOKUP_OPTIONS.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => void handleLookupOptionSelect(option)}
+                          disabled={isSending || !selectedSession}
+                          className="group rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-300 hover:bg-orange-50 hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-orange-300 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                            {option.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {lookupMode === "CAPACITY" && (
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {CAPACITY_RANGE_OPTIONS.map((option) => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() =>
+                              void handleCapacityRangeSelect(option.label)
+                            }
+                            disabled={isSending || !selectedSession}
+                            className="group rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] font-semibold text-orange-700 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-300 hover:bg-orange-100 hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-1.5 w-1.5 rounded-full bg-orange-500 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                              {option.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-end gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-2.5">
-                <textarea
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder="Type your message for UniBot..."
-                  className="max-h-28 min-h-10 flex-1 resize-none border-none bg-transparent text-sm text-orange-950 outline-none placeholder:text-orange-400"
-                />
-
-                <button
-                  type="button"
-                  onClick={handleMicClick}
-                  disabled={isSending || !selectedSession}
-                  title={isListening ? "Stop recording" : "Speech to text"}
-                  className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-1 ${
-                    isListening
-                      ? "border-red-400 bg-gradient-to-b from-red-500 to-rose-600 text-white shadow-md shadow-red-200"
-                      : "border-orange-200 bg-gradient-to-b from-white to-orange-50 text-orange-700 shadow-sm hover:-translate-y-0.5 hover:border-orange-300 hover:shadow"
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                >
-                  {isListening && (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        className="absolute -inset-1 animate-pulse rounded-2xl border border-red-300"
-                      />
-                      <span
-                        aria-hidden="true"
-                        className="absolute h-3 w-3 animate-ping rounded-full bg-red-200"
-                      />
-                    </>
-                  )}
-                  {isListening ? (
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden="true"
-                      className="relative z-10 h-5 w-5"
+              {lookupMode === "DETAIL" && (
+                <div className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-3">
+                  <p className="text-xs font-semibold text-orange-700">
+                    Nhập location code để xem chi tiết phòng
+                  </p>
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      value={lookupLocationCode}
+                      onChange={(e) => setLookupLocationCode(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void handleLookupDetailSubmit();
+                        }
+                      }}
+                      placeholder="VD: A19-003"
+                      className="flex-1 rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleLookupDetailSubmit()}
+                      disabled={
+                        isSending ||
+                        !selectedSession ||
+                        !lookupLocationCode.trim()
+                      }
+                      className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
                     >
-                      <rect
-                        x="7"
-                        y="7"
-                        width="10"
-                        height="10"
-                        rx="2"
-                        className="fill-current"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden="true"
-                      className="relative z-10 h-5 w-5"
-                    >
-                      <path
-                        d="M12 3.75a3 3 0 0 0-3 3v5.25a3 3 0 0 0 6 0V6.75a3 3 0 0 0-3-3Z"
-                        className="fill-current"
-                      />
-                      <path
-                        d="M5.25 10.5a.75.75 0 0 1 .75.75V12a6 6 0 0 0 12 0v-.75a.75.75 0 0 1 1.5 0V12a7.5 7.5 0 0 1-6.75 7.46V21a.75.75 0 0 1-1.5 0v-1.54A7.5 7.5 0 0 1 4.5 12v-.75a.75.75 0 0 1 .75-.75Z"
-                        className="fill-current"
-                      />
-                    </svg>
-                  )}
-                  <span className="sr-only">
-                    {isListening ? "Stop recording" : "Start voice input"}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSend()}
-                  disabled={isSending || !inputValue.trim() || !selectedSession}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300 shadow-sm"
-                  aria-label="Send"
-                >
-                  {isSending ? (
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  ) : (
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      className="h-5 w-5"
-                    >
-                      <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-
-              {isListening && (
-                <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-red-600">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-                  Listening... Speak now.
-                </p>
+                      Tra cứu
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
