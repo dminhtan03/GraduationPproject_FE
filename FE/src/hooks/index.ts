@@ -11,3 +11,4 @@ export {
 } from "./useLocalStorage";
 export { useDashboard } from "./useDashboard";
 export type { UseDashboardReturn } from "./useDashboard";
+export { useAiChat } from "./useAiChat";

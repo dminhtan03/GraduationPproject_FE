@@ -13,11 +13,11 @@ export const BOOKING_ITEM_FALLBACK_IMAGE =
 
 export const BOOKING_DURATION_OPTIONS = [
   "1 tiếng",
-  "1h30",
-  "1h40",
+  "1 tiếng rưỡi",
+  "1 tiếng 40 phút",
   "2 tiếng",
-  "2h30",
-  "2h50",
+  "2 tiếng 30 phút",
+  "2 tiếng 50 phút",
   "3 tiếng",
 ].map((label) => ({
   label,

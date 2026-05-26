@@ -1,1210 +1,728 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { CloseOutlined, MessageOutlined } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
-import { aiService } from "../../services/aiService";
-import type { AiChatResponseDto, AiRoomSuggestion } from "../../types/api";
-import type { Reservation, UserProfile } from "../../types";
-import { api } from "../../services/api";
-import { API_ENDPOINTS } from "../../constants/endpoints";
-import { ROUTES } from "../../constants";
-import { roomService } from "../../services/roomService";
-import { extractApiMessage } from "../../utils/errorHandlers";
+import React, { useCallback, useEffect } from "react";
+import { Badge, Avatar, Tooltip, Typography, Tag, Image } from "antd";
+import {
+  RobotOutlined,
+  CloseOutlined,
+  SendOutlined,
+  EyeOutlined,
+  CalendarOutlined,
+  EnvironmentOutlined,
+  UserOutlined,
+  StarFilled,
+  TeamOutlined,
+  FileTextOutlined,
+  InfoCircleOutlined,
+  ThunderboltOutlined,
+  MessageOutlined,
+} from "@ant-design/icons";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAiChat } from "../../hooks/useAiChat";
+import type { AiRoomSuggestion } from "../../types/api";
 
-type Sender = "user" | "bot";
+import "../../styles/AiChatWidget.css";
 
-interface ChatBubbleMessage {
-  id: string;
-  sender: Sender;
-  text: string;
-  createdAt: string;
-  intent?: AiChatResponseDto["intent"];
-  suggestionType?: AiChatResponseDto["suggestionType"];
-  suggestions?: AiRoomSuggestion[];
-  reservation?: Reservation | null;
-  reservationCreated?: boolean;
-  roomDetail?: Record<string, unknown> | null;
-}
+const { Text, Title } = Typography;
 
-const createId = () => Math.random().toString(36).slice(2);
-const toText = (value: unknown) =>
-  typeof value === "string" ? value.trim() : "";
+// ── Animations ────────────────────────────────────────────────────────────────
 
-const AI_WIDGET_STORAGE_KEY = "ai_widget_chat_state_v1";
-
-interface SpeechRecognitionAlternativeLike {
-  transcript: string;
-}
-
-interface SpeechRecognitionEventLike {
-  resultIndex: number;
-  results: ArrayLike<ArrayLike<SpeechRecognitionAlternativeLike>>;
-}
-
-interface SpeechRecognitionLike {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onstart: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: (() => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
-
-const getSpeechRecognitionCtor = () => {
-  const maybeWindow = window as Window & {
-    SpeechRecognition?: SpeechRecognitionCtor;
-    webkitSpeechRecognition?: SpeechRecognitionCtor;
-  };
-
-  return maybeWindow.SpeechRecognition || maybeWindow.webkitSpeechRecognition;
+const widgetVariants = {
+  hidden: { opacity: 0, y: 24, scale: 0.92 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: "spring" as const, stiffness: 340, damping: 28 },
+  },
+  exit: {
+    opacity: 0,
+    y: 24,
+    scale: 0.92,
+    transition: { duration: 0.18 },
+  },
 };
 
-interface StoredWidgetState {
-  messages: ChatBubbleMessage[];
-  aiSessionId: string | null;
-  hasGreeted: boolean;
-}
-
-const toPositiveNumber = (value: unknown) => {
-  const numeric = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+const bubbleVariants = {
+  hidden: { opacity: 0, y: 8, scale: 0.96 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: "spring" as const, stiffness: 400, damping: 30 },
+  },
 };
 
-const toRecord = (value: unknown): Record<string, unknown> | null => {
-  if (!value || typeof value !== "object") return null;
-  return value as Record<string, unknown>;
+const fabVariants = {
+  idle: { scale: 1 },
+  hover: { scale: 1.08 },
+  tap: { scale: 0.94 },
 };
 
-const toNumberOrNull = (value: unknown) => {
-  const numeric = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-};
-
-const formatDateTimeLabel = (value: unknown) => {
-  if (!value) return "-";
-
-  const raw = String(value);
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return raw;
-
-  return parsed.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-const bookingStatusClass = (status: string) => {
-  const upper = status.toUpperCase();
-  if (
-    upper === "APPROVED" ||
-    upper === "CHECKED_IN" ||
-    upper === "IN_USE" ||
-    upper === "RESERVED"
-  ) {
-    return "border-emerald-200 bg-emerald-100 text-emerald-700";
-  }
-  if (upper === "CANCELLED" || upper === "REJECTED") {
-    return "border-rose-200 bg-rose-100 text-rose-700";
-  }
-  if (upper === "COMPLETED") {
-    return "border-slate-200 bg-slate-100 text-slate-700";
-  }
-  return "border-amber-200 bg-amber-100 text-amber-700";
-};
-
-const getBookingCardData = (reservation?: Reservation | null) => {
-  if (!reservation) return null;
-
-  const source = toRecord(reservation);
-  if (!source) return null;
-
-  const room = toRecord(source.room);
-  const floor = toRecord(source.floor);
-  const building = toRecord(source.building);
-
-  const id = toText(source.id) || "-";
-  const roomCode =
-    toText(source.locationCode) ||
-    toText(room?.locationCode) ||
-    toText(room?.roomName) ||
-    toText(source.roomId) ||
-    "-";
-  const floorName =
-    toText(source.floor) ||
-    toText(floor?.name) ||
-    toText(floor?.floorName) ||
-    "-";
-  const buildingName =
-    toText(source.buildingName) ||
-    toText(building?.name) ||
-    toText(building?.buildingName) ||
-    "-";
-  const purpose = toText(source.purpose) || "-";
-  const note = toText(source.note);
-  const status = toText(source.status) || "PENDING";
-  const attendeeCount = toNumberOrNull(source.attendeeCount);
-
-  return {
-    id,
-    roomCode,
-    floorName,
-    buildingName,
-    startTime: formatDateTimeLabel(source.startTime),
-    endTime: formatDateTimeLabel(source.endTime),
-    purpose,
-    note,
-    status,
-    attendeeCount,
-  };
-};
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export const AiChatWidget: React.FC = () => {
-  const navigate = useNavigate();
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatBubbleMessage[]>([]);
-  const [inputValue, setInputValue] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [hasGreeted, setHasGreeted] = useState(false);
-  const [aiSessionId, setAiSessionId] = useState<string | null>(null);
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [dismissedSuggestionMessageId, setDismissedSuggestionMessageId] =
-    useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const manualStopRef = useRef(false);
+  const [isOpen, setIsOpen] = React.useState(false);
+  const {
+    messages,
+    inputValue,
+    isSending,
+    isHydrated,
+    aiSessionId,
+    userInitials,
+    messagesEndRef,
+    menuOptions,
+    latestSuggestions,
+    isSuggestionsVisible,
+    suggestionLabel,
+    showBestMatch,
+    latestSuggestionMessage,
+    // Actions
+    setInputValue,
+    setDismissedSuggestionMessageId,
+    handleSend,
+    handleQuickAction,
+    handleBookNow,
+    handleViewDetails,
+    handleViewBookingDetail,
+    greetIfNeeded,
+    scrollToBottom,
+    // Helpers
+    getBookingCardData,
+    bookingStatusClass,
+    formatDateTimeLabel,
+    toText,
+    toNumberOrNull,
+  } = useAiChat();
 
-  const latestMessage = useMemo(
-    () => messages[messages.length - 1] ?? null,
-    [messages],
-  );
-
-  const latestSuggestionMessage = useMemo(() => {
-    if (!latestMessage || latestMessage.sender !== "bot") return null;
-    if (!latestMessage.suggestions?.length) return null;
-    return latestMessage;
-  }, [latestMessage]);
-
-  const latestSuggestions = latestSuggestionMessage?.suggestions ?? [];
-
-  const isSingleSuggestion = latestSuggestions.length === 1;
-  const isSuggestionsVisible =
-    latestSuggestions.length > 0 &&
-    latestSuggestionMessage?.id !== dismissedSuggestionMessageId;
-  const suggestionKind = latestSuggestionMessage?.suggestionType || "suggested";
-  const suggestionLabel =
-    suggestionKind === "alternative"
-      ? "Alternative Rooms"
-      : suggestionKind === "available"
-        ? "Available Rooms Today"
-        : "Suggested Rooms";
-  const showBestMatch = isSingleSuggestion && suggestionKind === "suggested";
-
+  // Greet on first open
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(AI_WIDGET_STORAGE_KEY);
-      if (!raw) {
-        setIsHydrated(true);
-        return;
-      }
+    if (isOpen && isHydrated) greetIfNeeded();
+  }, [isOpen, isHydrated, greetIfNeeded]);
 
-      const parsed = JSON.parse(raw) as Partial<StoredWidgetState>;
-      if (Array.isArray(parsed.messages)) {
-        setMessages(parsed.messages);
-      }
-
-      if (
-        typeof parsed.aiSessionId === "string" ||
-        parsed.aiSessionId === null
-      ) {
-        setAiSessionId(parsed.aiSessionId ?? null);
-      }
-
-      if (typeof parsed.hasGreeted === "boolean") {
-        setHasGreeted(parsed.hasGreeted);
-      }
-    } catch {
-      // Ignore invalid storage payload.
-    } finally {
-      setIsHydrated(true);
-    }
-  }, []);
-
+  // Auto-scroll
   useEffect(() => {
-    if (!isHydrated) return;
+    if (isOpen) scrollToBottom();
+  }, [messages, isSending, isOpen, scrollToBottom]);
 
-    const payload: StoredWidgetState = {
-      messages,
-      aiSessionId,
-      hasGreeted,
-    };
+  const toggleOpen = useCallback(() => setIsOpen((p) => !p), []);
 
-    window.localStorage.setItem(AI_WIDGET_STORAGE_KEY, JSON.stringify(payload));
-  }, [aiSessionId, hasGreeted, isHydrated, messages]);
+  // ── Render helpers ────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (!isHydrated || !isOpen || hasGreeted || messages.length > 0) return;
-    const now = new Date().toISOString();
-    setMessages([
-      {
-        id: createId(),
-        sender: "bot",
-        text: "Hello! I am UniBot. I can help you find available rooms and book faster.",
-        createdAt: now,
-      },
-    ]);
-    setHasGreeted(true);
-  }, [hasGreeted, isHydrated, isOpen, messages.length]);
+  const renderMenuOptions = (msgMenuOptions?: typeof menuOptions) => {
+    const options =
+      msgMenuOptions && msgMenuOptions.length > 0 ? msgMenuOptions : null;
+    if (!options) return null;
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await api.get<UserProfile | { data: UserProfile }>(
-          API_ENDPOINTS.AUTH.PROFILE,
-        );
-        const raw = res.data;
-        const nested = (raw as { data?: UserProfile }).data;
-        const userData: UserProfile | null = nested || (raw as UserProfile);
-        setProfile(userData || null);
-      } catch {
-        setProfile(null);
-      }
-    };
-    fetchProfile();
-  }, []);
+    return (
+      <motion.div
+        className="wcw-menu-options"
+        variants={bubbleVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        {options.map((option) => (
+          <button
+            key={option.code}
+            type="button"
+            onClick={() => void handleQuickAction(option)}
+            disabled={isSending}
+            className="wcw-menu-option"
+          >
+            <span className="wcw-menu-option__code">{option.code}</span>
+            <span className="wcw-menu-option__label">{option.label}</span>
+          </button>
+        ))}
+      </motion.div>
+    );
+  };
 
-  let userInitials = "U";
-  if (profile) {
-    if (profile.firstName && profile.lastName) {
-      userInitials = `${profile.firstName[0] ?? ""}${
-        profile.lastName[0] ?? ""
-      }`.toUpperCase();
-    } else if (profile.firstName) {
-      userInitials = profile.firstName[0].toUpperCase();
-    } else if (profile.email) {
-      userInitials = profile.email[0].toUpperCase();
-    }
-  }
+  const renderRoomDetailCard = (rd: Record<string, unknown>) => {
+    const rdImages = Array.isArray(rd.images) ? (rd.images as string[]) : [];
+    const rdAmenities = Array.isArray(rd.amenities)
+      ? (rd.amenities as string[])
+      : [];
+    const rdCode = toText(rd.locationCode) || toText(rd.id) || "-";
+    const rdCapacity = toNumberOrNull(rd.capacity);
+    const rdScore = toNumberOrNull(rd.score);
+    const rdCurrentUser = toText(rd.currentUserName);
+    const rdCheckIn = toText(rd.checkInTime);
+    const rdFeedbacks = Array.isArray(rd.feedbacks)
+      ? (rd.feedbacks as Record<string, unknown>[])
+      : [];
+    const rdId = toText(rd.id);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-      });
-    }
-  }, [messages, isSending, isOpen]);
+    return (
+      <div className="wcw-card wcw-card--detail">
+        <div className="wcw-card__header">
+          <Text className="wcw-card__title">
+            <InfoCircleOutlined /> Room Detail
+          </Text>
+          {rdScore !== null && (
+            <Tag color="gold" className="wcw-card__tag">
+              <StarFilled /> {rdScore.toFixed(1)}
+            </Tag>
+          )}
+        </div>
 
-  useEffect(() => {
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      }
-    };
-  }, []);
+        {rdImages[0] && (
+          <Image
+            src={rdImages[0]}
+            alt={rdCode}
+            className="wcw-card__image"
+            preview={{ mask: <EyeOutlined /> }}
+            height={80}
+            width="100%"
+            style={{ objectFit: "cover" }}
+          />
+        )}
 
-  const sendMessageToAi = useCallback(
-    async (content: string, _mode: "chat" | "voice") => {
-      void _mode;
-      if (!content || isSending) return;
+        <div className="wcw-card__body">
+          <div className="wcw-card__grid">
+            <div className="wcw-card__field">
+              <Text type="secondary" className="wcw-card__label">
+                Room Code
+              </Text>
+              <Text strong className="wcw-card__value">
+                {rdCode}
+              </Text>
+            </div>
+            <div className="wcw-card__field">
+              <Text type="secondary" className="wcw-card__label">
+                Capacity
+              </Text>
+              <Text strong className="wcw-card__value">
+                {rdCapacity ?? "-"}
+              </Text>
+            </div>
+          </div>
 
-      const now = new Date().toISOString();
-      const userMessage: ChatBubbleMessage = {
-        id: createId(),
-        sender: "user",
-        text: content,
-        createdAt: now,
-      };
-      setMessages((prev) => [...prev, userMessage]);
+          <div className="wcw-card__field">
+            <Text type="secondary" className="wcw-card__label">
+              <UserOutlined /> Current User
+            </Text>
+            <Text strong className="wcw-card__value">
+              {rdCurrentUser || "No active user"}
+            </Text>
+          </div>
 
-      setIsSending(true);
-      try {
-        const response: AiChatResponseDto = await aiService.chat({
-          message: content,
-          sessionId: aiSessionId ?? undefined,
-        });
+          {rdCheckIn && (
+            <div className="wcw-card__field">
+              <Text type="secondary" className="wcw-card__label">
+                Check-in
+              </Text>
+              <Text strong className="wcw-card__value">
+                {formatDateTimeLabel(rdCheckIn)}
+              </Text>
+            </div>
+          )}
 
-        if (response.sessionId) {
-          setAiSessionId(response.sessionId);
-        }
+          {rdAmenities.length > 0 && (
+            <div className="wcw-card__amenities">
+              {rdAmenities.slice(0, 5).map((a) => (
+                <Tag key={`${rdId}-${a}`} className="wcw-tag--amenity">
+                  {a}
+                </Tag>
+              ))}
+            </div>
+          )}
 
-        const botMessage: ChatBubbleMessage = {
-          id: createId(),
-          sender: "bot",
-          text: response.reply,
-          createdAt: new Date().toISOString(),
-          intent: response.intent,
-          suggestionType: response.suggestionType,
-          suggestions: response.suggestions,
-          reservation: response.reservation,
-          reservationCreated: response.reservationCreated,
-          roomDetail: response.roomDetail as
-            | Record<string, unknown>
-            | null
-            | undefined,
-        };
-        setMessages((prev) => [...prev, botMessage]);
-      } catch (err: unknown) {
-        const fallbackMessage =
-          "Sorry, UniBot is unavailable right now. Please try again later.";
-        const botMessage: ChatBubbleMessage = {
-          id: createId(),
-          sender: "bot",
-          text: extractApiMessage(err, fallbackMessage),
-          createdAt: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, botMessage]);
-      } finally {
-        setIsSending(false);
-      }
-    },
-    [aiSessionId, isSending],
-  );
+          {rdFeedbacks.length > 0 && (
+            <div className="wcw-card__feedbacks">
+              {rdFeedbacks.slice(0, 2).map((fb, i) => {
+                const rating =
+                  typeof fb.rating === "number"
+                    ? Math.max(0, Math.min(5, Math.round(fb.rating)))
+                    : 0;
+                const desc = toText(fb.description);
+                return (
+                  <div
+                    key={toText(fb.id) || `fb-${i}`}
+                    className="wcw-card__feedback-item"
+                  >
+                    <Text className="wcw-feedback-stars">
+                      {rating > 0 ? "★".repeat(rating) : "No rating"}
+                    </Text>
+                    {desc && <Text className="wcw-feedback-desc">{desc}</Text>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-  const handleSend = useCallback(
-    async (overrideText?: string) => {
-      const content = (overrideText ?? inputValue).trim();
-      if (!content) return;
+          {(rdId || rdCode !== "-") && (
+            <div className="wcw-card__actions">
+              <button
+                type="button"
+                onClick={() =>
+                  handleViewDetails({
+                    roomId: rdId || "",
+                    locationCode: rdCode,
+                    status: "AVAILABLE",
+                    capacity: rdCapacity ?? undefined,
+                    amenities: rdAmenities.length > 0 ? rdAmenities : undefined,
+                    imageUrl: rdImages[0] || undefined,
+                  })
+                }
+                className="wcw-btn wcw-btn--primary wcw-btn--sm"
+              >
+                View Room →
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
-      if (!overrideText) {
-        setInputValue("");
-      }
-
-      await sendMessageToAi(content, "chat");
-    },
-    [inputValue, sendMessageToAi],
-  );
-
-  const handleMicClick = useCallback(() => {
-    if (isSending) return;
-
-    if (isListening) {
-      manualStopRef.current = true;
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-
-    const RecognitionCtor = getSpeechRecognitionCtor();
-    if (!RecognitionCtor) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: createId(),
-          sender: "bot",
-          text: "Speech recognition is not supported in this browser.",
-          createdAt: new Date().toISOString(),
-        },
-      ]);
-      return;
-    }
-
-    const recognition = new RecognitionCtor();
-    recognitionRef.current = recognition;
-    recognition.lang = "en-US";
-    recognition.interimResults = true;
-    recognition.continuous = false;
-
-    let finalTranscript = "";
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onresult = (event: SpeechRecognitionEventLike) => {
-      let transcript = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        transcript += event.results[i][0].transcript;
-      }
-
-      finalTranscript = transcript.trim();
-      if (finalTranscript) {
-        setInputValue(finalTranscript);
-      }
-    };
-
-    recognition.onerror = () => {
-      setIsListening(false);
-      recognitionRef.current = null;
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      recognitionRef.current = null;
-
-      if (manualStopRef.current) {
-        manualStopRef.current = false;
-        return;
-      }
-
-      const spokenText = finalTranscript.trim();
-      if (!spokenText) return;
-
-      setInputValue("");
-      void sendMessageToAi(spokenText, "voice");
-    };
-
-    recognition.start();
-  }, [isListening, isSending, sendMessageToAi]);
-
-  const resolveSuggestionForNavigation = async (
-    suggestion: AiRoomSuggestion,
+  const renderBookingCard = (
+    booking: ReturnType<typeof getBookingCardData>,
+    reservation: import("../../types").Reservation | null | undefined,
+    reservationCreated?: boolean,
   ) => {
-    let resolvedRoomId = toText(suggestion.roomId);
-    let resolvedRoomData: Record<string, unknown> | null = null;
-    let resolvedBuilding = "";
-    let resolvedFloor = "";
+    if (!booking && !reservationCreated) return null;
+    const bookingId =
+      toText(reservation?.id) || toText(reservation?.rawData?.reservationId);
 
-    if (!resolvedRoomId) {
-      const code = toText(suggestion.locationCode).toLowerCase();
-      if (!code) return;
+    return (
+      <div className="wcw-card wcw-card--booking">
+        <div className="wcw-card__header">
+          <Text className="wcw-card__title">
+            <CalendarOutlined /> Booking Details
+          </Text>
+          <Tag
+            className={`wcw-card__status ${bookingStatusClass(booking?.status || "CREATED")}`}
+          >
+            {booking?.status || "CREATED"}
+          </Tag>
+        </div>
 
-      try {
-        const roomsMap = await roomService.getRoomsMap();
-        for (const building of roomsMap.buildingResponse || []) {
-          for (const floor of building.floors || []) {
-            const match = (floor.rooms || []).find((room) => {
-              const locationCode = toText(
-                (room as { locationCode?: string }).locationCode,
-              ).toLowerCase();
-              return locationCode === code;
-            });
+        {booking ? (
+          <div className="wcw-card__body">
+            <div className="wcw-card__field">
+              <Text type="secondary" className="wcw-card__label">
+                <EnvironmentOutlined /> Room
+              </Text>
+              <Text strong className="wcw-card__value">
+                {booking.roomCode}
+              </Text>
+            </div>
 
-            if (match) {
-              resolvedRoomData = match as Record<string, unknown>;
-              resolvedRoomId = toText(
-                (match as { roomId?: string; id?: string }).roomId ||
-                  (match as { id?: string }).id,
-              );
-              resolvedBuilding = toText(building.buildingName);
-              resolvedFloor = toText(floor.floorName);
-              break;
-            }
-          }
-          if (resolvedRoomId) break;
-        }
-      } catch {
-        return;
-      }
-    }
+            <div className="wcw-card__grid">
+              <div className="wcw-card__field">
+                <Text type="secondary" className="wcw-card__label">
+                  Location
+                </Text>
+                <Text className="wcw-card__value">
+                  {booking.buildingName} · {booking.floorName}
+                </Text>
+              </div>
+              <div className="wcw-card__field">
+                <Text type="secondary" className="wcw-card__label">
+                  Schedule
+                </Text>
+                <Text className="wcw-card__value">
+                  {booking.startTime} – {booking.endTime}
+                </Text>
+              </div>
+            </div>
 
-    if (!resolvedRoomId) return null;
+            {booking.attendeeCount && (
+              <Tag
+                icon={<TeamOutlined />}
+                color="blue"
+                className="wcw-tag--inline"
+              >
+                {booking.attendeeCount} attendees
+              </Tag>
+            )}
 
-    try {
-      const detail = await roomService.getRoomDetail(resolvedRoomId);
-      if (detail && typeof detail === "object") {
-        resolvedRoomData = detail as Record<string, unknown>;
-      }
-    } catch {
-      // Fallback to map data if room detail is not available.
-    }
+            <div className="wcw-card__field">
+              <Text type="secondary" className="wcw-card__label">
+                <FileTextOutlined /> Purpose
+              </Text>
+              <Text className="wcw-card__value">{booking.purpose}</Text>
+            </div>
 
-    const source = resolvedRoomData || {};
-    const roomNode = toRecord(source.room);
-    const floorNode = toRecord(source.floor);
-    const buildingNode = toRecord(source.building);
+            {booking.note && (
+              <div className="wcw-card__field wcw-card__field--note">
+                <Text type="secondary" className="wcw-card__label">
+                  Note
+                </Text>
+                <Text className="wcw-card__value">{booking.note}</Text>
+              </div>
+            )}
 
-    const roomState = {
-      id: resolvedRoomId,
-      roomName:
-        toText(source.roomName) ||
-        toText(source.locationCode) ||
-        toText(roomNode?.roomName) ||
-        toText(roomNode?.locationCode) ||
-        toText(source.locationCode) ||
-        toText(suggestion.locationCode) ||
-        resolvedRoomId,
-      building:
-        toText(source.building) ||
-        toText(source.buildingName) ||
-        toText(roomNode?.buildingName) ||
-        toText(roomNode?.building) ||
-        toText(buildingNode?.name) ||
-        toText(buildingNode?.buildingName) ||
-        toText((buildingNode as Record<string, unknown> | null)?.code) ||
-        toText(suggestion.building) ||
-        resolvedBuilding,
-      floorInfo:
-        toText(source.floorInfo) ||
-        toText(source.floorName) ||
-        toText(source.floor) ||
-        toText(roomNode?.floorInfo) ||
-        toText(roomNode?.floorName) ||
-        toText(roomNode?.floor) ||
-        toText(floorNode?.name) ||
-        toText(floorNode?.floorName) ||
-        toText((floorNode as Record<string, unknown> | null)?.floorInfo) ||
-        toText(suggestion.floor) ||
-        resolvedFloor,
-      slot: toPositiveNumber(source.slot || source.capacity),
-      status:
-        String(
-          source.status || suggestion.status || "AVAILABLE",
-        ).toUpperCase() === "AVAILABLE"
-          ? "AVAILABLE"
-          : "OCCUPIED",
-    };
-
-    return {
-      roomId: resolvedRoomId,
-      roomState,
-    };
+            {bookingId && (
+              <div className="wcw-card__actions">
+                <button
+                  type="button"
+                  onClick={() => handleViewBookingDetail(reservation)}
+                  className="wcw-btn wcw-btn--primary wcw-btn--sm"
+                >
+                  View Details →
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="wcw-card__body">
+            <Text className="wcw-card__success-text">
+              Reservation has been created successfully.
+            </Text>
+          </div>
+        )}
+      </div>
+    );
   };
 
-  const handleBookNow = async (suggestion: AiRoomSuggestion) => {
-    const resolved = await resolveSuggestionForNavigation(suggestion);
-    if (!resolved) return;
+  const renderSuggestionItem = (item: AiRoomSuggestion) => {
+    const metaParts = [
+      item.building,
+      item.floor,
+      typeof item.capacity === "number" ? `Capacity ${item.capacity}` : "",
+    ]
+      .map((v) => (typeof v === "string" ? v.trim() : v))
+      .filter(Boolean) as string[];
 
-    navigate(ROUTES.ROOM_DETAIL.replace(":roomId", resolved.roomId), {
-      state: { room: resolved.roomState },
-    });
+    return (
+      <motion.div
+        key={`${item.roomId}-${item.locationCode}`}
+        className="wcw-suggestion-item"
+        variants={bubbleVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        {item.imageUrl && (
+          <Image
+            src={item.imageUrl}
+            alt={item.locationCode || item.roomId}
+            className="wcw-suggestion-item__img"
+            preview={{ mask: <EyeOutlined /> }}
+            height={64}
+            width="100%"
+            style={{ objectFit: "cover", borderRadius: 8 }}
+          />
+        )}
+        <Text strong className="wcw-suggestion-item__name">
+          {item.locationCode || item.roomId}
+        </Text>
+        {metaParts.length > 0 && (
+          <Text type="secondary" className="wcw-suggestion-item__meta">
+            {metaParts.join(" · ")}
+          </Text>
+        )}
+        <div className="wcw-suggestion-item__actions">
+          <button
+            type="button"
+            onClick={() => handleViewDetails(item)}
+            className="wcw-btn wcw-btn--ghost wcw-btn--xs"
+          >
+            Details
+          </button>
+          <button
+            type="button"
+            onClick={() => handleBookNow(item)}
+            className="wcw-btn wcw-btn--primary wcw-btn--xs"
+          >
+            Book
+          </button>
+        </div>
+      </motion.div>
+    );
   };
 
-  const handleViewDetails = async (suggestion: AiRoomSuggestion) => {
-    const resolved = await resolveSuggestionForNavigation(suggestion);
-    if (!resolved) return;
-
-    navigate(ROUTES.ROOM_DETAIL.replace(":roomId", resolved.roomId), {
-      state: { room: resolved.roomState },
-    });
-  };
-
-  const handleViewBookingDetail = (reservation?: Reservation | null) => {
-    const source = toRecord(reservation);
-    if (!source) return;
-
-    const bookingId = toText(source.id) || toText(source.reservationId);
-    if (!bookingId) return;
-
-    navigate(ROUTES.BOOKING_DETAIL.replace(":bookingId", bookingId), {
-      state: { booking: reservation },
-    });
-  };
-
-  const toggleOpen = () => {
-    setIsOpen((prev) => !prev);
-  };
+  // ── Main render ───────────────────────────────────────────────────────────
 
   return (
     <>
-      {isOpen && (
-        <div className="fixed bottom-24 right-4 z-50 flex max-h-[74vh] w-80 flex-col overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-xl md:right-6 md:w-96">
-          {/* Header */}
-          <div className="flex items-center justify-between bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 text-white">
-            <div className="flex flex-col leading-tight">
-              <span className="font-semibold text-sm">UniBot Assistant</span>
-              <span className="text-[11px] text-white/80">
-                {aiSessionId ? "Session active" : "Online"}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white transition hover:bg-white/15"
-              aria-label="Close chat"
-            >
-              <CloseOutlined />
-            </button>
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto bg-gradient-to-b from-white to-orange-50/30 px-3 py-3">
-            {messages.length === 0 ? (
-              <div className="flex h-full items-center justify-center px-4 text-center text-xs text-orange-600">
-                Ask UniBot about available rooms, equipment, or quick booking.
-              </div>
-            ) : (
-              messages.map((m) => {
-                const isUser = m.sender === "user";
-                const booking = getBookingCardData(m.reservation);
-                const bookingId =
-                  toText(m.reservation?.id) ||
-                  toText(m.reservation?.rawData?.reservationId);
-                return (
-                  <div
-                    key={m.id}
-                    className={`mb-2 flex ${isUser ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`flex items-end gap-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}
-                    >
-                      <div
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${isUser ? "bg-orange-500 text-white" : "bg-orange-50 border border-orange-400 text-orange-600 shadow-sm"}`}
-                      >
-                        {isUser ? userInitials : "AI"}
-                      </div>
-                      <div
-                        className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-sm transition-all ${isUser ? "rounded-br-none bg-orange-500 text-white font-medium" : "rounded-bl-none bg-slate-100 text-slate-700"}`}
-                      >
-                        {m.text}
-
-                        {/* Room Detail Card */}
-                        {!isUser &&
-                          m.roomDetail &&
-                          (() => {
-                            const rd = m.roomDetail as Record<string, unknown>;
-                            const rdImages = Array.isArray(rd.images)
-                              ? (rd.images as string[])
-                              : [];
-                            const rdAmenities = Array.isArray(rd.amenities)
-                              ? (rd.amenities as string[])
-                              : [];
-                            const rdCode =
-                              toText(rd.locationCode) || toText(rd.id) || "-";
-                            const rdCapacity = toNumberOrNull(rd.capacity);
-                            const rdScore = toNumberOrNull(rd.score);
-                            const rdCurrentUser = toText(rd.currentUserName);
-                            const rdCheckIn = toText(rd.checkInTime);
-                            const rdFeedbacks = Array.isArray(rd.feedbacks)
-                              ? (rd.feedbacks as Record<string, unknown>[])
-                              : [];
-                            const rdId = toText(rd.id);
-                            return (
-                              <div className="mt-2 overflow-hidden rounded-xl border border-orange-200 bg-white shadow-md">
-                                <div className="flex items-center justify-between gap-2 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-2.5 py-2">
-                                  <span className="text-[10px] font-bold uppercase tracking-wide text-orange-700">
-                                    Room Detail
-                                  </span>
-                                  {rdScore !== null && (
-                                    <span className="rounded-lg border border-orange-200 bg-white px-2 py-0.5 text-[9px] font-semibold text-orange-700">
-                                      Score {rdScore.toFixed(1)}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {rdImages[0] && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setPreviewImageUrl(rdImages[0])
-                                    }
-                                    className="block w-full"
-                                  >
-                                    <img
-                                      src={rdImages[0]}
-                                      alt={rdCode}
-                                      className="h-20 w-full object-cover"
-                                      loading="lazy"
-                                    />
-                                  </button>
-                                )}
-
-                                <div className="space-y-1.5 px-2.5 py-2 text-[10px] text-slate-700">
-                                  <div className="grid grid-cols-2 gap-1.5">
-                                    <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
-                                      <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">
-                                        Room Code
-                                      </p>
-                                      <p className="mt-0.5 text-xs font-semibold text-slate-900">
-                                        {rdCode}
-                                      </p>
-                                    </div>
-                                    <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
-                                      <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">
-                                        Capacity
-                                      </p>
-                                      <p className="mt-0.5 text-xs font-semibold text-slate-900">
-                                        {rdCapacity ?? "-"}
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1.5">
-                                    <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">
-                                      Current User
-                                    </p>
-                                    <p className="mt-0.5 text-xs font-semibold text-slate-900">
-                                      {rdCurrentUser || "No active user"}
-                                    </p>
-                                  </div>
-
-                                  {rdCheckIn && (
-                                    <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1.5">
-                                      <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">
-                                        Check-in
-                                      </p>
-                                      <p className="mt-0.5 text-xs font-semibold text-slate-900">
-                                        {formatDateTimeLabel(rdCheckIn)}
-                                      </p>
-                                    </div>
-                                  )}
-
-                                  {rdAmenities.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                      {rdAmenities.slice(0, 5).map((a) => (
-                                        <span
-                                          key={`${rdId}-${a}`}
-                                          className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[9px] font-medium text-orange-700"
-                                        >
-                                          • {a}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  {rdFeedbacks.length > 0 && (
-                                    <div className="space-y-1">
-                                      {rdFeedbacks.slice(0, 2).map((fb, i) => {
-                                        const rating =
-                                          typeof fb.rating === "number"
-                                            ? Math.max(
-                                                0,
-                                                Math.min(
-                                                  5,
-                                                  Math.round(fb.rating),
-                                                ),
-                                              )
-                                            : 0;
-                                        const desc = toText(fb.description);
-                                        return (
-                                          <div
-                                            key={toText(fb.id) || `fb-${i}`}
-                                            className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1"
-                                          >
-                                            <div className="text-[10px] font-semibold text-amber-600">
-                                              {rating > 0
-                                                ? "★".repeat(rating)
-                                                : "No rating"}
-                                            </div>
-                                            {desc && (
-                                              <p className="mt-0.5 text-[9px] text-slate-700">
-                                                {desc}
-                                              </p>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-
-                                  {(rdId || rdCode !== "-") && (
-                                    <div className="flex justify-end pt-1">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleViewDetails({
-                                            roomId: rdId || "",
-                                            locationCode: rdCode,
-                                            status: "AVAILABLE",
-                                            capacity: rdCapacity ?? undefined,
-                                            amenities:
-                                              rdAmenities.length > 0
-                                                ? rdAmenities
-                                                : undefined,
-                                            imageUrl: rdImages[0] || undefined,
-                                          })
-                                        }
-                                        className="rounded-lg border border-orange-500 bg-orange-500 px-2.5 py-1 text-[9px] font-semibold text-white transition hover:bg-orange-600"
-                                      >
-                                        View Room →
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                        {/* Booking Details Card */}
-                        {!isUser && (booking || m.reservationCreated) && (
-                          <div className="mt-2 overflow-hidden rounded-xl border border-orange-200 bg-white shadow-md hover:shadow-lg transition-shadow">
-                            <div className="flex items-center justify-between gap-2 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-2.5 py-2">
-                              <span className="font-bold uppercase tracking-wide text-orange-700 text-[10px]">
-                                Booking Details
-                              </span>
-                              <span
-                                className={`rounded-lg border px-2 py-0.5 text-[9px] font-semibold ${bookingStatusClass(
-                                  booking?.status || "CREATED",
-                                )}`}
-                              >
-                                {booking?.status || "CREATED"}
-                              </span>
-                            </div>
-
-                            {booking ? (
-                              <div className="space-y-2 px-2.5 py-2.5 text-[10px] text-slate-700">
-                                <div className="sm:hidden rounded-lg border border-orange-100 bg-orange-50/50 px-2 py-2">
-                                  <p className="font-bold text-slate-900 text-xs">
-                                    {booking.roomCode}
-                                  </p>
-                                  <p className="mt-0.5 text-[9px] text-slate-600">
-                                    {booking.buildingName} · {booking.floorName}
-                                  </p>
-                                  <p className="mt-1 text-[9px] font-semibold text-slate-900">
-                                    {booking.startTime} - {booking.endTime}
-                                  </p>
-                                </div>
-
-                                <div className="hidden sm:grid grid-cols-1 gap-1.5">
-                                  <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
-                                    <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">
-                                      Room
-                                    </p>
-                                    <p className="mt-0.5 font-semibold text-slate-900 text-xs">
-                                      {booking.roomCode}
-                                    </p>
-                                  </div>
-
-                                  <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
-                                    <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">
-                                      Location
-                                    </p>
-                                    <p className="mt-0.5 font-semibold text-slate-900 text-xs">
-                                      {booking.buildingName} ·{" "}
-                                      {booking.floorName}
-                                    </p>
-                                  </div>
-
-                                  <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-2 py-1.5">
-                                    <p className="text-[8px] font-bold uppercase tracking-wide text-orange-600">
-                                      Schedule
-                                    </p>
-                                    <p className="mt-0.5 font-semibold text-slate-900 text-xs">
-                                      {booking.startTime} - {booking.endTime}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {booking.attendeeCount && (
-                                  <span className="inline-flex rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[9px] font-semibold text-blue-700">
-                                    {booking.attendeeCount} attendees
-                                  </span>
-                                )}
-
-                                <div className="rounded-lg border border-slate-200 bg-slate-50/60 px-2 py-1.5">
-                                  <p className="text-[8px] font-bold uppercase tracking-wide text-slate-600">
-                                    Purpose
-                                  </p>
-                                  <p className="mt-0.5 text-slate-900 text-xs">
-                                    {booking.purpose}
-                                  </p>
-                                </div>
-
-                                {booking.note && (
-                                  <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-2 py-1.5">
-                                    <p className="text-[8px] font-bold uppercase tracking-wide text-amber-700">
-                                      Note
-                                    </p>
-                                    <p className="mt-0.5 text-amber-900 text-xs">
-                                      {booking.note}
-                                    </p>
-                                  </div>
-                                )}
-
-                                <div className="flex justify-end pt-1">
-                                  {bookingId && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleViewBookingDetail(m.reservation)
-                                      }
-                                      className="rounded-lg border border-orange-500 bg-orange-500 px-2.5 py-1 text-[9px] font-semibold text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md"
-                                    >
-                                      View Details →
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="px-2.5 py-2 text-[10px] text-orange-900">
-                                Reservation has been created successfully.
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-            {isSending && (
-              <div className="mb-2 flex justify-start">
-                <div className="flex flex-row items-end gap-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-orange-100 text-[11px] font-semibold text-orange-700">
-                    AI
-                  </div>
-                  <div className="rounded-2xl rounded-bl-none border border-orange-200 bg-white px-3 py-2 shadow-sm">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-orange-400" />
-                      <span
-                        className="h-1.5 w-1.5 animate-bounce rounded-full bg-orange-400"
-                        style={{ animationDelay: "0.1s" }}
-                      />
-                      <span
-                        className="h-1.5 w-1.5 animate-bounce rounded-full bg-orange-400"
-                        style={{ animationDelay: "0.2s" }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {isSuggestionsVisible && (
-              <div className="mt-2 rounded-xl border border-orange-200 bg-white p-2.5">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-700">
-                    {suggestionLabel}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDismissedSuggestionMessageId(
-                        latestSuggestionMessage?.id ?? null,
-                      )
+      {/* ── Chat Panel ─────────────────────────────────────── */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className="wcw-panel"
+            variants={widgetVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            {/* Header */}
+            <div className="wcw-header">
+              <div className="wcw-header__left">
+                <Avatar
+                  size={32}
+                  icon={<RobotOutlined />}
+                  className="wcw-header__avatar"
+                />
+                <div className="wcw-header__info">
+                  <Title level={5} className="wcw-header__title">
+                    UniBot Assistant
+                  </Title>
+                  <Badge
+                    status="success"
+                    text={
+                      <span className="wcw-header__status">
+                        {aiSessionId ? "Session active" : "Online"}
+                      </span>
                     }
-                    className="inline-flex h-5 w-5 items-center justify-center rounded border border-orange-200 text-[10px] text-orange-600 transition hover:border-orange-300 hover:bg-orange-50"
-                    aria-label="Close suggested rooms"
-                  >
-                    <CloseOutlined />
-                  </button>
+                  />
                 </div>
-
-                {showBestMatch && (
-                  <p className="mb-2 inline-flex rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
-                    Best match
-                  </p>
-                )}
-
-                <div className="max-h-36 space-y-1.5 overflow-y-auto pr-1">
-                  {latestSuggestions.map((item) => (
-                    <div
-                      key={`${item.roomId}-${item.locationCode}`}
-                      className="rounded-lg border border-orange-100 px-2 py-1.5"
-                    >
-                      {(() => {
-                        const metaParts = [
-                          item.building,
-                          item.floor,
-                          typeof item.capacity === "number"
-                            ? `Capacity ${item.capacity}`
-                            : "",
-                        ]
-                          .map((value) =>
-                            typeof value === "string" ? value.trim() : value,
-                          )
-                          .filter(Boolean) as string[];
-                        return (
-                          <>
-                            {item.imageUrl && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setPreviewImageUrl(item.imageUrl || null)
-                                }
-                                className="mb-1 block w-full"
-                              >
-                                <img
-                                  src={item.imageUrl}
-                                  alt={item.locationCode || item.roomId}
-                                  className="h-20 w-full rounded-md object-cover"
-                                  loading="lazy"
-                                />
-                              </button>
-                            )}
-
-                            <div className="truncate text-xs font-semibold text-orange-900">
-                              {item.locationCode || item.roomId}
-                            </div>
-                            {metaParts.length > 0 && (
-                              <div className="mt-0.5 text-[11px] text-orange-700/90">
-                                {metaParts.join(" · ")}
-                              </div>
-                            )}
-                            <div className="mt-1.5 flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleViewDetails(item)}
-                                className="rounded border border-orange-200 px-2 py-0.5 text-[10px] font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-                              >
-                                Details
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleBookNow(item)}
-                                className="rounded bg-orange-500 px-2 py-0.5 text-[10px] font-semibold text-white transition hover:bg-orange-600"
-                              >
-                                Book
-                              </button>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  ))}
-                </div>
-                {latestSuggestions.length > 3 && (
-                  <p className="mt-1.5 text-[10px] text-orange-600/90">
-                    Scroll to view more rooms.
-                  </p>
-                )}
               </div>
-            )}
-
-            {previewImageUrl && (
-              <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4">
+              <Tooltip title="Close">
                 <button
                   type="button"
-                  onClick={() => setPreviewImageUrl(null)}
-                  className="absolute inset-0"
-                  aria-label="Close image preview"
-                />
-                <div className="relative z-10 w-full max-w-lg rounded-xl bg-white p-2 shadow-2xl">
-                  <img
-                    src={previewImageUrl}
-                    alt="Room preview"
-                    className="max-h-[70vh] w-full rounded-lg object-contain"
-                  />
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewImageUrl(null)}
-                      className="rounded border border-orange-200 px-2.5 py-1 text-[10px] font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <div className="border-t border-orange-200 bg-white px-3 py-2">
-
-
-            <div className="flex items-end gap-2">
-              <textarea
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                rows={1}
-                className="min-h-9 max-h-24 flex-1 resize-none rounded-lg border border-orange-200 px-2.5 py-2 text-xs text-orange-950 outline-none placeholder:text-orange-400 focus:border-orange-300"
-              />
-
-              <button
-                type="button"
-                onClick={handleMicClick}
-                disabled={isSending}
-                title={isListening ? "Stop recording" : "Speech to text"}
-                className={`relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:ring-offset-1 ${
-                  isListening
-                    ? "border-red-400 bg-gradient-to-b from-red-500 to-rose-600 text-white shadow-md shadow-red-200"
-                    : "border-orange-200 bg-gradient-to-b from-white to-orange-50 text-orange-700 shadow-sm hover:-translate-y-0.5 hover:border-orange-300 hover:shadow"
-                } disabled:cursor-not-allowed disabled:opacity-60`}
-              >
-                {isListening && (
-                  <>
-                    <span
-                      aria-hidden="true"
-                      className="absolute -inset-1 animate-pulse rounded-[10px] border border-red-300"
-                    />
-                    <span
-                      aria-hidden="true"
-                      className="absolute h-2.5 w-2.5 animate-ping rounded-full bg-red-200"
-                    />
-                  </>
-                )}
-                {isListening ? (
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                    className="relative z-10 h-4 w-4"
-                  >
-                    <rect
-                      x="7"
-                      y="7"
-                      width="10"
-                      height="10"
-                      rx="2"
-                      className="fill-current"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                    className="relative z-10 h-4 w-4"
-                  >
-                    <path
-                      d="M12 3.75a3 3 0 0 0-3 3v5.25a3 3 0 0 0 6 0V6.75a3 3 0 0 0-3-3Z"
-                      className="fill-current"
-                    />
-                    <path
-                      d="M5.25 10.5a.75.75 0 0 1 .75.75V12a6 6 0 0 0 12 0v-.75a.75.75 0 0 1 1.5 0V12a7.5 7.5 0 0 1-6.75 7.46V21a.75.75 0 0 1-1.5 0v-1.54A7.5 7.5 0 0 1 4.5 12v-.75a.75.75 0 0 1 .75-.75Z"
-                      className="fill-current"
-                    />
-                  </svg>
-                )}
-                <span className="sr-only">
-                  {isListening ? "Stop recording" : "Start voice input"}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSend()}
-                disabled={isSending || !inputValue.trim()}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300 shadow-sm"
-                aria-label="Send"
-              >
-                {isSending ? (
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                    <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
-                  </svg>
-                )}
-              </button>
+                  onClick={() => setIsOpen(false)}
+                  className="wcw-header__close"
+                  aria-label="Close chat"
+                >
+                  <CloseOutlined />
+                </button>
+              </Tooltip>
             </div>
 
-            {isListening && (
-              <p className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-red-600">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-                Listening... speak now.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+            {/* Messages */}
+            <div className="wcw-messages">
+              {messages.length === 0 ? (
+                <div className="wcw-messages__empty">
+                  <RobotOutlined className="wcw-messages__empty-icon" />
+                  <Text type="secondary">
+                    Ask UniBot about available rooms, equipment, or quick
+                    booking.
+                  </Text>
+                </div>
+              ) : (
+                messages.map((m) => {
+                  const isUser = m.sender === "user";
+                  const booking = getBookingCardData(m.reservation);
+                  return (
+                    <motion.div
+                      key={m.id}
+                      className={`wcw-bubble-row ${isUser ? "wcw-bubble-row--user" : "wcw-bubble-row--bot"}`}
+                      variants={bubbleVariants}
+                      initial="hidden"
+                      animate="visible"
+                    >
+                      <div
+                        className={`wcw-bubble-group ${isUser ? "wcw-bubble-group--user" : "wcw-bubble-group--bot"}`}
+                      >
+                        <Avatar
+                          size={24}
+                          className={
+                            isUser ? "wcw-avatar--user" : "wcw-avatar--bot"
+                          }
+                        >
+                          {isUser ? userInitials : "AI"}
+                        </Avatar>
 
-      {/* Floating bubble */}
-      <button
+                        <div
+                          className={`wcw-bubble ${isUser ? "wcw-bubble--user" : "wcw-bubble--bot"}`}
+                        >
+                          <Text className="wcw-bubble__text">{m.text}</Text>
+
+                          {/* Inline Menu Options from bot message */}
+                          {!isUser && renderMenuOptions(m.menuOptions)}
+
+                          {/* Room Detail */}
+                          {!isUser &&
+                            m.roomDetail &&
+                            renderRoomDetailCard(
+                              m.roomDetail as Record<string, unknown>,
+                            )}
+
+                          {/* Booking Card */}
+                          {!isUser &&
+                            (booking || m.reservationCreated) &&
+                            renderBookingCard(
+                              booking,
+                              m.reservation,
+                              m.reservationCreated,
+                            )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })
+              )}
+
+              {/* Typing indicator */}
+              {isSending && (
+                <motion.div
+                  className="wcw-bubble-row wcw-bubble-row--bot"
+                  variants={bubbleVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  <div className="wcw-bubble-group wcw-bubble-group--bot">
+                    <Avatar size={24} className="wcw-avatar--bot">
+                      AI
+                    </Avatar>
+                    <div className="wcw-bubble wcw-bubble--bot">
+                      <div className="wcw-typing">
+                        <span className="wcw-typing__dot" />
+                        <span
+                          className="wcw-typing__dot"
+                          style={{ animationDelay: "0.15s" }}
+                        />
+                        <span
+                          className="wcw-typing__dot"
+                          style={{ animationDelay: "0.3s" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Suggestions Panel */}
+              <AnimatePresence>
+                {isSuggestionsVisible && (
+                  <motion.div
+                    className="wcw-suggestions"
+                    variants={bubbleVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="hidden"
+                  >
+                    <div className="wcw-suggestions__header">
+                      <Text strong className="wcw-suggestions__title">
+                        <ThunderboltOutlined /> {suggestionLabel}
+                      </Text>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDismissedSuggestionMessageId(
+                            latestSuggestionMessage?.id ?? null,
+                          )
+                        }
+                        className="wcw-suggestions__close"
+                        aria-label="Dismiss suggestions"
+                      >
+                        <CloseOutlined />
+                      </button>
+                    </div>
+
+                    {showBestMatch && (
+                      <Tag color="volcano" className="wcw-tag--best-match">
+                        ✨ Best match
+                      </Tag>
+                    )}
+
+                    <div className="wcw-suggestions__list">
+                      {latestSuggestions.map((item) =>
+                        renderSuggestionItem(item),
+                      )}
+                    </div>
+
+                    {latestSuggestions.length > 3 && (
+                      <Text type="secondary" className="wcw-suggestions__hint">
+                        Scroll to view more rooms
+                      </Text>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Quick Actions Bar */}
+            <div className="wcw-quick-actions">
+              <div className="wcw-quick-actions__label">
+                <ThunderboltOutlined /> Quick actions
+              </div>
+              <div className="wcw-quick-actions__grid">
+                {menuOptions.map((option) => (
+                  <button
+                    key={option.code}
+                    type="button"
+                    onClick={() => void handleQuickAction(option)}
+                    disabled={isSending}
+                    className="wcw-quick-action"
+                  >
+                    <span className="wcw-quick-action__code">
+                      {option.code}
+                    </span>
+                    <span className="wcw-quick-action__text">
+                      {option.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Input */}
+            <div className="wcw-input-area">
+              <div className="wcw-input-area__row">
+                <textarea
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  rows={1}
+                  placeholder="Nhập tin nhắn cho UniBot..."
+                  className="wcw-input-area__textarea"
+                />
+
+                <Tooltip title="Send">
+                  <button
+                    type="button"
+                    onClick={() => handleSend()}
+                    disabled={isSending || !inputValue.trim()}
+                    className="wcw-btn-icon wcw-btn-icon--send"
+                    aria-label="Send"
+                  >
+                    {isSending ? (
+                      <span className="wcw-spinner" />
+                    ) : (
+                      <SendOutlined />
+                    )}
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Floating Action Button ─────────────────────────── */}
+      <motion.button
         type="button"
         onClick={toggleOpen}
-        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-40 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg hover:shadow-xl px-4 py-3 flex items-center gap-2 transition-all hover:scale-105"
+        className="wcw-fab"
+        variants={fabVariants}
+        initial="idle"
+        whileHover="hover"
+        whileTap="tap"
+        aria-label="Open UniBot"
       >
-        <MessageOutlined className="text-lg" />
-        <span className="hidden sm:inline text-sm font-semibold">
-          Ask UniBot
-        </span>
-      </button>
+        <AnimatePresence mode="wait">
+          {isOpen ? (
+            <motion.span
+              key="close"
+              initial={{ rotate: -90, opacity: 0 }}
+              animate={{ rotate: 0, opacity: 1 }}
+              exit={{ rotate: 90, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              <CloseOutlined style={{ fontSize: 20 }} />
+            </motion.span>
+          ) : (
+            <motion.span
+              key="open"
+              initial={{ rotate: 90, opacity: 0 }}
+              animate={{ rotate: 0, opacity: 1 }}
+              exit={{ rotate: -90, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="wcw-fab__content"
+            >
+              <MessageOutlined style={{ fontSize: 22 }} />
+              <span className="wcw-fab__label">Ask UniBot</span>
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </motion.button>
     </>
   );
 };

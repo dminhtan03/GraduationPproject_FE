@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDownIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { aiService } from "../../services/aiService";
 import type {
@@ -826,8 +827,11 @@ const AIAssistantPage: React.FC = () => {
     };
 
     return (
-      <div
+      <motion.div
         key={message.id}
+        initial={{ opacity: 0, y: 12, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: "spring" as const, stiffness: 380, damping: 28 }}
         className={`mb-5 flex ${isUser ? "justify-end" : "justify-start"}`}
       >
         <div
@@ -843,10 +847,10 @@ const AIAssistantPage: React.FC = () => {
             {isUser ? userInitials : "AI"}
           </div>
           <div
-            className={`max-w-[85vw] sm:max-w-[70vw] xl:max-w-[44rem] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+            className={`max-w-[85vw] sm:max-w-[70vw] xl:max-w-[44rem] rounded-2xl px-4 py-3.5 text-xs sm:text-sm leading-relaxed shadow-sm transition-all duration-200 ${
               isUser
-                ? "rounded-br-md bg-orange-500 text-white font-medium"
-                : "rounded-bl-md bg-slate-100 text-slate-700"
+                ? "rounded-br-none bg-gradient-to-br from-orange-500 to-orange-600 text-white font-medium shadow-orange-500/10"
+                : "rounded-bl-none border border-slate-100 bg-white text-slate-800"
             }`}
           >
             <div>{message.text}</div>
@@ -1477,7 +1481,7 @@ const AIAssistantPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   };
 
@@ -1894,27 +1898,32 @@ const AIAssistantPage: React.FC = () => {
   ]);
 
   return (
-    <section className="ai-assistant-enter relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:p-6">
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="ai-assistant-enter relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:p-6"
+    >
       <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-slate-200/45 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-12 right-10 h-48 w-48 rounded-full bg-slate-200/50 blur-3xl" />
 
       <div className="relative grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-12">
         <aside className="hidden xl:col-span-4 xl:block 2xl:col-span-3">
-          <div className="flex max-h-[280px] min-h-0 flex-col rounded-2xl bg-white/90 p-4 shadow-sm backdrop-blur-sm sm:max-h-[340px] sm:p-5 xl:max-h-none xl:min-h-[620px]">
+          <div className="flex max-h-[280px] min-h-0 flex-col rounded-3xl border border-orange-100 bg-white/95 p-4 shadow-md backdrop-blur-md sm:max-h-[340px] sm:p-5 xl:max-h-none xl:min-h-[620px] transition-all duration-300 hover:shadow-lg">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-orange-700">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-orange-700">
                   Conversations
                 </h2>
-                <p className="text-xs text-orange-500">UniBot History</p>
+                <p className="text-[10px] text-orange-500 font-medium mt-0.5">UniBot History</p>
               </div>
               <button
                 type="button"
                 onClick={() => void handleNewChat()}
                 disabled={isCreatingChat}
-                className="rounded-lg border border-orange-200 px-3 py-1.5 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+                className="rounded-xl border border-orange-200 bg-white px-3.5 py-1.5 text-xs font-bold text-orange-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-300 hover:bg-orange-50 active:translate-y-0 active:scale-95 disabled:opacity-60"
               >
-                {isCreatingChat ? "Creating..." : "New Chat"}
+                {isCreatingChat ? "Creating..." : "+ New Chat"}
               </button>
             </div>
 
@@ -1934,29 +1943,29 @@ const AIAssistantPage: React.FC = () => {
               {sessions.map((session) => {
                 const active = session.id === selectedSessionId;
                 return (
-                  <div key={session.id} className="relative">
+                  <div key={session.id} className="group relative">
                     <button
                       type="button"
                       onClick={() => handleSelectSession(session.id)}
-                      className={`w-full rounded-xl border px-3 py-2.5 pr-10 text-left transition ${
+                      className={`w-full rounded-2xl border px-3.5 py-3 pr-10 text-left transition-all duration-200 ease-out ${
                         active
-                          ? "border-orange-500 bg-orange-500 text-white shadow"
-                          : "border-orange-200 bg-white hover:border-orange-300 hover:bg-orange-50"
+                          ? "border-transparent bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-md shadow-orange-500/10 scale-[1.01]"
+                          : "border-slate-100 bg-white text-slate-800 hover:border-orange-200 hover:bg-orange-50/40 hover:scale-[1.005]"
                       }`}
                     >
-                      <div className="truncate text-sm font-semibold">
+                      <div className="truncate text-xs font-bold">
                         {session.title}
                       </div>
                       <div
-                        className={`mt-1 truncate text-xs ${
-                          active ? "text-orange-50/85" : "text-orange-700/80"
+                        className={`mt-1 truncate text-[10px] font-medium leading-relaxed ${
+                          active ? "text-orange-50/90" : "text-slate-500"
                         }`}
                       >
                         {session.subtitle}
                       </div>
                       <div
-                        className={`mt-1 text-[11px] ${
-                          active ? "text-orange-100/80" : "text-orange-500"
+                        className={`mt-1 text-[9px] font-semibold ${
+                          active ? "text-orange-100/90" : "text-orange-400"
                         }`}
                       >
                         {formatDate(session.createdAt)}
@@ -1969,14 +1978,14 @@ const AIAssistantPage: React.FC = () => {
                         event.stopPropagation();
                         requestDeleteSession(session);
                       }}
-                      className={`absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold transition ${
+                      className={`absolute right-2.5 top-2.5 inline-flex h-5 w-5 items-center justify-center rounded-lg border text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-all duration-200 ${
                         active
-                          ? "border-white/30 text-white hover:bg-white/10"
-                          : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-100"
+                          ? "border-white/30 text-white hover:bg-white/20 opacity-100"
+                          : "border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500"
                       }`}
                       aria-label="Delete conversation"
                     >
-                      <TrashIcon className="h-3.5 w-3.5" />
+                      <TrashIcon className="h-3 w-3" />
                     </button>
                   </div>
                 );
@@ -1986,32 +1995,26 @@ const AIAssistantPage: React.FC = () => {
         </aside>
 
         <main className="xl:col-span-8 2xl:col-span-9">
-          <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-2xl bg-white/95 shadow-sm sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px]">
-            <header className="border-b border-orange-100 bg-gradient-to-r from-orange-500 to-amber-950 px-4 py-4 text-white sm:px-6">
+          <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-3xl border border-orange-100/60 bg-white shadow-md sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px] transition-all duration-300 hover:shadow-lg">
+            <header className="border-b border-orange-100/30 bg-gradient-to-r from-orange-600 via-orange-500 to-amber-900 px-4 py-4 text-white sm:px-6 shadow-sm">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-lg font-semibold">AI Assistant</h1>
+                  <h1 className="text-sm font-bold uppercase tracking-wider">AI Assistant</h1>
+                  <p className="text-[10px] text-orange-100/80 mt-0.5 font-medium">Hệ thống gợi ý & đặt phòng thông minh</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setIsMobileHistoryOpen(true)}
-                    className="rounded-full border border-white/35 bg-white/15 px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-white/20 xl:hidden"
+                    className="rounded-xl border border-white/35 bg-white/15 px-3 py-1.5 text-[10px] font-bold text-white transition hover:bg-white/20 xl:hidden"
                   >
-                    Conversations
+                    Lịch sử
                   </button>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[11px] font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live
-                  </span>
-                  <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[11px] font-medium">
-                    {selectedSession ? "Active Session" : "New Session"}
-                  </span>
                 </div>
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto bg-white px-4 py-5 sm:px-6">
+            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-orange-50/20 via-white to-orange-50/10 px-4 py-5 sm:px-6">
               {isSelectedSessionLoading && (
                 <div className="mb-5 flex justify-center">
                   <div className="rounded-xl border border-orange-200 bg-white px-4 py-2 text-xs font-medium text-orange-600">
@@ -2024,7 +2027,12 @@ const AIAssistantPage: React.FC = () => {
                 selectedMessages.map((message) => renderMessage(message))}
 
               {isSending && (
-                <div className="mb-5 flex justify-start">
+                <motion.div
+                  className="mb-5 flex justify-start"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ type: "spring" as const, stiffness: 400, damping: 30 }}
+                >
                   <div className="flex items-end gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">
                       AI
@@ -2043,7 +2051,7 @@ const AIAssistantPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )}
 
               <div ref={messagesEndRef} />
@@ -2101,17 +2109,17 @@ const AIAssistantPage: React.FC = () => {
               </div>
             )}
 
-            <div className="sticky bottom-0 z-10 border-t border-orange-100 bg-white px-4 py-3 sm:px-6">
-              <div className="relative mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 px-3 py-3 shadow-sm">
-                <div className="pointer-events-none absolute -right-12 -top-10 h-24 w-24 rounded-full bg-sky-200/40 blur-2xl" />
-                <div className="pointer-events-none absolute -left-10 bottom-0 h-16 w-16 rounded-full bg-teal-200/40 blur-2xl" />
+            <div className="sticky bottom-0 z-10 border-t border-orange-100 bg-white/95 backdrop-blur-md px-4 py-3 sm:px-6">
+              <div className="relative mb-3 overflow-hidden rounded-2xl border border-orange-100/70 bg-gradient-to-br from-white via-orange-50/25 to-amber-50/30 px-3.5 py-3 shadow-sm">
+                <div className="pointer-events-none absolute -right-12 -top-10 h-24 w-24 rounded-full bg-orange-200/20 blur-2xl" />
+                <div className="pointer-events-none absolute -left-10 bottom-0 h-16 w-16 rounded-full bg-amber-200/20 blur-2xl" />
 
                 <div className="relative flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold text-slate-700">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-orange-700">
                       Quick actions
                     </p>
-                    <p className="mt-0.5 text-[11px] text-slate-600">
+                    <p className="mt-0.5 text-[11px] font-medium text-slate-600">
                       Vui lòng chọn chức năng: (1) Đặt phòng, (2) Hủy phòng, (3)
                       Gia hạn thời gian, (4) Tra cứu.
                     </p>
@@ -2126,15 +2134,15 @@ const AIAssistantPage: React.FC = () => {
                           type="button"
                           onClick={() => void handleQuickActionSelect(option)}
                           disabled={isSending || !selectedSession}
-                          className="group relative flex flex-col items-start rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-left text-[11px] font-semibold text-slate-900 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="group relative flex flex-col items-start rounded-2xl border border-orange-100 bg-white px-3.5 py-2.5 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1">
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1.5 transition-colors group-hover:bg-orange-200">
                             {option.code}
                           </span>
-                          <span className="text-xs font-semibold">
+                          <span className="text-xs font-bold text-slate-800">
                             {resolveQuickActionLabel(option)}
                           </span>
-                          <span className="mt-1 h-0.5 w-6 rounded-full bg-sky-400/60 transition-all duration-200 group-hover:w-9" />
+                          <span className="mt-1 h-0.5 w-5 rounded-full bg-orange-400 transition-all duration-200 group-hover:w-8" />
                         </button>
                       ))
                     : [
@@ -2156,15 +2164,15 @@ const AIAssistantPage: React.FC = () => {
                           type="button"
                           onClick={() => void handleQuickActionSelect(option)}
                           disabled={isSending || !selectedSession}
-                          className="group relative flex flex-col items-start rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-left text-[11px] font-semibold text-slate-900 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="group relative flex flex-col items-start rounded-2xl border border-orange-100 bg-white px-3.5 py-2.5 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1">
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1.5 transition-colors group-hover:bg-orange-200">
                             {option.code}
                           </span>
-                          <span className="text-xs font-semibold">
+                          <span className="text-xs font-bold text-slate-800">
                             {option.label}
                           </span>
-                          <span className="mt-1 h-0.5 w-6 rounded-full bg-sky-400/60 transition-all duration-200 group-hover:w-9" />
+                          <span className="mt-1 h-0.5 w-5 rounded-full bg-orange-400 transition-all duration-200 group-hover:w-8" />
                         </button>
                       ))}
                 </div>
@@ -2362,7 +2370,7 @@ const AIAssistantPage: React.FC = () => {
           onClose={() => setDeleteToast(null)}
         />
       )}
-    </section>
+    </motion.section>
   );
 };
 export default AIAssistantPage;
