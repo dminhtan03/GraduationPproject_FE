@@ -11,12 +11,22 @@ export const QUICK_ACTION_LABELS: Record<string, string> = {
 export const BOOKING_ITEM_FALLBACK_IMAGE =
   "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800";
 
-export const BOOKING_DURATION_OPTIONS = [1, 2, 3].map((hours) => ({
-  label: `${hours} tiếng`,
-  message: `${hours} tiếng`,
+export const BOOKING_DURATION_OPTIONS = [
+  "1 tiếng",
+  "1h30",
+  "1h40",
+  "2 tiếng",
+  "2h30",
+  "2h50",
+  "3 tiếng",
+].map((label) => ({
+  label,
+  message: label,
 }));
 
-export const BOOKING_CAPACITY_OPTIONS = [5, 10, 15, 20].map((people) => ({
-  label: `${people} người`,
-  message: `${people} người`,
-}));
+export const BOOKING_CAPACITY_OPTIONS = [5, 10, 15, 20, 25, 30].map(
+  (people) => ({
+    label: `${people} người`,
+    message: `${people} người`,
+  }),
+);

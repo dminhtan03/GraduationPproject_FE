@@ -31,7 +31,6 @@ import {
 import {
   buildAssistantStorageKey,
   buildCapacityOptions,
-  buildBookingTimeOptions,
   deriveStoredSessions,
   getStoredAssistantState,
   mergeSessionsById,
@@ -60,35 +59,6 @@ import {
 import { normalizeRoomsMap } from "../../utils/roomList";
 const EMPTY_MESSAGES_BY_SESSION: Record<string, ChatMessage[]> = {};
 
-type LookupMode = "NONE" | "DETAIL" | "CAPACITY";
-
-type LookupOption = {
-  id: "HISTORY" | "AVAILABLE" | "DETAIL" | "CAPACITY";
-  label: string;
-  message?: string;
-};
-
-const LOOKUP_OPTIONS: LookupOption[] = [
-  {
-    id: "HISTORY",
-    label: "Lịch sử đặt phòng của tôi",
-    message: "Lịch sử đặt phòng của tôi",
-  },
-  {
-    id: "AVAILABLE",
-    label: "Phòng còn trống",
-    message: "Phòng còn trống",
-  },
-  {
-    id: "DETAIL",
-    label: "Chi tiết phòng",
-  },
-  {
-    id: "CAPACITY",
-    label: "Tìm kiếm theo sức chứa",
-  },
-];
-
 const CAPACITY_RANGE_OPTIONS = [
   { id: "CAP_5_20", label: "5 - 20 người", message: "5 - 20 người" },
   { id: "CAP_20_40", label: "20 - 40 người", message: "20 - 40 người" },
@@ -96,6 +66,84 @@ const CAPACITY_RANGE_OPTIONS = [
   { id: "CAP_60_80", label: "60 - 80 người", message: "60 - 80 người" },
   { id: "CAP_80_100", label: "80 - 100 người", message: "80 - 100 người" },
 ];
+
+type BookingTimeMode = "quick" | "manual";
+
+type BookingTimeUiState = {
+  mode: BookingTimeMode;
+  dayIndex: number;
+  time: string;
+  manualMessage: string;
+};
+
+type BookingDayOption = {
+  id: string;
+  label: string;
+  dateLabel: string;
+  offsetDays: number;
+};
+
+const BOOKING_TIME_SLOTS = Array.from({ length: 30 }, (_, index) => {
+  const baseMinutes = 7 * 60;
+  const minutes = baseMinutes + index * 30;
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+});
+
+const formatBookingDateLabel = (date: Date) =>
+  date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+
+const buildBookingDayOptions = (base: Date): BookingDayOption[] => {
+  const start = new Date(base);
+  start.setHours(0, 0, 0, 0);
+
+  return ["Hôm nay", "Ngày mai", "Ngày kia"].map((label, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+
+    return {
+      id: `DAY_${index}`,
+      label,
+      dateLabel: formatBookingDateLabel(date),
+      offsetDays: index,
+    };
+  });
+};
+
+const timeLabelToMinutes = (label: string) => {
+  const [hourText, minuteText] = label.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  return hour * 60 + minute;
+};
+
+const roundToNextHalfHour = (date: Date) => {
+  const next = new Date(date);
+  next.setSeconds(0, 0);
+
+  const minutes = next.getMinutes();
+  const remainder = minutes % 30;
+  if (remainder !== 0) {
+    next.setMinutes(minutes + (30 - remainder));
+  }
+
+  return next;
+};
+
+const getAvailableTimeSlots = (offsetDays: number, now: Date) => {
+  if (offsetDays !== 0) return BOOKING_TIME_SLOTS;
+
+  const nextSlot = roundToNextHalfHour(now);
+  const minMinutes = nextSlot.getHours() * 60 + nextSlot.getMinutes();
+
+  return BOOKING_TIME_SLOTS.filter(
+    (label) => timeLabelToMinutes(label) >= minMinutes,
+  );
+};
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -150,15 +198,21 @@ const AIAssistantPage: React.FC = () => {
   const [activeMenuOptions, setActiveMenuOptions] = useState<AiMenuOption[]>(
     [],
   );
-  const [showLookupOptions, setShowLookupOptions] = useState(false);
-  const [lookupMode, setLookupMode] = useState<LookupMode>("NONE");
   const [lookupLocationCode, setLookupLocationCode] = useState("");
   const [bookingImageByCode, setBookingImageByCode] = useState<
     Record<string, string>
   >({});
+  const [bookingTimeUiByMessage, setBookingTimeUiByMessage] = useState<
+    Record<string, BookingTimeUiState>
+  >({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const loadedSessionDetailsRef = useRef<Set<string>>(
     new Set(Object.keys(initialStoredMessagesBySession)),
+  );
+  const todayKey = new Date().toDateString();
+  const bookingDayOptions = useMemo(
+    () => buildBookingDayOptions(new Date()),
+    [todayKey],
   );
 
   useEffect(() => {
@@ -177,9 +231,8 @@ const AIAssistantPage: React.FC = () => {
       Object.keys(nextMessagesBySession),
     );
     setActiveMenuOptions([]);
-    setShowLookupOptions(false);
-    setLookupMode("NONE");
     setLookupLocationCode("");
+    setBookingTimeUiByMessage({});
   }, [storageKey]);
 
   const createEmptySession = useCallback(async () => {
@@ -333,6 +386,27 @@ const AIAssistantPage: React.FC = () => {
   const selectedMessages = useMemo(() => {
     return messagesBySession[selectedSessionId] ?? [];
   }, [messagesBySession, selectedSessionId]);
+
+  const latestBotMessageText = useMemo(() => {
+    for (let index = selectedMessages.length - 1; index >= 0; index -= 1) {
+      const message = selectedMessages[index];
+      if (message.sender === "bot") {
+        return message.text.toLowerCase();
+      }
+    }
+    return "";
+  }, [selectedMessages]);
+
+  const showLookupDetailInput = useMemo(() => {
+    return (
+      latestBotMessageText.includes("chi tiết phòng") ||
+      latestBotMessageText.includes("location code") ||
+      latestBotMessageText.includes("nhập location") ||
+      latestBotMessageText.includes("nhập location code") ||
+      latestBotMessageText.includes("nhập phòng") ||
+      latestBotMessageText.includes("nhập mã phòng")
+    );
+  }, [latestBotMessageText]);
 
   const bookingRoomCodes = useMemo(() => {
     const codes = new Set<string>();
@@ -580,11 +654,6 @@ const AIAssistantPage: React.FC = () => {
             };
           }),
         );
-
-        // Update the active menu options if the response includes them
-        if (response.menuOptions && response.menuOptions.length > 0) {
-          setActiveMenuOptions(response.menuOptions);
-        }
       } catch (error: unknown) {
         const fallbackMessage =
           "AI service is unavailable. Please try again later.";
@@ -616,33 +685,6 @@ const AIAssistantPage: React.FC = () => {
     [isSending, selectedSession, sendMessageToAi],
   );
 
-  const handleLookupOptionSelect = useCallback(
-    async (option: LookupOption) => {
-      if (isSending || !selectedSession) return;
-
-      if (option.id === "DETAIL") {
-        setLookupMode("DETAIL");
-        setShowLookupOptions(true);
-        return;
-      }
-
-      if (option.id === "CAPACITY") {
-        setLookupMode("CAPACITY");
-        setShowLookupOptions(true);
-        return;
-      }
-
-      if (option.message) {
-        await sendMessageToAi(option.message, "chat");
-      }
-
-      setShowLookupOptions(false);
-      setLookupMode("NONE");
-      setLookupLocationCode("");
-    },
-    [isSending, selectedSession, sendMessageToAi],
-  );
-
   const handleCapacityRangeSelect = useCallback(
     async (label: string) => {
       if (isSending || !selectedSession) return;
@@ -651,8 +693,6 @@ const AIAssistantPage: React.FC = () => {
         `T\u00ecm ki\u1ebfm theo s\u1ee9c ch\u1ee9a ${label}`,
         "chat",
       );
-      setShowLookupOptions(false);
-      setLookupMode("NONE");
     },
     [isSending, selectedSession, sendMessageToAi],
   );
@@ -664,22 +704,16 @@ const AIAssistantPage: React.FC = () => {
 
     await sendMessageToAi(`Chi tiết phòng ${code}`, "chat");
     setLookupLocationCode("");
-    setShowLookupOptions(false);
-    setLookupMode("NONE");
   }, [isSending, lookupLocationCode, selectedSession, sendMessageToAi]);
 
   const handleQuickActionSelect = useCallback(
     async (menuOption: AiMenuOption) => {
       if (isSending || !selectedSession) return;
       if (isLookupAction(menuOption)) {
-        setShowLookupOptions(true);
-        setLookupMode("NONE");
         setLookupLocationCode("");
+        await sendMessageToAi(resolveQuickActionLabel(menuOption), "chat");
         return;
       }
-
-      setShowLookupOptions(false);
-      setLookupMode("NONE");
       setLookupLocationCode("");
       await sendMessageToAi(resolveQuickActionLabel(menuOption), "chat");
     },
@@ -733,23 +767,63 @@ const AIAssistantPage: React.FC = () => {
       toText(message.reservation?.rawData?.reservationId);
 
     const textNormalized = message.text.toLowerCase();
-    const bookingTimeOptions = buildBookingTimeOptions(message.id);
+    const isBookingTimePrompt = textNormalized.includes("muốn đặt khi nào");
+    const isLookupCapacityPrompt =
+      textNormalized.includes("khoảng sức chứa") ||
+      textNormalized.includes("nhập sức chứa");
+    const isDurationPrompt =
+      textNormalized.includes("trong bao lâu") ||
+      textNormalized.includes("thêm bao lâu");
+    const isCapacityPrompt = textNormalized.includes("bao nhiêu người");
     const capacityOptions = buildCapacityOptions(
       roomDetailCapacity ?? undefined,
     );
-    const inlineOptions = textNormalized.includes("muốn đặt khi nào")
-      ? bookingTimeOptions
-      : textNormalized.includes("trong bao lâu") ||
-          textNormalized.includes("thêm bao lâu")
+    const inlineOptions = isBookingTimePrompt
+      ? []
+      : isDurationPrompt
         ? BOOKING_DURATION_OPTIONS
-        : textNormalized.includes("bao nhiêu người")
+        : isCapacityPrompt
           ? capacityOptions
           : [];
-    const inlineOptionsLayout =
-      textNormalized.includes("trong bao lâu") ||
-      textNormalized.includes("thêm bao lâu")
-        ? "mt-3 grid grid-cols-3 gap-2"
-        : "mt-3 grid grid-cols-2 gap-2";
+    const inlineOptionsLayout = isDurationPrompt
+      ? "mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2"
+      : "mt-3 grid grid-cols-2 gap-2";
+
+    const getFallbackBookingTimeState = () => ({
+      mode: "quick" as BookingTimeMode,
+      dayIndex: 0,
+      time: getAvailableTimeSlots(0, new Date())[0] ?? "",
+      manualMessage: "",
+    });
+
+    const bookingTimeState = isBookingTimePrompt
+      ? (bookingTimeUiByMessage[message.id] ?? getFallbackBookingTimeState())
+      : null;
+    const activeBookingDay = bookingTimeState
+      ? (bookingDayOptions[bookingTimeState.dayIndex] ?? bookingDayOptions[0])
+      : bookingDayOptions[0];
+    const availableTimeSlots = bookingTimeState
+      ? getAvailableTimeSlots(activeBookingDay.offsetDays, new Date())
+      : [];
+    const resolvedBookingTime = bookingTimeState
+      ? availableTimeSlots.includes(bookingTimeState.time)
+        ? bookingTimeState.time
+        : activeBookingDay.offsetDays === 0
+          ? (availableTimeSlots[0] ?? "")
+          : bookingTimeState.time
+      : "";
+
+    const updateBookingTimeState = (
+      updater: (current: BookingTimeUiState) => BookingTimeUiState,
+    ) => {
+      setBookingTimeUiByMessage((prev) => {
+        const current = prev[message.id] ?? getFallbackBookingTimeState();
+        return {
+          ...prev,
+          [message.id]: updater(current),
+        };
+      });
+    };
 
     return (
       <div
@@ -777,6 +851,223 @@ const AIAssistantPage: React.FC = () => {
           >
             <div>{message.text}</div>
 
+            {!isUser && isBookingTimePrompt && bookingTimeState && (
+              <div className="mt-3 rounded-2xl border border-orange-100 bg-white/95 p-3 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateBookingTimeState((current) => ({
+                        ...current,
+                        mode: "quick",
+                      }))
+                    }
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 ${
+                      bookingTimeState.mode === "quick"
+                        ? "border-orange-300 bg-orange-500 text-white"
+                        : "border-orange-200 bg-white text-orange-700 hover:border-orange-300 hover:bg-orange-50"
+                    }`}
+                  >
+                    Chọn nhanh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateBookingTimeState((current) => ({
+                        ...current,
+                        mode: "manual",
+                      }))
+                    }
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5 ${
+                      bookingTimeState.mode === "manual"
+                        ? "border-orange-300 bg-orange-500 text-white"
+                        : "border-orange-200 bg-white text-orange-700 hover:border-orange-300 hover:bg-orange-50"
+                    }`}
+                  >
+                    Nhập thủ công
+                  </button>
+                </div>
+
+                {bookingTimeState.mode === "quick" ? (
+                  <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        Ngày
+                      </p>
+                      <div className="mt-2 grid grid-cols-3 gap-2">
+                        {bookingDayOptions.map((day, index) => {
+                          const isActive = index === bookingTimeState.dayIndex;
+                          return (
+                            <button
+                              key={day.id}
+                              type="button"
+                              onClick={() => {
+                                updateBookingTimeState((current) => {
+                                  const nextDay =
+                                    bookingDayOptions[index] ||
+                                    bookingDayOptions[0];
+                                  const nextSlots = getAvailableTimeSlots(
+                                    nextDay.offsetDays,
+                                    new Date(),
+                                  );
+                                  const shouldAutoPick =
+                                    nextDay.offsetDays === 0;
+                                  const nextTime = shouldAutoPick
+                                    ? nextSlots[0] || ""
+                                    : current.time;
+                                  const resolvedTime = nextSlots.includes(
+                                    current.time,
+                                  )
+                                    ? current.time
+                                    : nextTime;
+
+                                  return {
+                                    ...current,
+                                    dayIndex: index,
+                                    time: resolvedTime,
+                                  };
+                                });
+                              }}
+                              className={`rounded-xl border px-2.5 py-2 text-left text-[11px] font-semibold transition-all hover:-translate-y-0.5 ${
+                                isActive
+                                  ? "border-orange-300 bg-orange-500 text-white"
+                                  : "border-orange-200 bg-white text-slate-700 hover:border-orange-300 hover:bg-orange-50"
+                              }`}
+                            >
+                              <div>{day.label}</div>
+                              <div
+                                className={`mt-0.5 text-[10px] ${
+                                  isActive ? "text-white/85" : "text-slate-500"
+                                }`}
+                              >
+                                {day.dateLabel}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        Giờ bắt đầu
+                      </p>
+                      {availableTimeSlots.length > 0 ? (
+                        <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                          {availableTimeSlots.map((time) => {
+                            const isActive = time === resolvedBookingTime;
+                            return (
+                              <button
+                                key={time}
+                                type="button"
+                                onClick={() =>
+                                  updateBookingTimeState((current) => ({
+                                    ...current,
+                                    time,
+                                  }))
+                                }
+                                className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-all hover:-translate-y-0.5 ${
+                                  isActive
+                                    ? "border-orange-300 bg-orange-500 text-white"
+                                    : "border-orange-200 bg-white text-slate-700 hover:border-orange-300 hover:bg-orange-50"
+                                }`}
+                              >
+                                {time}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Hôm nay đã hết khung giờ trống.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-orange-100 bg-orange-50/70 px-3 py-2">
+                      <span className="text-xs text-slate-700">
+                        {resolvedBookingTime
+                          ? `Đặt lúc ${resolvedBookingTime} — ${activeBookingDay.label}`
+                          : "Chọn giờ bắt đầu"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!resolvedBookingTime) return;
+                          void sendMessageToAi(
+                            `${activeBookingDay.label} lúc ${resolvedBookingTime}`,
+                            "chat",
+                          );
+                        }}
+                        disabled={
+                          !resolvedBookingTime || isSending || !selectedSession
+                        }
+                        className="inline-flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-500 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Xác nhận
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        value={bookingTimeState.manualMessage}
+                        onChange={(event) =>
+                          updateBookingTimeState((current) => ({
+                            ...current,
+                            manualMessage: event.target.value,
+                          }))
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          const payload = bookingTimeState.manualMessage.trim();
+                          if (!payload) return;
+                          void sendMessageToAi(payload, "chat");
+                        }}
+                        placeholder="VD: Hôm nay lúc 07:00"
+                        className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-400 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const payload = bookingTimeState.manualMessage.trim();
+                          if (!payload) return;
+                          void sendMessageToAi(payload, "chat");
+                        }}
+                        disabled={
+                          !bookingTimeState.manualMessage.trim() ||
+                          isSending ||
+                          !selectedSession
+                        }
+                        className="rounded-lg border border-orange-300 bg-orange-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Gửi
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!isUser && isLookupCapacityPrompt && (
+              <div className="mt-3 grid grid-cols-2 gap-1.5">
+                {CAPACITY_RANGE_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => void handleCapacityRangeSelect(option.label)}
+                    disabled={isSending || !selectedSession}
+                    className="flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-orange-400" />
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {!isUser && inlineOptions.length > 0 && (
               <div className={inlineOptionsLayout}>
                 {inlineOptions.map((option) => (
@@ -794,7 +1085,7 @@ const AIAssistantPage: React.FC = () => {
             )}
 
             {!isUser && bookingItems.length > 0 && (
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {bookingItems.map((item) => {
                   const roomCode = resolveBookingRoomCode(item);
                   const labelRange = item.label?.split("|")[1]?.trim() || "";
@@ -805,11 +1096,33 @@ const AIAssistantPage: React.FC = () => {
                   const imageUrl =
                     (roomCode && bookingImageByCode[roomCode]) ||
                     BOOKING_ITEM_FALLBACK_IMAGE;
+                  const bookingItemId = item.id || "";
+                  const bookingDetailPath = bookingItemId
+                    ? ROUTES.BOOKING_DETAIL.replace(":bookingId", bookingItemId)
+                    : "";
+                  const canNavigate = Boolean(bookingDetailPath);
 
                   return (
                     <div
                       key={`${item.id}-${roomCode}`}
-                      className="overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-sm"
+                      role={canNavigate ? "button" : undefined}
+                      tabIndex={canNavigate ? 0 : undefined}
+                      onClick={() => {
+                        if (!canNavigate) return;
+                        navigate(bookingDetailPath);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!canNavigate) return;
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(bookingDetailPath);
+                        }
+                      }}
+                      className={`overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-sm transition-all duration-200 ${
+                        canNavigate
+                          ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md"
+                          : ""
+                      }`}
                     >
                       <div className="relative h-32 w-full overflow-hidden bg-orange-50">
                         <img
@@ -832,12 +1145,13 @@ const AIAssistantPage: React.FC = () => {
                         {bookingActionLabel && roomCode && (
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={(event) => {
+                              event.stopPropagation();
                               void sendMessageToAi(
                                 `${bookingActionLabel} ${roomCode}`,
                                 "chat",
-                              )
-                            }
+                              );
+                            }}
                             disabled={isSending || !selectedSession}
                             className="mt-2 inline-flex items-center justify-center rounded-lg border border-orange-200 bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                           >
@@ -1854,77 +2168,23 @@ const AIAssistantPage: React.FC = () => {
                         </button>
                       ))}
                 </div>
-
-                {showLookupOptions && (
-                  <div className="relative mt-3 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
-                        Tra cứu
-                      </p>
-                      {lookupMode !== "NONE" && (
-                        <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
-                          {lookupMode === "DETAIL"
-                            ? "Chi tiết phòng"
-                            : "Theo sức chứa"}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {LOOKUP_OPTIONS.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => void handleLookupOptionSelect(option)}
-                          disabled={isSending || !selectedSession}
-                          className="group rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-300 hover:bg-orange-50 hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-orange-300 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                            {option.label}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {lookupMode === "CAPACITY" && (
-                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        {CAPACITY_RANGE_OPTIONS.map((option) => (
-                          <button
-                            key={option.id}
-                            type="button"
-                            onClick={() =>
-                              void handleCapacityRangeSelect(option.label)
-                            }
-                            disabled={isSending || !selectedSession}
-                            className="group rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] font-semibold text-orange-700 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-300 hover:bg-orange-100 hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-orange-500 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                              {option.label}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
-              {lookupMode === "DETAIL" && (
-                <div className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-3">
+              {showLookupDetailInput && (
+                <div className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <p className="text-xs font-semibold text-orange-700">
                     Nhập location code để xem chi tiết phòng
                   </p>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <input
                       value={lookupLocationCode}
-                      onChange={(e) => setLookupLocationCode(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          void handleLookupDetailSubmit();
-                        }
+                      onChange={(event) =>
+                        setLookupLocationCode(event.target.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        void handleLookupDetailSubmit();
                       }}
                       placeholder="VD: A19-003"
                       className="flex-1 rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-200"
