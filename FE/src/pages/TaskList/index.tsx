@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tag, Tabs, Empty, Spin, Select, Modal, Input, DatePicker, Button, Tooltip, Dropdown, MenuProps } from "antd";
 import {
@@ -75,6 +75,22 @@ const TaskListPage: React.FC = () => {
   const [resultNote, setResultNote] = useState("");
   const [reviewComment, setReviewComment] = useState("");
 
+  // Workplace API state
+  const [workplaceItems, setWorkplaceItems] = useState<any[]>([]);
+  const [workplaceLoading, setWorkplaceLoading] = useState(false);
+
+  // Quick assign modal
+  const [quickAssignModal, setQuickAssignModal] = useState(false);
+  const [quickAssignTaskId, setQuickAssignTaskId] = useState<string | null>(null);
+  const [quickAssignSearch, setQuickAssignSearch] = useState("");
+  const [quickAssignResults, setQuickAssignResults] = useState<any[]>([]);
+
+  // AI task highlight
+  const [newTaskIds, setNewTaskIds] = useState<Set<string>>(new Set());
+
+  const workplaceSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const quickAssignSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   const show = (type: MessageType, message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 3000);
@@ -96,6 +112,15 @@ const TaskListPage: React.FC = () => {
     }
   }, []);
 
+  const loadWorkplaceItems = useCallback(async (search?: string, status?: string) => {
+    setWorkplaceLoading(true);
+    try {
+      const data = await taskService.listMyTasks(undefined, search, status !== "ALL" ? status : undefined);
+      setWorkplaceItems(data);
+    } catch { /* silent */ }
+    finally { setWorkplaceLoading(false); }
+  }, []);
+
   useEffect(() => { void loadData(); }, [loadData]);
 
   // Load current user ID for role-based status menu
@@ -106,30 +131,30 @@ const TaskListPage: React.FC = () => {
   // Auto-reload khi có task notification
   useTaskNotifications(userId, () => { void loadData(); });
 
+  // Debounced workplace API search/filter
+  useEffect(() => {
+    clearTimeout(workplaceSearchTimer.current);
+    workplaceSearchTimer.current = setTimeout(() => {
+      void loadWorkplaceItems(searchQuery, statusFilter);
+    }, 300);
+    return () => clearTimeout(workplaceSearchTimer.current);
+  }, [searchQuery, statusFilter, loadWorkplaceItems]);
+
+  // Read AI-created task IDs from localStorage and highlight them
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("new_tasks_from_ai");
+      if (stored) {
+        const ids: string[] = JSON.parse(stored);
+        setNewTaskIds(new Set(ids));
+        localStorage.removeItem("new_tasks_from_ai");
+        setTimeout(() => setNewTaskIds(new Set()), 30000);
+      }
+    } catch { /* non-fatal */ }
+  }, []);
+
   const activeSprint = useMemo(() => sprints.find(s => s.status === "ACTIVE"), [sprints]);
   const backlogTasks = useMemo(() => tasks.filter(t => !t.sprintId), [tasks]);
-
-  // Workplace List: chỉ task cá nhân (do mình tạo), gần deadline lên đầu
-  const workplaceTasks = useMemo(() => {
-    const now = new Date();
-    const threeDays = 3 * 24 * 60 * 60 * 1000;
-    const personal = tasks.filter(t => {
-      const matchStatus = statusFilter === "ALL" || t.status === statusFilter;
-      const matchSearch = !searchQuery || t.title?.toLowerCase().includes(searchQuery.toLowerCase());
-      // Khi không lọc cụ thể, ẩn DONE/CANCELLED; khi chọn status cụ thể thì hiển thị đúng status đó
-      const isPersonal = !t.sprintId && (statusFilter !== "ALL" || (t.status !== "DONE" && t.status !== "CANCELLED"));
-      return matchStatus && matchSearch && isPersonal;
-    });
-    return personal.sort((a, b) => {
-      const aDue = a.dueAt ? new Date(a.dueAt).getTime() : Infinity;
-      const bDue = b.dueAt ? new Date(b.dueAt).getTime() : Infinity;
-      const aNear = aDue - now.getTime() <= threeDays && aDue > now.getTime();
-      const bNear = bDue - now.getTime() <= threeDays && bDue > now.getTime();
-      if (aNear && !bNear) return -1;
-      if (!aNear && bNear) return 1;
-      return aDue - bDue;
-    });
-  }, [tasks, statusFilter, searchQuery]);
 
   const applyBacklogFilters = (taskList: any[]) => {
     return taskList.filter(t => {
@@ -153,13 +178,6 @@ const TaskListPage: React.FC = () => {
     return new Date(dueAt).getTime() < Date.now();
   };
 
-  const filteredTasks = useMemo(() => {
-    return tasks.filter(t => {
-      const matchStatus = statusFilter === "ALL" || t.status === statusFilter;
-      const matchSearch = t.title?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchStatus && matchSearch;
-    });
-  }, [tasks, statusFilter, searchQuery]);
 
   // Sprint Handlers
   const handleCreateSprint = async () => {
@@ -337,6 +355,52 @@ const TaskListPage: React.FC = () => {
     }
   };
 
+  const handleDeleteTask = (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    Modal.confirm({
+      title: "Delete Task",
+      content: "Are you sure you want to delete this task? This action cannot be undone.",
+      okText: "Delete",
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await taskService.deleteTask(taskId);
+          show("success", "Task deleted");
+          void loadData();
+          void loadWorkplaceItems(searchQuery, statusFilter);
+        } catch {
+          show("error", "Failed to delete task");
+        }
+      }
+    });
+  };
+
+  const handleQuickAssignSearch = (val: string) => {
+    setQuickAssignSearch(val);
+    clearTimeout(quickAssignSearchTimer.current);
+    if (!val.trim()) { setQuickAssignResults([]); return; }
+    quickAssignSearchTimer.current = setTimeout(async () => {
+      const r = await userService.searchUsers(val);
+      setQuickAssignResults(r);
+    }, 350);
+  };
+
+  const handleQuickAssign = async (assigneeId: string) => {
+    if (!quickAssignTaskId) return;
+    try {
+      await taskService.assignTask(quickAssignTaskId, { assigneeId });
+      show("success", "Task assigned");
+      setQuickAssignModal(false);
+      setQuickAssignTaskId(null);
+      setQuickAssignSearch("");
+      setQuickAssignResults([]);
+      void loadData();
+      void loadWorkplaceItems(searchQuery, statusFilter);
+    } catch {
+      show("error", "Failed to assign task");
+    }
+  };
+
   // Analytics Data
   const analyticsData = useMemo(() => {
     const statusCounts = { TODO: 0, DOING: 0, WAITING_REVIEW: 0, DONE: 0, CANCELLED: 0, REWORK: 0 };
@@ -442,27 +506,34 @@ const TaskListPage: React.FC = () => {
                     ]} />
                   <Input placeholder="Search tasks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-64" />
                 </div>
-                <span className="text-sm font-medium text-slate-500">{filteredTasks.length} total tasks</span>
+                <span className="text-sm font-medium text-slate-500">{workplaceItems.length} tasks</span>
               </div>
 
-              {workplaceTasks.length === 0 ? (
+              {workplaceLoading ? (
+                <div className="flex justify-center py-16"><Spin /></div>
+              ) : workplaceItems.length === 0 ? (
                 <Empty className="py-20 bg-white rounded-3xl border border-slate-100 shadow-sm"
                   image={<ClipboardDocumentListIcon className="h-16 w-16 text-slate-200 mx-auto" />}
-                  description="Không có nhiệm vụ cá nhân nào." />
+                  description="Không có nhiệm vụ nào." />
               ) : (
                 <div className="grid gap-3.5">
-                  {workplaceTasks.map((task) => {
+                  {workplaceItems.map((task) => {
                     const near = isNearDeadline(task.dueAt);
                     const over = isOverdue(task.dueAt, task.status);
+                    const isNew = newTaskIds.has(task.id);
                     return (
                       <div key={task.id} onClick={() => navigate(`/tasks/${task.id}`)}
                         className={`cursor-pointer rounded-2xl border p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition duration-200 flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${
-                          over ? "border-red-300 bg-red-50/60" : near ? "border-orange-300 bg-orange-50/40" : "border-slate-200/75 bg-white"
+                          isNew ? "border-emerald-400 bg-emerald-50/60 ring-2 ring-emerald-300/50"
+                          : over ? "border-red-300 bg-red-50/60"
+                          : near ? "border-orange-300 bg-orange-50/40"
+                          : "border-slate-200/75 bg-white"
                         }`}>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3 mb-1.5">
                             <p className="font-bold text-slate-900 text-base truncate">{task.title}</p>
                             <Tag color={PRIORITY_COLOR[task.priority]} className="m-0 text-xs font-bold px-2 py-0.5 border-0 rounded-md">{task.priority}</Tag>
+                            {isNew && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full animate-pulse">NEW</span>}
                             {over && <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">QUÁ HẠN</span>}
                             {near && !over && <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">GẦN HẠN</span>}
                           </div>
@@ -487,6 +558,10 @@ const TaskListPage: React.FC = () => {
                               {task.status?.replace(/_/g, " ")}
                             </Tag>
                           </Dropdown>
+                          <button type="button" onClick={(e) => handleDeleteTask(task.id, e)}
+                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
                     );
@@ -707,37 +782,36 @@ const TaskListPage: React.FC = () => {
                             sprintTasks.map(t => {
                               const isDone = t.status === "DONE";
                               const assigneeName = t.assignments?.[0]?.assigneeName || "Unassigned";
-                              
+                              const isNew = newTaskIds.has(t.id);
+
                               return (
                                 <div key={t.id} draggable onDragStart={(e) => onDragStart(e, t)}
-                                  className="flex items-center justify-between gap-3 py-2 px-4 bg-white border-b border-slate-100 hover:bg-slate-50 cursor-grab active:cursor-grabbing group">
+                                  className={`flex items-center justify-between gap-3 py-2 px-4 border-b border-slate-100 hover:bg-slate-50 cursor-grab active:cursor-grabbing group ${isNew ? "bg-emerald-50/60" : "bg-white"}`}>
                                   <div className="flex items-center gap-3 overflow-hidden flex-1">
-                                    <input type="checkbox" className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 cursor-pointer" />
-                                    
                                     {/* Issue Type Icon */}
                                     <div className="w-4 h-4 rounded-sm bg-blue-500 flex items-center justify-center shrink-0">
                                       <CheckIcon className="w-3 h-3 text-white font-bold" />
                                     </div>
-                                    
+
                                     <span className={`text-[11px] font-medium shrink-0 ${isDone ? 'line-through text-slate-400' : 'text-slate-500'}`}>TSK-{t.id.toString().slice(-4).toUpperCase()}</span>
-                                    
+                                    {isNew && <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1 py-0.5 rounded-full shrink-0">NEW</span>}
                                     <span className={`text-[13px] truncate hover:underline cursor-pointer ${isDone ? 'line-through text-slate-500' : 'text-slate-800'}`} onClick={() => navigate(`/tasks/${t.id}`)}>
                                       {t.title}
                                     </span>
                                   </div>
-                                  
+
                                   <div className="flex items-center gap-4 shrink-0">
                                     <Dropdown menu={{ items: getStatusMenuItems(t), onClick: (e) => { e.domEvent.stopPropagation(); handleStatusMenuClick(t.id, e.key, t); } }} trigger={['click']} disabled={(getStatusMenuItems(t)?.length || 0) === 0}>
                                       <div className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer uppercase border ${
-                                        isDone ? 'bg-green-50 text-green-700 border-green-200' : 
-                                        t.status === 'DOING' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
+                                        isDone ? 'bg-green-50 text-green-700 border-green-200' :
+                                        t.status === 'DOING' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                                         'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
                                       }`}>
-                                        {t.status.replace(/_/g, " ")} 
+                                        {t.status.replace(/_/g, " ")}
                                         <ChevronDownIcon className="w-2.5 h-2.5 inline-block ml-1 mb-0.5" />
                                       </div>
                                     </Dropdown>
-                                    
+
                                     <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium w-20">
                                       {t.dueAt ? (
                                         <>
@@ -746,17 +820,23 @@ const TaskListPage: React.FC = () => {
                                         </>
                                       ) : <span>-</span>}
                                     </div>
-                                    
-                                    {/* Priority Icon Placeholder */}
+
+                                    {/* Priority Icon */}
                                     <div className={`w-4 h-4 rounded flex items-center justify-center ${t.priority === 'URGENT' ? 'text-red-500' : t.priority === 'HIGH' ? 'text-orange-500' : 'text-slate-400'}`}>
                                       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2L14 14H2L8 2Z" /></svg>
                                     </div>
 
-                                    <Tooltip title={assigneeName}>
-                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ${assigneeName === 'Unassigned' ? 'bg-slate-300' : 'bg-[#172b4d]'}`}>
+                                    <Tooltip title={`${assigneeName} — click to assign`}>
+                                      <div onClick={(e) => { e.stopPropagation(); setQuickAssignTaskId(t.id); setQuickAssignModal(true); setQuickAssignSearch(""); setQuickAssignResults([]); }}
+                                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm cursor-pointer hover:ring-2 hover:ring-orange-400 transition ${assigneeName === 'Unassigned' ? 'bg-slate-300' : 'bg-[#172b4d]'}`}>
                                         {getInitials(assigneeName)}
                                       </div>
                                     </Tooltip>
+
+                                    <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
+                                      className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
+                                      <TrashIcon className="h-3.5 w-3.5" />
+                                    </button>
                                   </div>
                                 </div>
                               );
@@ -779,7 +859,7 @@ const TaskListPage: React.FC = () => {
                    onDrop={async (e) => {
                      e.preventDefault();
                      const taskId = e.dataTransfer.getData("taskId");
-                     if (taskId) await handleMoveToSprint(taskId, null);
+                     if (taskId) await handleMoveToSprint(taskId, "backlog");
                    }}>
                 
                 {/* Backlog Header */}
@@ -804,31 +884,32 @@ const TaskListPage: React.FC = () => {
                       applyBacklogFilters(backlogTasks).map(t => {
                         const isDone = t.status === "DONE";
                         const assigneeName = t.assignments?.[0]?.assigneeName || "Unassigned";
+                        const isNew = newTaskIds.has(t.id);
 
                         return (
                           <div key={t.id} draggable onDragStart={(e) => onDragStart(e, t)}
-                            className="flex items-center justify-between gap-3 py-2 px-4 bg-white border-b border-slate-100 hover:bg-slate-50 cursor-grab active:cursor-grabbing group">
+                            className={`flex items-center justify-between gap-3 py-2 px-4 border-b border-slate-100 hover:bg-slate-50 cursor-grab active:cursor-grabbing group ${isNew ? "bg-emerald-50/60" : "bg-white"}`}>
                             <div className="flex items-center gap-3 overflow-hidden flex-1">
-                              <input type="checkbox" className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 cursor-pointer" />
                               <div className="w-4 h-4 rounded-sm bg-blue-500 flex items-center justify-center shrink-0">
                                 <CheckIcon className="w-3 h-3 text-white font-bold" />
                               </div>
                               <span className={`text-[11px] font-medium shrink-0 ${isDone ? 'line-through text-slate-400' : 'text-slate-500'}`}>TSK-{t.id.toString().slice(-4).toUpperCase()}</span>
+                              {isNew && <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-1 py-0.5 rounded-full shrink-0">NEW</span>}
                               <span className={`text-[13px] truncate hover:underline cursor-pointer ${isDone ? 'line-through text-slate-500' : 'text-slate-800'}`} onClick={() => navigate(`/tasks/${t.id}`)}>{t.title}</span>
                             </div>
-                            
+
                             <div className="flex items-center gap-4 shrink-0">
                               <Dropdown menu={{ items: getStatusMenuItems(t), onClick: (e) => { e.domEvent.stopPropagation(); handleStatusMenuClick(t.id, e.key, t); } }} trigger={['click']} disabled={(getStatusMenuItems(t)?.length || 0) === 0}>
                                 <div className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer uppercase border ${
-                                  isDone ? 'bg-green-50 text-green-700 border-green-200' : 
-                                  t.status === 'DOING' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
+                                  isDone ? 'bg-green-50 text-green-700 border-green-200' :
+                                  t.status === 'DOING' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                                   'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
                                 }`}>
-                                  {t.status.replace(/_/g, " ")} 
+                                  {t.status.replace(/_/g, " ")}
                                   <ChevronDownIcon className="w-2.5 h-2.5 inline-block ml-1 mb-0.5" />
                                 </div>
                               </Dropdown>
-                              
+
                               <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium w-20">
                                 {t.dueAt ? (
                                   <>
@@ -842,11 +923,17 @@ const TaskListPage: React.FC = () => {
                                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2L14 14H2L8 2Z" /></svg>
                               </div>
 
-                              <Tooltip title={assigneeName}>
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ${assigneeName === 'Unassigned' ? 'bg-slate-300' : 'bg-[#172b4d]'}`}>
+                              <Tooltip title={`${assigneeName} — click to assign`}>
+                                <div onClick={(e) => { e.stopPropagation(); setQuickAssignTaskId(t.id); setQuickAssignModal(true); setQuickAssignSearch(""); setQuickAssignResults([]); }}
+                                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm cursor-pointer hover:ring-2 hover:ring-orange-400 transition ${assigneeName === 'Unassigned' ? 'bg-slate-300' : 'bg-[#172b4d]'}`}>
                                   {getInitials(assigneeName)}
                                 </div>
                               </Tooltip>
+
+                              <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
+                                className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
+                                <TrashIcon className="h-3.5 w-3.5" />
+                              </button>
                             </div>
                           </div>
                         );
@@ -933,6 +1020,42 @@ const TaskListPage: React.FC = () => {
             <Button danger onClick={() => handleReviewTask("REJECTED")}>Request Rework</Button>
             <Button type="primary" className="bg-emerald-500 hover:bg-emerald-600 border-none" onClick={() => handleReviewTask("APPROVED")}>Approve & Complete</Button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Quick Assign Modal */}
+      <Modal
+        title="Assign Task"
+        open={quickAssignModal}
+        onCancel={() => { setQuickAssignModal(false); setQuickAssignTaskId(null); setQuickAssignSearch(""); setQuickAssignResults([]); }}
+        footer={null}
+      >
+        <div className="space-y-3 py-2">
+          <Input
+            placeholder="Search user by name or email..."
+            value={quickAssignSearch}
+            onChange={(e) => handleQuickAssignSearch(e.target.value)}
+            autoFocus
+          />
+          {quickAssignResults.length > 0 && (
+            <div className="border border-slate-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
+              {quickAssignResults.map((u) => (
+                <div key={u.id} onClick={() => handleQuickAssign(u.id)}
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-orange-50 cursor-pointer border-b border-slate-100 last:border-0 transition">
+                  <div className="w-8 h-8 rounded-full bg-[#172b4d] flex items-center justify-center text-[11px] font-bold text-white shrink-0">
+                    {getInitials(u.fullName)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{u.fullName}</p>
+                    <p className="text-xs text-slate-400">{u.email}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {quickAssignSearch && quickAssignResults.length === 0 && (
+            <p className="text-xs text-slate-400 text-center py-2">No users found</p>
+          )}
         </div>
       </Modal>
 
