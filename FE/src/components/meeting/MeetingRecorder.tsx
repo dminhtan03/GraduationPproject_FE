@@ -67,6 +67,12 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
 
   useEffect(() => () => clearInterval(timerRef.current), []);
 
+  // Auto-stop at 15 minutes
+  useEffect(() => {
+    if (phase === "recording" && elapsed >= 900) stopRecording();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elapsed, phase]);
+
   // Cập nhật khi initialData thay đổi (load lần đầu)
   useEffect(() => {
     if (initialData && phase === "idle") {
@@ -201,7 +207,10 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
             <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
           </span>
-          <p className="text-sm font-semibold text-red-700">Đang ghi âm… {fmtElapsed(elapsed)}</p>
+          <div>
+              <p className="text-sm font-semibold text-red-700">Đang ghi âm… {fmtElapsed(elapsed)}</p>
+              <p className="text-xs text-red-400 mt-0.5">Tối đa 15:00 — tự động dừng</p>
+            </div>
         </div>
         <button type="button" onClick={stopRecording}
           className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 transition">
@@ -257,16 +266,6 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
           <p className="text-sm text-slate-700 leading-6 whitespace-pre-wrap">{result.summary}</p>
         ) : (
           <p className="text-sm text-slate-400 italic">Chưa có tóm tắt.</p>
-        )}
-        {result?.transcript && (
-          <details className="mt-3">
-            <summary className="cursor-pointer text-xs font-semibold text-emerald-600 hover:underline">
-              Xem transcript đầy đủ
-            </summary>
-            <p className="mt-2 text-xs text-slate-600 leading-5 whitespace-pre-wrap max-h-48 overflow-y-auto rounded-lg bg-white p-3 border border-emerald-100">
-              {result.transcript}
-            </p>
-          </details>
         )}
       </div>
 

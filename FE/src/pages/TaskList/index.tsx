@@ -385,20 +385,30 @@ const TaskListPage: React.FC = () => {
     }, 350);
   };
 
-  const handleQuickAssign = async (assigneeId: string) => {
-    if (!quickAssignTaskId) return;
-    try {
-      await taskService.assignTask(quickAssignTaskId, { assigneeId });
-      show("success", "Task assigned");
-      setQuickAssignModal(false);
-      setQuickAssignTaskId(null);
-      setQuickAssignSearch("");
-      setQuickAssignResults([]);
+  const handleQuickAssign = (user: { id: string; fullName: string }) => {
+    const taskId = quickAssignTaskId;
+    if (!taskId) return;
+
+    // Optimistic update — reflect immediately in UI
+    const patchAssignment = (t: any) => t.id !== taskId ? t
+      : { ...t, assignments: [{ assigneeId: user.id, assigneeName: user.fullName, status: "ACCEPTED" }] };
+    setTasks(prev => prev.map(patchAssignment));
+    setWorkplaceItems(prev => prev.map(patchAssignment));
+
+    setQuickAssignModal(false);
+    setQuickAssignTaskId(null);
+    setQuickAssignSearch("");
+    setQuickAssignResults([]);
+
+    // Fire API in background — email sends on server side asynchronously
+    taskService.assignTask(taskId, { assigneeId: user.id }).then(() => {
       void loadData();
       void loadWorkplaceItems(searchQuery, statusFilter);
-    } catch {
+    }).catch(() => {
       show("error", "Failed to assign task");
-    }
+      void loadData();
+      void loadWorkplaceItems(searchQuery, statusFilter);
+    });
   };
 
   // Analytics Data
@@ -1040,7 +1050,7 @@ const TaskListPage: React.FC = () => {
           {quickAssignResults.length > 0 && (
             <div className="border border-slate-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
               {quickAssignResults.map((u) => (
-                <div key={u.id} onClick={() => handleQuickAssign(u.id)}
+                <div key={u.id} onClick={() => handleQuickAssign(u)}
                   className="flex items-center gap-3 px-4 py-2.5 hover:bg-orange-50 cursor-pointer border-b border-slate-100 last:border-0 transition">
                   <div className="w-8 h-8 rounded-full bg-[#172b4d] flex items-center justify-center text-[11px] font-bold text-white shrink-0">
                     {getInitials(u.fullName)}
