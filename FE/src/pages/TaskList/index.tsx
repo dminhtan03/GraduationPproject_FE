@@ -88,6 +88,10 @@ const TaskListPage: React.FC = () => {
   // AI task highlight
   const [newTaskIds, setNewTaskIds] = useState<Set<string>>(new Set());
 
+  // Delete confirm modal
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+
   const workplaceSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const quickAssignSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -357,22 +361,24 @@ const TaskListPage: React.FC = () => {
 
   const handleDeleteTask = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    Modal.confirm({
-      title: "Delete Task",
-      content: "Are you sure you want to delete this task? This action cannot be undone.",
-      okText: "Delete",
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          await taskService.deleteTask(taskId);
-          show("success", "Task deleted");
-          void loadData();
-          void loadWorkplaceItems(searchQuery, statusFilter);
-        } catch {
-          show("error", "Failed to delete task");
-        }
-      }
-    });
+    setDeleteTaskId(taskId);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTaskId) return;
+    try {
+      await taskService.deleteTask(deleteTaskId);
+      show("success", "Task deleted");
+      setDeleteModalOpen(false);
+      setDeleteTaskId(null);
+      void loadData();
+      void loadWorkplaceItems(searchQuery, statusFilter);
+    } catch {
+      show("error", "Failed to delete task");
+      setDeleteModalOpen(false);
+      setDeleteTaskId(null);
+    }
   };
 
   const handleQuickAssignSearch = (val: string) => {
@@ -1067,6 +1073,18 @@ const TaskListPage: React.FC = () => {
             <p className="text-xs text-slate-400 text-center py-2">No users found</p>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        title="Delete Task"
+        open={deleteModalOpen}
+        onCancel={() => { setDeleteModalOpen(false); setDeleteTaskId(null); }}
+        onOk={confirmDelete}
+        okText="Delete"
+        okButtonProps={{ danger: true }}
+        cancelText="Cancel"
+      >
+        <p className="text-slate-600 mt-2">Are you sure you want to delete this task? This action cannot be undone.</p>
       </Modal>
 
       {toast && <CustomMessage type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
