@@ -228,3 +228,91 @@ export const mergeSessionsById = (
       new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
   );
 };
+
+export const CAPACITY_RANGE_OPTIONS = [
+  { id: "CAP_5_20", label: "5 - 20 người", message: "5 - 20 người" },
+  { id: "CAP_20_40", label: "20 - 40 người", message: "20 - 40 người" },
+  { id: "CAP_40_60", label: "40 - 60 người", message: "40 - 60 người" },
+  { id: "CAP_60_80", label: "60 - 80 người", message: "60 - 80 người" },
+  { id: "CAP_80_100", label: "80 - 100 người", message: "80 - 100 người" },
+];
+
+export type BookingTimeMode = "quick" | "manual";
+
+export type BookingTimeUiState = {
+  mode: BookingTimeMode;
+  dayIndex: number;
+  time: string;
+  manualMessage: string;
+  durationMinutes?: number;
+};
+
+export type BookingDayOption = {
+  id: string;
+  label: string;
+  dateLabel: string;
+  offsetDays: number;
+};
+
+export const BOOKING_TIME_SLOTS = Array.from({ length: 30 }, (_, index) => {
+  const baseMinutes = 7 * 60;
+  const minutes = baseMinutes + index * 30;
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+});
+
+export const formatBookingDateLabel = (date: Date) =>
+  date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+
+export const buildBookingDayOptions = (base: Date): BookingDayOption[] => {
+  const start = new Date(base);
+  start.setHours(0, 0, 0, 0);
+
+  return ["Hôm nay", "Ngày mai", "Ngày kia"].map((label, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+
+    return {
+      id: `DAY_${index}`,
+      label,
+      dateLabel: formatBookingDateLabel(date),
+      offsetDays: index,
+    };
+  });
+};
+
+export const timeLabelToMinutes = (label: string) => {
+  const [hourText, minuteText] = label.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  return hour * 60 + minute;
+};
+
+export const roundToNextHalfHour = (date: Date) => {
+  const next = new Date(date);
+  next.setSeconds(0, 0);
+
+  const minutes = next.getMinutes();
+  const remainder = minutes % 30;
+  if (remainder !== 0) {
+    next.setMinutes(minutes + (30 - remainder));
+  }
+
+  return next;
+};
+
+export const getAvailableTimeSlots = (offsetDays: number, now: Date) => {
+  if (offsetDays !== 0) return BOOKING_TIME_SLOTS;
+
+  const nextSlot = roundToNextHalfHour(now);
+  const minMinutes = nextSlot.getHours() * 60 + nextSlot.getMinutes();
+
+  return BOOKING_TIME_SLOTS.filter(
+    (label) => timeLabelToMinutes(label) >= minMinutes,
+  );
+};
+
