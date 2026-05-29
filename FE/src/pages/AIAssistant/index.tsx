@@ -513,6 +513,11 @@ const AIAssistantPage: React.FC = () => {
     return intent === "LOOKUP" || label.includes("tra cứu");
   }, []);
 
+  const shouldShowMenuCode = (code?: string | number | null) => {
+    const value = String(code ?? "").trim();
+    return value.length > 0 && value.length <= 3;
+  };
+
   const sendMessageToAi = useCallback(
     async (content: string, _mode: "chat" | "voice") => {
       void _mode;
@@ -716,6 +721,11 @@ const AIAssistantPage: React.FC = () => {
       textNormalized.includes("trong bao lâu") ||
       textNormalized.includes("thêm bao lâu");
     const isCapacityPrompt = textNormalized.includes("bao nhiêu người");
+    const isNoCapacityMatchPrompt =
+      (textNormalized.includes("không tìm thấy phòng phù hợp") ||
+        textNormalized.includes("không tìm thấy phòng nào phù hợp") ||
+        textNormalized.includes("không có phòng phù hợp")) &&
+      textNormalized.includes("người");
 
     const getFallbackBookingTimeState = () => ({
       mode: "quick" as BookingTimeMode,
@@ -921,7 +931,7 @@ const AIAssistantPage: React.FC = () => {
               </div>
             )}
 
-            {!isUser && isCapacityPrompt && (
+            {!isUser && isCapacityPrompt && !isNoCapacityMatchPrompt && (
               <div className="mt-3 grid grid-cols-2 gap-1.5">
                 {CAPACITY_RANGE_OPTIONS.map((option) => (
                   <button
@@ -934,6 +944,26 @@ const AIAssistantPage: React.FC = () => {
                     {option.label}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {!isUser && isNoCapacityMatchPrompt && (
+              <div className="mt-3">
+                <div className="grid grid-cols-2 gap-1.5">
+                  {CAPACITY_RANGE_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() =>
+                        void sendMessageToAi(option.message, "chat")
+                      }
+                      disabled={isSending || !selectedSession}
+                      className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-center text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1499,20 +1529,25 @@ const AIAssistantPage: React.FC = () => {
               message.menuOptions &&
               message.menuOptions.length > 0 && (
                 <div className="mt-3 grid grid-cols-2 gap-1.5">
-                  {message.menuOptions.map((option) => (
-                    <button
-                      key={option.code}
-                      type="button"
-                      onClick={() => void handleSelectAction(option)}
-                      disabled={isSending}
-                      className="flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700">
-                        {option.code}
-                      </span>
-                      <span>{option.label}</span>
-                    </button>
-                  ))}
+                  {message.menuOptions.map((option) => {
+                    const showCode = shouldShowMenuCode(option.code);
+                    return (
+                      <button
+                        key={option.code || option.label}
+                        type="button"
+                        onClick={() => void handleSelectAction(option)}
+                        disabled={isSending}
+                        className="flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {showCode && (
+                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700">
+                            {option.code}
+                          </span>
+                        )}
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -2258,23 +2293,28 @@ const AIAssistantPage: React.FC = () => {
 
                 <div className="relative mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {activeMenuOptions.length > 0
-                    ? activeMenuOptions.map((option) => (
-                        <button
-                          key={option.code}
-                          type="button"
-                          onClick={() => void handleQuickActionSelect(option)}
-                          disabled={isSending || !selectedSession}
-                          className="group relative flex flex-col items-start rounded-2xl border border-orange-100 bg-white px-3.5 py-2.5 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1.5 transition-colors group-hover:bg-orange-200">
-                            {option.code}
-                          </span>
-                          <span className="text-xs font-bold text-slate-800">
-                            {resolveQuickActionLabel(option)}
-                          </span>
-                          <span className="mt-1 h-0.5 w-5 rounded-full bg-orange-400 transition-all duration-200 group-hover:w-8" />
-                        </button>
-                      ))
+                    ? activeMenuOptions.map((option) => {
+                        const showCode = shouldShowMenuCode(option.code);
+                        return (
+                          <button
+                            key={option.code || option.label}
+                            type="button"
+                            onClick={() => void handleQuickActionSelect(option)}
+                            disabled={isSending || !selectedSession}
+                            className="group relative flex flex-col items-start rounded-2xl border border-orange-100 bg-white px-3.5 py-2.5 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {showCode && (
+                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1.5 transition-colors group-hover:bg-orange-200">
+                                {option.code}
+                              </span>
+                            )}
+                            <span className="text-xs font-bold text-slate-800">
+                              {resolveQuickActionLabel(option)}
+                            </span>
+                            <span className="mt-1 h-0.5 w-5 rounded-full bg-orange-400 transition-all duration-200 group-hover:w-8" />
+                          </button>
+                        );
+                      })
                     : [
                         { code: "1", label: "Đặt phòng", intent: "BOOK_ROOM" },
                         {
