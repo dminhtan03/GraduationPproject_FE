@@ -32,8 +32,12 @@ export const taskService = {
   },
 
   // ── Listing ───────────────────────────────────────────────────────────────
-  listMyTasks: async (type?: string) => {
-    const res = await api.get(BASE, { params: type ? { type } : undefined });
+  listMyTasks: async (type?: string, search?: string, status?: string) => {
+    const params: Record<string, string> = {};
+    if (type) params.type = type;
+    if (search && search.trim()) params.search = search.trim();
+    if (status && status !== "ALL") params.status = status;
+    const res = await api.get(BASE, { params: Object.keys(params).length ? params : undefined });
     const data = extractData(res);
     return Array.isArray(data) ? data : [];
   },

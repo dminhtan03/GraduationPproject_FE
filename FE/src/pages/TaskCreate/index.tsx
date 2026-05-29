@@ -1,11 +1,11 @@
 import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Select, Input } from "antd";
+import { Select, Input, DatePicker } from "antd";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import dayjs from "dayjs";
 import { taskService } from "../../services/taskService";
 import { userService } from "../../services/userService";
 import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
-import DatePickerField from "../../components/common/DatePickerField";
 
 const TaskCreatePage: React.FC = () => {
   const navigate = useNavigate();
@@ -26,8 +26,6 @@ const TaskCreatePage: React.FC = () => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 3500);
   };
-
-  const today = new Date().toISOString().split("T")[0];
 
   const handleUserSearch = (val: string) => {
     clearTimeout(searchTimer.current);
@@ -117,7 +115,15 @@ const TaskCreatePage: React.FC = () => {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-700">Due Date</label>
-            <DatePickerField value={form.dueAt} onChange={(v) => setForm((p) => ({ ...p, dueAt: v }))} minDate={today} />
+            <DatePicker
+              className="w-full"
+              value={form.dueAt ? dayjs(form.dueAt) : null}
+              onChange={(d) => setForm((p) => ({ ...p, dueAt: d ? d.format("YYYY-MM-DD") : "" }))}
+              disabledDate={(d) => d && d.isBefore(dayjs(), "day")}
+              format="DD/MM/YYYY"
+              placeholder="Chọn ngày hết hạn"
+              allowClear
+            />
           </div>
         </div>
 

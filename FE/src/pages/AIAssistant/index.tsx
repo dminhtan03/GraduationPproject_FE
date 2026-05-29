@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { ChevronDownIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { aiService } from "../../services/aiService";
 import type {
@@ -24,19 +25,19 @@ import CustomMessage, {
 } from "../../components/common/CustomMessage";
 import { extractApiMessage } from "../../utils/errorHandlers";
 import type { ChatMessage, ChatSessionSummary } from "../../types/chat";
-import {
-  BOOKING_DURATION_OPTIONS,
-  BOOKING_ITEM_FALLBACK_IMAGE,
-} from "../../constants/aiAssistant";
+import { BOOKING_ITEM_FALLBACK_IMAGE } from "../../constants/aiAssistant";
 import {
   buildAssistantStorageKey,
-  buildCapacityOptions,
-  buildBookingTimeOptions,
   deriveStoredSessions,
   getStoredAssistantState,
   mergeSessionsById,
   resolveBookingRoomCode,
   resolveQuickActionLabel,
+  CAPACITY_RANGE_OPTIONS,
+  type BookingTimeMode,
+  type BookingTimeUiState,
+  buildBookingDayOptions,
+  getAvailableTimeSlots,
 } from "../../utils/aiAssistant";
 import {
   createId,
@@ -46,7 +47,6 @@ import {
   formatDateTimeLabel,
   mapDetailMessageToChatMessage,
   mapHistorySessionToSummary,
-  statusClass,
   bookingStatusClass,
   getBookingCardData,
   toText,
@@ -59,43 +59,6 @@ import {
 } from "../../utils/chatHelpers";
 import { normalizeRoomsMap } from "../../utils/roomList";
 const EMPTY_MESSAGES_BY_SESSION: Record<string, ChatMessage[]> = {};
-
-type LookupMode = "NONE" | "DETAIL" | "CAPACITY";
-
-type LookupOption = {
-  id: "HISTORY" | "AVAILABLE" | "DETAIL" | "CAPACITY";
-  label: string;
-  message?: string;
-};
-
-const LOOKUP_OPTIONS: LookupOption[] = [
-  {
-    id: "HISTORY",
-    label: "Lịch sử đặt phòng của tôi",
-    message: "Lịch sử đặt phòng của tôi",
-  },
-  {
-    id: "AVAILABLE",
-    label: "Phòng còn trống",
-    message: "Phòng còn trống",
-  },
-  {
-    id: "DETAIL",
-    label: "Chi tiết phòng",
-  },
-  {
-    id: "CAPACITY",
-    label: "Tìm kiếm theo sức chứa",
-  },
-];
-
-const CAPACITY_RANGE_OPTIONS = [
-  { id: "CAP_5_20", label: "5 - 20 người", message: "5 - 20 người" },
-  { id: "CAP_20_40", label: "20 - 40 người", message: "20 - 40 người" },
-  { id: "CAP_40_60", label: "40 - 60 người", message: "40 - 60 người" },
-  { id: "CAP_60_80", label: "60 - 80 người", message: "60 - 80 người" },
-  { id: "CAP_80_100", label: "80 - 100 người", message: "80 - 100 người" },
-];
 const AIAssistantPage: React.FC = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -150,15 +113,21 @@ const AIAssistantPage: React.FC = () => {
   const [activeMenuOptions, setActiveMenuOptions] = useState<AiMenuOption[]>(
     [],
   );
-  const [showLookupOptions, setShowLookupOptions] = useState(false);
-  const [lookupMode, setLookupMode] = useState<LookupMode>("NONE");
   const [lookupLocationCode, setLookupLocationCode] = useState("");
   const [bookingImageByCode, setBookingImageByCode] = useState<
     Record<string, string>
   >({});
+  const [bookingTimeUiByMessage, setBookingTimeUiByMessage] = useState<
+    Record<string, BookingTimeUiState>
+  >({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const loadedSessionDetailsRef = useRef<Set<string>>(
     new Set(Object.keys(initialStoredMessagesBySession)),
+  );
+  const todayKey = new Date().toDateString();
+  const bookingDayOptions = useMemo(
+    () => buildBookingDayOptions(new Date()),
+    [todayKey],
   );
 
   useEffect(() => {
@@ -177,9 +146,8 @@ const AIAssistantPage: React.FC = () => {
       Object.keys(nextMessagesBySession),
     );
     setActiveMenuOptions([]);
-    setShowLookupOptions(false);
-    setLookupMode("NONE");
     setLookupLocationCode("");
+    setBookingTimeUiByMessage({});
   }, [storageKey]);
 
   const createEmptySession = useCallback(async () => {
@@ -334,6 +302,30 @@ const AIAssistantPage: React.FC = () => {
     return messagesBySession[selectedSessionId] ?? [];
   }, [messagesBySession, selectedSessionId]);
 
+  const latestBotMessageText = useMemo(() => {
+    for (let index = selectedMessages.length - 1; index >= 0; index -= 1) {
+      const message = selectedMessages[index];
+      if (message.sender === "bot") {
+        return message.text.toLowerCase();
+      }
+    }
+    return "";
+  }, [selectedMessages]);
+
+  const showLookupDetailInput = useMemo(() => {
+    return (
+      latestBotMessageText.includes("chi tiết phòng") ||
+      latestBotMessageText.includes("location code") ||
+      latestBotMessageText.includes("nhập location") ||
+      latestBotMessageText.includes("nhập location code") ||
+      latestBotMessageText.includes("nhập phòng") ||
+      latestBotMessageText.includes("nhập mã phòng") ||
+      latestBotMessageText.includes("không hợp lệ") ||
+      latestBotMessageText.includes("không tồn tại") ||
+      latestBotMessageText.includes("vui lòng nhập lại")
+    );
+  }, [latestBotMessageText]);
+
   const bookingRoomCodes = useMemo(() => {
     const codes = new Set<string>();
     selectedMessages.forEach((message) => {
@@ -341,6 +333,22 @@ const AIAssistantPage: React.FC = () => {
         const roomCode = resolveBookingRoomCode(item);
         if (roomCode) {
           codes.add(roomCode);
+        }
+      });
+      if (message.roomDetail) {
+        if (message.roomDetail.locationCode) {
+          codes.add(message.roomDetail.locationCode);
+        }
+        if (message.roomDetail.id) {
+          codes.add(message.roomDetail.id);
+        }
+      }
+      (message.suggestions || []).forEach((s) => {
+        if (s.locationCode) {
+          codes.add(s.locationCode);
+        }
+        if (s.roomId) {
+          codes.add(s.roomId);
         }
       });
     });
@@ -505,6 +513,11 @@ const AIAssistantPage: React.FC = () => {
     return intent === "LOOKUP" || label.includes("tra cứu");
   }, []);
 
+  const shouldShowMenuCode = (code?: string | number | null) => {
+    const value = String(code ?? "").trim();
+    return value.length > 0 && value.length <= 3;
+  };
+
   const sendMessageToAi = useCallback(
     async (content: string, _mode: "chat" | "voice") => {
       void _mode;
@@ -580,11 +593,6 @@ const AIAssistantPage: React.FC = () => {
             };
           }),
         );
-
-        // Update the active menu options if the response includes them
-        if (response.menuOptions && response.menuOptions.length > 0) {
-          setActiveMenuOptions(response.menuOptions);
-        }
       } catch (error: unknown) {
         const fallbackMessage =
           "AI service is unavailable. Please try again later.";
@@ -616,33 +624,6 @@ const AIAssistantPage: React.FC = () => {
     [isSending, selectedSession, sendMessageToAi],
   );
 
-  const handleLookupOptionSelect = useCallback(
-    async (option: LookupOption) => {
-      if (isSending || !selectedSession) return;
-
-      if (option.id === "DETAIL") {
-        setLookupMode("DETAIL");
-        setShowLookupOptions(true);
-        return;
-      }
-
-      if (option.id === "CAPACITY") {
-        setLookupMode("CAPACITY");
-        setShowLookupOptions(true);
-        return;
-      }
-
-      if (option.message) {
-        await sendMessageToAi(option.message, "chat");
-      }
-
-      setShowLookupOptions(false);
-      setLookupMode("NONE");
-      setLookupLocationCode("");
-    },
-    [isSending, selectedSession, sendMessageToAi],
-  );
-
   const handleCapacityRangeSelect = useCallback(
     async (label: string) => {
       if (isSending || !selectedSession) return;
@@ -651,8 +632,6 @@ const AIAssistantPage: React.FC = () => {
         `T\u00ecm ki\u1ebfm theo s\u1ee9c ch\u1ee9a ${label}`,
         "chat",
       );
-      setShowLookupOptions(false);
-      setLookupMode("NONE");
     },
     [isSending, selectedSession, sendMessageToAi],
   );
@@ -664,22 +643,16 @@ const AIAssistantPage: React.FC = () => {
 
     await sendMessageToAi(`Chi tiết phòng ${code}`, "chat");
     setLookupLocationCode("");
-    setShowLookupOptions(false);
-    setLookupMode("NONE");
   }, [isSending, lookupLocationCode, selectedSession, sendMessageToAi]);
 
   const handleQuickActionSelect = useCallback(
     async (menuOption: AiMenuOption) => {
       if (isSending || !selectedSession) return;
       if (isLookupAction(menuOption)) {
-        setShowLookupOptions(true);
-        setLookupMode("NONE");
         setLookupLocationCode("");
+        await sendMessageToAi(resolveQuickActionLabel(menuOption), "chat");
         return;
       }
-
-      setShowLookupOptions(false);
-      setLookupMode("NONE");
       setLookupLocationCode("");
       await sendMessageToAi(resolveQuickActionLabel(menuOption), "chat");
     },
@@ -705,16 +678,23 @@ const AIAssistantPage: React.FC = () => {
           : "";
     const bookingItems = message.bookingItems || [];
     const roomDetail = message.roomDetail;
-    const roomDetailImage =
-      Array.isArray(roomDetail?.images) && roomDetail.images.length > 0
-        ? roomDetail.images[0]
-        : null;
-    const roomDetailAmenities = Array.isArray(roomDetail?.amenities)
-      ? roomDetail.amenities
-      : [];
     const roomDetailId = toText(roomDetail?.id);
     const roomDetailLocationCodeRaw = toText(roomDetail?.locationCode);
     const roomDetailLocationCode = roomDetailLocationCodeRaw || "-";
+    const roomDetailImages = Array.isArray(roomDetail?.images)
+      ? roomDetail.images.filter(Boolean)
+      : [];
+    const resolvedImageFromMap = roomDetailLocationCodeRaw
+      ? bookingImageByCode[roomDetailLocationCodeRaw] ||
+        bookingImageByCode[roomDetailId]
+      : null;
+    const roomDetailImage =
+      roomDetailImages.length > 0
+        ? roomDetailImages[0]
+        : resolvedImageFromMap || null;
+    const roomDetailAmenities = Array.isArray(roomDetail?.amenities)
+      ? roomDetail.amenities
+      : [];
     const roomDetailCapacity =
       typeof roomDetail?.capacity === "number" ? roomDetail.capacity : null;
     const roomDetailScore =
@@ -733,27 +713,62 @@ const AIAssistantPage: React.FC = () => {
       toText(message.reservation?.rawData?.reservationId);
 
     const textNormalized = message.text.toLowerCase();
-    const bookingTimeOptions = buildBookingTimeOptions(message.id);
-    const capacityOptions = buildCapacityOptions(
-      roomDetailCapacity ?? undefined,
-    );
-    const inlineOptions = textNormalized.includes("muốn đặt khi nào")
-      ? bookingTimeOptions
-      : textNormalized.includes("trong bao lâu") ||
-          textNormalized.includes("thêm bao lâu")
-        ? BOOKING_DURATION_OPTIONS
-        : textNormalized.includes("bao nhiêu người")
-          ? capacityOptions
-          : [];
-    const inlineOptionsLayout =
+    const isBookingTimePrompt = textNormalized.includes("muốn đặt khi nào");
+    const isLookupCapacityPrompt =
+      textNormalized.includes("khoảng sức chứa") ||
+      textNormalized.includes("nhập sức chứa");
+    const isDurationPrompt =
       textNormalized.includes("trong bao lâu") ||
-      textNormalized.includes("thêm bao lâu")
-        ? "mt-3 grid grid-cols-3 gap-2"
-        : "mt-3 grid grid-cols-2 gap-2";
+      textNormalized.includes("thêm bao lâu");
+    const isCapacityPrompt = textNormalized.includes("bao nhiêu người");
+    const isNoCapacityMatchPrompt =
+      (textNormalized.includes("không tìm thấy phòng phù hợp") ||
+        textNormalized.includes("không tìm thấy phòng nào phù hợp") ||
+        textNormalized.includes("không có phòng phù hợp")) &&
+      textNormalized.includes("người");
+
+    const getFallbackBookingTimeState = () => ({
+      mode: "quick" as BookingTimeMode,
+      dayIndex: 0,
+      time: getAvailableTimeSlots(0, new Date())[0] ?? "",
+      manualMessage: "",
+    });
+
+    const bookingTimeState = isBookingTimePrompt
+      ? (bookingTimeUiByMessage[message.id] ?? getFallbackBookingTimeState())
+      : null;
+    const activeBookingDay = bookingTimeState
+      ? (bookingDayOptions[bookingTimeState.dayIndex] ?? bookingDayOptions[0])
+      : bookingDayOptions[0];
+    const availableTimeSlots = bookingTimeState
+      ? getAvailableTimeSlots(activeBookingDay.offsetDays, new Date())
+      : [];
+    const resolvedBookingTime = bookingTimeState
+      ? availableTimeSlots.includes(bookingTimeState.time)
+        ? bookingTimeState.time
+        : activeBookingDay.offsetDays === 0
+          ? (availableTimeSlots[0] ?? "")
+          : bookingTimeState.time
+      : "";
+
+    const updateBookingTimeState = (
+      updater: (current: BookingTimeUiState) => BookingTimeUiState,
+    ) => {
+      setBookingTimeUiByMessage((prev) => {
+        const current = prev[message.id] ?? getFallbackBookingTimeState();
+        return {
+          ...prev,
+          [message.id]: updater(current),
+        };
+      });
+    };
 
     return (
-      <div
+      <motion.div
         key={message.id}
+        initial={{ opacity: 0, y: 12, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: "spring" as const, stiffness: 380, damping: 28 }}
         className={`mb-5 flex ${isUser ? "justify-end" : "justify-start"}`}
       >
         <div
@@ -769,23 +784,146 @@ const AIAssistantPage: React.FC = () => {
             {isUser ? userInitials : "AI"}
           </div>
           <div
-            className={`max-w-[85vw] sm:max-w-[70vw] xl:max-w-[44rem] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+            className={`max-w-[85vw] sm:max-w-[70vw] xl:max-w-[44rem] rounded-2xl px-4 py-3.5 text-xs sm:text-sm leading-relaxed shadow-sm transition-all duration-200 ${
               isUser
-                ? "rounded-br-md bg-orange-500 text-white font-medium"
-                : "rounded-bl-md bg-slate-100 text-slate-700"
+                ? "rounded-br-none bg-gradient-to-br from-orange-500 to-orange-600 text-white font-medium shadow-orange-500/10"
+                : "rounded-bl-none border border-slate-100 bg-white text-slate-800"
             }`}
           >
             <div>{message.text}</div>
 
-            {!isUser && inlineOptions.length > 0 && (
-              <div className={inlineOptionsLayout}>
-                {inlineOptions.map((option) => (
+            {!isUser && isBookingTimePrompt && bookingTimeState && (
+              <div className="mt-3 rounded-2xl border border-orange-100 bg-white/95 p-3 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      Ngày
+                    </p>
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {bookingDayOptions.map((day, index) => {
+                        const isActive = index === bookingTimeState.dayIndex;
+                        return (
+                          <button
+                            key={day.id}
+                            type="button"
+                            onClick={() => {
+                              updateBookingTimeState((current) => {
+                                const nextDay =
+                                  bookingDayOptions[index] ||
+                                  bookingDayOptions[0];
+                                const nextSlots = getAvailableTimeSlots(
+                                  nextDay.offsetDays,
+                                  new Date(),
+                                );
+                                const shouldAutoPick = nextDay.offsetDays === 0;
+                                const nextTime = shouldAutoPick
+                                  ? nextSlots[0] || ""
+                                  : current.time;
+                                const resolvedTime = nextSlots.includes(
+                                  current.time,
+                                )
+                                  ? current.time
+                                  : nextTime;
+
+                                return {
+                                  ...current,
+                                  dayIndex: index,
+                                  time: resolvedTime,
+                                };
+                              });
+                            }}
+                            className={`rounded-xl border px-2.5 py-2 text-left text-[11px] font-semibold transition-all hover:-translate-y-0.5 ${
+                              isActive
+                                ? "border-orange-300 bg-orange-500 text-white"
+                                : "border-orange-200 bg-white text-slate-700 hover:border-orange-300 hover:bg-orange-50"
+                            }`}
+                          >
+                            <div>{day.label}</div>
+                            <div
+                              className={`mt-0.5 text-[10px] ${
+                                isActive ? "text-white/85" : "text-slate-500"
+                              }`}
+                            >
+                              {day.dateLabel}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      Giờ bắt đầu
+                    </p>
+                    {availableTimeSlots.length > 0 ? (
+                      <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                        {availableTimeSlots.map((time) => {
+                          const isActive = time === resolvedBookingTime;
+                          return (
+                            <button
+                              key={time}
+                              type="button"
+                              onClick={() =>
+                                updateBookingTimeState((current) => ({
+                                  ...current,
+                                  time,
+                                }))
+                              }
+                              className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-all hover:-translate-y-0.5 ${
+                                isActive
+                                  ? "border-orange-300 bg-orange-500 text-white"
+                                  : "border-orange-200 bg-white text-slate-700 hover:border-orange-300 hover:bg-orange-50"
+                              }`}
+                            >
+                              {time}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Hôm nay đã hết khung giờ trống.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl border border-orange-100 bg-orange-50/70 px-3 py-2">
+                    <span className="text-xs text-slate-700">
+                      {resolvedBookingTime
+                        ? `Đặt lúc ${resolvedBookingTime} — ${activeBookingDay.label}`
+                        : "Chọn giờ bắt đầu"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!resolvedBookingTime) return;
+                        void sendMessageToAi(
+                          `${activeBookingDay.label} lúc ${resolvedBookingTime}`,
+                          "chat",
+                        );
+                      }}
+                      disabled={
+                        !resolvedBookingTime || isSending || !selectedSession
+                      }
+                      className="inline-flex items-center gap-1 rounded-lg border border-orange-300 bg-orange-500 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Xác nhận
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!isUser && isLookupCapacityPrompt && (
+              <div className="mt-3 grid grid-cols-2 gap-1.5">
+                {CAPACITY_RANGE_OPTIONS.map((option) => (
                   <button
-                    key={option.label}
+                    key={option.id}
                     type="button"
-                    onClick={() => void sendMessageToAi(option.message, "chat")}
+                    onClick={() => void handleCapacityRangeSelect(option.label)}
                     disabled={isSending || !selectedSession}
-                    className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-center text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {option.label}
                   </button>
@@ -793,11 +931,122 @@ const AIAssistantPage: React.FC = () => {
               </div>
             )}
 
+            {!isUser && isCapacityPrompt && !isNoCapacityMatchPrompt && (
+              <div className="mt-3 grid grid-cols-2 gap-1.5">
+                {CAPACITY_RANGE_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => void sendMessageToAi(option.message, "chat")}
+                    disabled={isSending || !selectedSession}
+                    className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-center text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!isUser && isNoCapacityMatchPrompt && (
+              <div className="mt-3">
+                <div className="grid grid-cols-2 gap-1.5">
+                  {CAPACITY_RANGE_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() =>
+                        void sendMessageToAi(option.message, "chat")
+                      }
+                      disabled={isSending || !selectedSession}
+                      className="rounded-xl border border-orange-200 bg-white px-3 py-2 text-center text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!isUser &&
+              isDurationPrompt &&
+              (() => {
+                const DURATION_STEP = 30;
+                const DURATION_MIN = 30;
+                const DURATION_MAX = 480;
+                const currentMinutes =
+                  bookingTimeUiByMessage[message.id]?.durationMinutes ?? 60;
+                const hours = Math.floor(currentMinutes / 60);
+                const mins = currentMinutes % 60;
+                const durationLabel =
+                  hours > 0 && mins > 0
+                    ? `${hours} tiếng ${mins} phút`
+                    : hours > 0
+                      ? `${hours} tiếng`
+                      : `${mins} phút`;
+                return (
+                  <div className="mt-3 rounded-2xl border border-orange-100 bg-white/95 p-4 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300 min-w-[280px] sm:min-w-[420px] transition-all duration-300">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-3">
+                      Chọn thời lượng
+                    </p>
+                    <div className="relative flex items-center group w-full mb-3">
+                      <input
+                        type="range"
+                        min={DURATION_MIN}
+                        max={DURATION_MAX}
+                        step={DURATION_STEP}
+                        value={currentMinutes}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setBookingTimeUiByMessage((prev) => ({
+                            ...prev,
+                            [message.id]: {
+                              ...(prev[message.id] ?? {
+                                mode: "quick" as BookingTimeMode,
+                                dayIndex: 0,
+                                time: "",
+                                manualMessage: "",
+                              }),
+                              durationMinutes: val,
+                            },
+                          }));
+                        }}
+                        className="w-full h-2 bg-orange-100 rounded-lg appearance-none cursor-pointer accent-orange-500 outline-none transition-all duration-300 hover:bg-orange-200 focus:outline-none [&::-webkit-slider-thumb]:h-4.5 [&::-webkit-slider-thumb]:w-4.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-500 [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-orange-600 [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-150 [&::-webkit-slider-thumb]:hover:scale-125 [&::-webkit-slider-thumb]:active:scale-110 [&::-moz-range-thumb]:h-4.5 [&::-moz-range-thumb]:w-4.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-orange-500 [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-orange-600 [&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:transition-transform [&::-moz-range-thumb]:duration-150 [&::-moz-range-thumb]:hover:scale-125 [&::-moz-range-thumb]:active:scale-110"
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        30 phút
+                      </span>
+                      <span className="rounded-full border border-orange-200 bg-orange-50 px-3.5 py-1 text-xs font-bold text-orange-700 shadow-sm animate-pulse">
+                        {durationLabel}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        8 tiếng
+                      </span>
+                    </div>
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void sendMessageToAi(durationLabel, "chat")
+                        }
+                        disabled={isSending || !selectedSession}
+                        className="rounded-lg border border-orange-300 bg-orange-500 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Xác nhận
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
             {!isUser && bookingItems.length > 0 && (
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {bookingItems.map((item) => {
                   const roomCode = resolveBookingRoomCode(item);
-                  const labelRange = item.label?.split("|")[1]?.trim() || "";
+                  const labelParts = item.label ? item.label.split("|") : [];
+                  const labelRange = labelParts[1]?.trim() || "";
+                  const statusPart = labelParts[2]?.trim() || "";
                   const timeRange =
                     item.startTime && item.endTime
                       ? `${item.startTime} - ${item.endTime}`
@@ -805,11 +1054,60 @@ const AIAssistantPage: React.FC = () => {
                   const imageUrl =
                     (roomCode && bookingImageByCode[roomCode]) ||
                     BOOKING_ITEM_FALLBACK_IMAGE;
+                  const bookingItemId = item.id || "";
+                  const bookingDetailPath = bookingItemId
+                    ? ROUTES.BOOKING_DETAIL.replace(":bookingId", bookingItemId)
+                    : "";
+                  const canNavigate = Boolean(bookingDetailPath);
+
+                  let statusBadge = null;
+                  if (statusPart) {
+                    let statusColorClasses =
+                      "bg-slate-50 border-slate-200 text-slate-600";
+                    if (statusPart.toLowerCase().includes("không đến")) {
+                      statusColorClasses =
+                        "bg-red-50 border-red-200 text-red-700 font-bold shadow-sm";
+                    } else if (statusPart.toLowerCase().includes("hủy")) {
+                      statusColorClasses =
+                        "bg-slate-100 border-slate-300 text-slate-500 line-through font-semibold";
+                    } else if (
+                      statusPart.toLowerCase().includes("đã") ||
+                      statusPart.toLowerCase().includes("hoạt động")
+                    ) {
+                      statusColorClasses =
+                        "bg-emerald-50 border-emerald-200 text-emerald-700 font-bold shadow-sm";
+                    }
+
+                    statusBadge = (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wide ${statusColorClasses}`}
+                      >
+                        {statusPart}
+                      </span>
+                    );
+                  }
 
                   return (
                     <div
                       key={`${item.id}-${roomCode}`}
-                      className="overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-sm"
+                      role={canNavigate ? "button" : undefined}
+                      tabIndex={canNavigate ? 0 : undefined}
+                      onClick={() => {
+                        if (!canNavigate) return;
+                        navigate(bookingDetailPath);
+                      }}
+                      onKeyDown={(event) => {
+                        if (!canNavigate) return;
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(bookingDetailPath);
+                        }
+                      }}
+                      className={`overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-sm transition-all duration-200 ${
+                        canNavigate
+                          ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md"
+                          : ""
+                      }`}
                     >
                       <div className="relative h-32 w-full overflow-hidden bg-orange-50">
                         <img
@@ -825,19 +1123,23 @@ const AIAssistantPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="p-3">
-                        <div className="text-xs font-semibold text-slate-800">
-                          {timeRange || item.label || ""}
+                      <div className="p-3 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-1.5">
+                          <div className="text-xs font-semibold text-slate-800">
+                            {timeRange || item.label || ""}
+                          </div>
+                          {statusBadge}
                         </div>
                         {bookingActionLabel && roomCode && (
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={(event) => {
+                              event.stopPropagation();
                               void sendMessageToAi(
                                 `${bookingActionLabel} ${roomCode}`,
                                 "chat",
-                              )
-                            }
+                              );
+                            }}
                             disabled={isSending || !selectedSession}
                             className="mt-2 inline-flex items-center justify-center rounded-lg border border-orange-200 bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                           >
@@ -852,81 +1154,168 @@ const AIAssistantPage: React.FC = () => {
             )}
 
             {!isUser && roomDetail && (
-              <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-md hover:shadow-lg transition-shadow">
-                <div className="flex items-center justify-between gap-2 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50 px-3 py-2.5">
-                  <p className="text-[11px] font-bold uppercase tracking-wide text-orange-700">
-                    Room Detail
-                  </p>
-                  {roomDetailScore !== null && (
-                    <span className="rounded-lg border border-orange-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-orange-700">
-                      Score {roomDetailScore.toFixed(1)}
-                    </span>
+              <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-md transition-shadow hover:shadow-lg">
+                {/* Hero image or fallback */}
+                <div className="relative h-48 w-full bg-slate-100 overflow-hidden flex items-center justify-center">
+                  {roomDetailImage ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImageUrl(roomDetailImage)}
+                        className="relative block w-full h-full overflow-hidden bg-gradient-to-br from-orange-100 to-amber-100"
+                      >
+                        <img
+                          src={roomDetailImage}
+                          alt={roomDetailLocationCode}
+                          className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.03]"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-slate-900/20" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex h-full w-full items-center justify-center text-sm font-medium text-slate-400 bg-slate-50 border-b border-slate-100">
+                        No image
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 via-transparent to-slate-900/10" />
+                    </>
                   )}
+
+                  <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                    <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-bold text-slate-800 shadow-sm">
+                      {roomDetailLocationCode}
+                    </span>
+                    {roomDetailScore !== null && (
+                      <span className="rounded-full bg-orange-500 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
+                        ★ {roomDetailScore.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {roomDetailImage && (
-                  <button
-                    type="button"
-                    onClick={() => setPreviewImageUrl(roomDetailImage)}
-                    className="block w-full bg-gradient-to-br from-orange-100 to-amber-100"
-                  >
-                    <img
-                      src={roomDetailImage}
-                      alt={roomDetailLocationCode}
-                      className="h-36 w-full object-cover transition-transform duration-300 hover:scale-[1.02]"
-                      loading="lazy"
-                    />
-                  </button>
+                {/* Image gallery (if more than 1 image) */}
+                {roomDetailImages.length > 1 && (
+                  <div className="flex gap-1.5 overflow-x-auto p-2 bg-slate-50/70 border-b border-slate-100">
+                    {roomDetailImages.slice(1, 5).map((img, idx) => (
+                      <button
+                        key={`room-img-${idx}`}
+                        type="button"
+                        onClick={() => setPreviewImageUrl(img)}
+                        className="flex-shrink-0 overflow-hidden rounded-lg border border-orange-100 transition hover:border-orange-300"
+                      >
+                        <img
+                          src={img}
+                          alt={`${roomDetailLocationCode} ${idx + 2}`}
+                          className="h-16 w-20 object-cover transition-transform duration-200 hover:scale-105"
+                          loading="lazy"
+                        />
+                      </button>
+                    ))}
+                  </div>
                 )}
 
-                <div className="space-y-2.5 px-3 py-3 text-[12px] text-slate-700">
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-2.5">
-                      <p className="text-[9px] font-bold uppercase tracking-wide text-orange-600">
-                        Room Code
-                      </p>
-                      <p className="mt-1 font-semibold text-slate-900">
-                        {roomDetailLocationCode}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-orange-100 bg-orange-50/40 px-3 py-2.5">
-                      <p className="text-[9px] font-bold uppercase tracking-wide text-orange-600">
-                        Capacity
-                      </p>
-                      <p className="mt-1 font-semibold text-slate-900">
-                        {roomDetailCapacity ?? "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 sm:col-span-2">
-                      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-600">
-                        Current User
-                      </p>
-                      <p className="mt-1 font-semibold text-slate-900">
-                        {roomDetailCurrentUser || "No active user"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 sm:col-span-2">
-                      <p className="text-[9px] font-bold uppercase tracking-wide text-slate-600">
-                        Check-in Time
-                      </p>
-                      {roomDetailCheckInLabel ? (
-                        <p className="mt-1 font-semibold text-slate-900">
-                          {roomDetailCheckInLabel}
+                <div className="space-y-3 px-4 py-3.5 text-[12px] text-slate-700">
+                  {/* Info grid */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex items-center gap-2 rounded-xl bg-orange-50/60 px-3 py-2">
+                      <svg
+                        className="w-4 h-4 text-orange-500 shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                        />
+                      </svg>
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-orange-600">
+                          Room Code
                         </p>
-                      ) : (
-                        <p className="mt-1 text-[11px] font-medium text-black">
-                          No active check-in.
+                        <p className="font-semibold text-slate-900">
+                          {roomDetailLocationCode}
                         </p>
-                      )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-xl bg-orange-50/60 px-3 py-2">
+                      <svg
+                        className="w-4 h-4 text-orange-500 shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                        />
+                      </svg>
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-orange-600">
+                          Capacity
+                        </p>
+                        <p className="font-semibold text-slate-900">
+                          {roomDetailCapacity ?? "-"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                      <svg
+                        className="w-4 h-4 text-slate-500 shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        />
+                      </svg>
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                          Current User
+                        </p>
+                        <p className="font-semibold text-slate-900">
+                          {roomDetailCurrentUser || "No active user"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                      <svg
+                        className="w-4 h-4 text-slate-500 shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                          Check-in
+                        </p>
+                        <p className="font-semibold text-slate-900">
+                          {roomDetailCheckInLabel || "No check-in"}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
+                  {/* Amenities */}
                   {roomDetailAmenities.length > 0 && (
                     <div>
-                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                         Amenities
                       </p>
                       <div className="flex flex-wrap gap-1.5">
@@ -935,20 +1324,20 @@ const AIAssistantPage: React.FC = () => {
                             key={`${roomDetailId || roomDetailLocationCode}-${amenity}`}
                             className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-medium text-orange-700"
                           >
-                            • {amenity}
+                            {amenity}
                           </span>
                         ))}
                       </div>
                     </div>
                   )}
 
+                  {/* Feedback */}
                   <div>
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                       Feedback
                     </p>
-
                     {roomDetailFeedbacks.length > 0 ? (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
                         {roomDetailFeedbacks
                           .slice(0, 3)
                           .map((feedback, index) => {
@@ -961,28 +1350,27 @@ const AIAssistantPage: React.FC = () => {
                                 : 0;
                             const description = toText(feedback?.description);
                             const createdAt = toText(feedback?.createdAt);
-
                             return (
                               <div
                                 key={
                                   feedback?.id ||
                                   `${roomDetailId || roomDetailLocationCode}-feedback-${index}`
                                 }
-                                className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5"
+                                className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2"
                               >
                                 <div className="flex items-center justify-between gap-2">
-                                  <div className="text-[11px] font-semibold text-amber-600">
+                                  <div className="text-[11px] font-semibold text-amber-500">
                                     {rating > 0
                                       ? "★".repeat(rating)
                                       : "No rating"}
                                   </div>
                                   {createdAt && (
-                                    <span className="text-[10px] text-slate-500">
+                                    <span className="text-[10px] text-slate-400">
                                       {formatDateTimeLabel(createdAt)}
                                     </span>
                                   )}
                                 </div>
-                                <p className="mt-1 text-[11px] text-slate-700">
+                                <p className="mt-0.5 text-[11px] text-slate-600">
                                   {description || "No feedback description."}
                                 </p>
                               </div>
@@ -990,12 +1378,13 @@ const AIAssistantPage: React.FC = () => {
                           })}
                       </div>
                     ) : (
-                      <p className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-[11px] text-slate-600">
+                      <p className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-500">
                         No feedback available for this room.
                       </p>
                     )}
                   </div>
 
+                  {/* CTA */}
                   {(roomDetailId || roomDetailLocationCodeRaw) && (
                     <div className="flex items-center justify-end pt-1">
                       <button
@@ -1140,20 +1529,25 @@ const AIAssistantPage: React.FC = () => {
               message.menuOptions &&
               message.menuOptions.length > 0 && (
                 <div className="mt-3 grid grid-cols-2 gap-1.5">
-                  {message.menuOptions.map((option) => (
-                    <button
-                      key={option.code}
-                      type="button"
-                      onClick={() => void handleSelectAction(option)}
-                      disabled={isSending}
-                      className="flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700">
-                        {option.code}
-                      </span>
-                      <span>{option.label}</span>
-                    </button>
-                  ))}
+                  {message.menuOptions.map((option) => {
+                    const showCode = shouldShowMenuCode(option.code);
+                    return (
+                      <button
+                        key={option.code || option.label}
+                        type="button"
+                        onClick={() => void handleSelectAction(option)}
+                        disabled={isSending}
+                        className="flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 transition hover:border-orange-400 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {showCode && (
+                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700">
+                            {option.code}
+                          </span>
+                        )}
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 
@@ -1163,7 +1557,7 @@ const AIAssistantPage: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   };
 
@@ -1296,113 +1690,192 @@ const AIAssistantPage: React.FC = () => {
     const hasCapacity = typeof s.capacity === "number";
     const showMetaGrid = hasBuilding || hasFloor || hasCapacity;
 
+    const resolvedImage =
+      s.imageUrl ||
+      (s.locationCode ? bookingImageByCode[s.locationCode] : null) ||
+      (s.roomId ? bookingImageByCode[s.roomId] : null);
+
     return (
       <div
         key={`${s.roomId}-${s.locationCode}`}
-        className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 ${
+        className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-300 ${
           isFeatured
-            ? "border-orange-300 ring-2 ring-orange-200 shadow-md hover:shadow-lg"
-            : "border-orange-100 hover:border-orange-200 hover:shadow-md"
+            ? "border-orange-300 ring-2 ring-orange-200 shadow-md hover:shadow-lg scale-[1.01]"
+            : "border-orange-100 hover:border-orange-300 hover:shadow-md"
         }`}
       >
         {isFeatured && (
-          <div className="flex items-center justify-center bg-gradient-to-r from-orange-50 to-amber-50 px-3 py-2">
-            <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-orange-700">
-              Best match for your request
+          <div className="flex items-center justify-center bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-1.5 shadow-sm">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+              Phù hợp nhất
             </span>
           </div>
         )}
 
-        {s.imageUrl && (
-          <button
-            type="button"
-            onClick={() => setPreviewImageUrl(s.imageUrl || null)}
-            className="relative block w-full overflow-hidden bg-gradient-to-br from-orange-100 to-amber-100"
-          >
-            <img
-              src={s.imageUrl}
-              alt={s.locationCode || s.roomId}
-              className="h-32 w-full object-cover transition-transform duration-300 hover:scale-105"
-              loading="lazy"
-            />
-          </button>
-        )}
-
-        <div className="p-3.5 sm:p-4">
-          <div className="mb-3 flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <h3 className="truncate text-sm font-bold text-slate-900">
-                {s.locationCode || s.roomId}
-              </h3>
-            </div>
-            <span
-              className={`shrink-0 rounded-lg border px-2.5 py-1 text-[10px] font-semibold ${
-                statusClass[status] ||
-                "border-slate-200 bg-slate-50 text-slate-700"
-              }`}
+        {/* Header Image or Fallback */}
+        <div className="relative h-36 w-full bg-slate-100 overflow-hidden flex items-center justify-center">
+          {resolvedImage ? (
+            <button
+              type="button"
+              onClick={() => setPreviewImageUrl(resolvedImage)}
+              className="relative block w-full h-full overflow-hidden bg-gradient-to-br from-orange-50 to-amber-50"
             >
-              {status || "UNKNOWN"}
+              <img
+                src={resolvedImage}
+                alt={s.locationCode || s.roomId}
+                className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.05]"
+                loading="lazy"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-slate-900/20" />
+            </button>
+          ) : (
+            <>
+              <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-slate-400 bg-slate-50 border-b border-slate-100">
+                Không có ảnh
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 via-transparent to-slate-900/10" />
+            </>
+          )}
+
+          <div className="absolute bottom-2.5 left-2.5">
+            <span className="rounded-full bg-white/95 px-3 py-1 text-[10px] font-bold text-slate-800 shadow-sm border border-slate-100">
+              {s.locationCode || s.roomId}
             </span>
+          </div>
+        </div>
+
+        <div className="p-3.5 sm:p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            {status === "AVAILABLE" ? (
+              <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700 uppercase tracking-wider shadow-sm animate-pulse">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Available
+              </span>
+            ) : (
+              <span className="shrink-0 inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[9px] font-bold text-orange-700 uppercase tracking-wider shadow-sm">
+                {status || "UNKNOWN"}
+              </span>
+            )}
           </div>
 
           {showMetaGrid && (
-            <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {hasBuilding && (
-                <div className="rounded-lg border border-orange-100 bg-orange-50/50 px-2 py-2">
-                  <p className="text-[10px] font-semibold text-orange-600 uppercase tracking-wide">
-                    Building
-                  </p>
-                  <p className="mt-1 truncate text-xs font-medium text-slate-900">
-                    {s.building}
-                  </p>
+                <div className="flex items-center gap-2 rounded-xl bg-orange-50/50 px-2.5 py-1.5 border border-orange-100/60 shadow-sm">
+                  <svg
+                    className="w-3.5 h-3.5 text-orange-500 shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                    />
+                  </svg>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[8px] font-bold text-orange-600 uppercase tracking-wider">
+                      Tòa nhà
+                    </p>
+                    <p className="truncate text-[11px] font-bold text-slate-800">
+                      {s.building}
+                    </p>
+                  </div>
                 </div>
               )}
 
               {hasFloor && (
-                <div className="rounded-lg border border-amber-100 bg-amber-50/50 px-2 py-2">
-                  <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-wide">
-                    Floor
-                  </p>
-                  <p className="mt-1 truncate text-xs font-medium text-slate-900">
-                    {s.floor}
-                  </p>
+                <div className="flex items-center gap-2 rounded-xl bg-amber-50/50 px-2.5 py-1.5 border border-amber-100/60 shadow-sm">
+                  <svg
+                    className="w-3.5 h-3.5 text-amber-500 shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                    />
+                  </svg>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[8px] font-bold text-amber-600 uppercase tracking-wider">
+                      Tầng
+                    </p>
+                    <p className="truncate text-[11px] font-bold text-slate-800">
+                      {s.floor}
+                    </p>
+                  </div>
                 </div>
               )}
 
               {hasCapacity && (
-                <div className="rounded-lg border border-sky-100 bg-sky-50/50 px-2 py-2">
-                  <p className="text-[10px] font-semibold text-sky-600 uppercase tracking-wide">
-                    Capacity
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-slate-900">
-                    {s.capacity}
-                  </p>
+                <div className="flex items-center gap-2 rounded-xl bg-sky-50/50 px-2.5 py-1.5 border border-sky-100/60 shadow-sm">
+                  <svg
+                    className="w-3.5 h-3.5 text-sky-500 shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                    />
+                  </svg>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[8px] font-bold text-sky-600 uppercase tracking-wider">
+                      Sức chứa
+                    </p>
+                    <p className="truncate text-[11px] font-bold text-slate-800">
+                      {s.capacity} người
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
           {s.availableTimeSlots && s.availableTimeSlots.length > 0 && (
-            <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-2">
-              <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">
-                Available Time Slots
-              </p>
-              <p className="mt-1 text-xs text-emerald-900">
-                {s.availableTimeSlots.slice(0, 2).join(" • ")}
-              </p>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-3 py-2 flex items-start gap-2 shadow-sm">
+              <svg
+                className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <div>
+                <p className="text-[9px] font-bold text-emerald-800 uppercase tracking-wider">
+                  Khung giờ còn trống
+                </p>
+                <p className="mt-0.5 text-xs text-emerald-950 font-medium">
+                  {s.availableTimeSlots.slice(0, 2).join(" • ")}
+                </p>
+              </div>
             </div>
           )}
 
           {s.amenities && s.amenities.length > 0 && (
-            <div className="mb-3">
-              <p className="mb-2 text-[10px] font-semibold text-slate-600 uppercase tracking-wide">
-                Amenities
+            <div className="space-y-1.5">
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                Tiện ích phòng
               </p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1">
                 {s.amenities.slice(0, 5).map((amenity) => (
                   <span
                     key={`${s.roomId}-${amenity}`}
-                    className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-medium text-orange-700"
+                    className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50/50 px-2 py-0.5 text-[9px] font-semibold text-orange-700"
                   >
                     • {amenity}
                   </span>
@@ -1412,10 +1885,10 @@ const AIAssistantPage: React.FC = () => {
           )}
         </div>
 
-        <div className="flex gap-2 border-t border-orange-50 bg-gradient-to-r from-orange-50/40 to-amber-50/40 px-3.5 py-3 sm:px-4">
+        <div className="flex gap-2 border-t border-orange-50 bg-gradient-to-r from-orange-50/40 to-amber-50/40 px-3 py-2.5 sm:px-4">
           <button
             type="button"
-            className="flex-1 rounded-lg border border-orange-200 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+            className="flex-1 rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-bold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50 active:scale-[0.98]"
             onClick={() => handleViewDetails(s)}
           >
             Details
@@ -1423,10 +1896,10 @@ const AIAssistantPage: React.FC = () => {
 
           <button
             type="button"
-            className="flex-1 rounded-lg border border-orange-500 bg-orange-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-600 hover:shadow-md"
+            className="flex-1 rounded-xl border border-orange-500 bg-orange-500 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-orange-600 hover:shadow active:scale-[0.98]"
             onClick={() => handleBookNow(s)}
           >
-            Book Now →
+            Book Now
           </button>
         </div>
       </div>
@@ -1580,27 +2053,34 @@ const AIAssistantPage: React.FC = () => {
   ]);
 
   return (
-    <section className="ai-assistant-enter relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:p-6">
+    <motion.section
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="ai-assistant-enter relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:p-6"
+    >
       <div className="pointer-events-none absolute -left-12 top-8 h-40 w-40 rounded-full bg-slate-200/45 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-12 right-10 h-48 w-48 rounded-full bg-slate-200/50 blur-3xl" />
 
       <div className="relative grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-12">
         <aside className="hidden xl:col-span-4 xl:block 2xl:col-span-3">
-          <div className="flex max-h-[280px] min-h-0 flex-col rounded-2xl bg-white/90 p-4 shadow-sm backdrop-blur-sm sm:max-h-[340px] sm:p-5 xl:max-h-none xl:min-h-[620px]">
+          <div className="flex max-h-[280px] min-h-0 flex-col rounded-3xl border border-orange-100 bg-white/95 p-4 shadow-md backdrop-blur-md sm:max-h-[340px] sm:p-5 xl:max-h-none xl:min-h-[620px] transition-all duration-300 hover:shadow-lg">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-orange-700">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-orange-700">
                   Conversations
                 </h2>
-                <p className="text-xs text-orange-500">UniBot History</p>
+                <p className="text-[10px] text-orange-500 font-medium mt-0.5">
+                  UniBot History
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => void handleNewChat()}
                 disabled={isCreatingChat}
-                className="rounded-lg border border-orange-200 px-3 py-1.5 text-xs font-semibold text-orange-700 transition hover:border-orange-300 hover:bg-orange-50"
+                className="rounded-xl border border-orange-200 bg-white px-3.5 py-1.5 text-xs font-bold text-orange-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-300 hover:bg-orange-50 active:translate-y-0 active:scale-95 disabled:opacity-60"
               >
-                {isCreatingChat ? "Creating..." : "New Chat"}
+                {isCreatingChat ? "Creating..." : "+ New Chat"}
               </button>
             </div>
 
@@ -1620,29 +2100,29 @@ const AIAssistantPage: React.FC = () => {
               {sessions.map((session) => {
                 const active = session.id === selectedSessionId;
                 return (
-                  <div key={session.id} className="relative">
+                  <div key={session.id} className="group relative">
                     <button
                       type="button"
                       onClick={() => handleSelectSession(session.id)}
-                      className={`w-full rounded-xl border px-3 py-2.5 pr-10 text-left transition ${
+                      className={`w-full rounded-2xl border px-3.5 py-3 pr-10 text-left transition-all duration-200 ease-out ${
                         active
-                          ? "border-orange-500 bg-orange-500 text-white shadow"
-                          : "border-orange-200 bg-white hover:border-orange-300 hover:bg-orange-50"
+                          ? "border-transparent bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-md shadow-orange-500/10 scale-[1.01]"
+                          : "border-slate-100 bg-white text-slate-800 hover:border-orange-200 hover:bg-orange-50/40 hover:scale-[1.005]"
                       }`}
                     >
-                      <div className="truncate text-sm font-semibold">
+                      <div className="truncate text-xs font-bold">
                         {session.title}
                       </div>
                       <div
-                        className={`mt-1 truncate text-xs ${
-                          active ? "text-orange-50/85" : "text-orange-700/80"
+                        className={`mt-1 truncate text-[10px] font-medium leading-relaxed ${
+                          active ? "text-orange-50/90" : "text-slate-500"
                         }`}
                       >
                         {session.subtitle}
                       </div>
                       <div
-                        className={`mt-1 text-[11px] ${
-                          active ? "text-orange-100/80" : "text-orange-500"
+                        className={`mt-1 text-[9px] font-semibold ${
+                          active ? "text-orange-100/90" : "text-orange-400"
                         }`}
                       >
                         {formatDate(session.createdAt)}
@@ -1655,14 +2135,14 @@ const AIAssistantPage: React.FC = () => {
                         event.stopPropagation();
                         requestDeleteSession(session);
                       }}
-                      className={`absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold transition ${
+                      className={`absolute right-2.5 top-2.5 inline-flex h-5 w-5 items-center justify-center rounded-lg border text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-all duration-200 ${
                         active
-                          ? "border-white/30 text-white hover:bg-white/10"
-                          : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-100"
+                          ? "border-white/30 text-white hover:bg-white/20 opacity-100"
+                          : "border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500"
                       }`}
                       aria-label="Delete conversation"
                     >
-                      <TrashIcon className="h-3.5 w-3.5" />
+                      <TrashIcon className="h-3 w-3" />
                     </button>
                   </div>
                 );
@@ -1672,32 +2152,30 @@ const AIAssistantPage: React.FC = () => {
         </aside>
 
         <main className="xl:col-span-8 2xl:col-span-9">
-          <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-2xl bg-white/95 shadow-sm sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px]">
-            <header className="border-b border-orange-100 bg-gradient-to-r from-orange-500 to-amber-950 px-4 py-4 text-white sm:px-6">
+          <div className="flex h-[70vh] min-h-[520px] flex-col overflow-hidden rounded-3xl border border-orange-100/60 bg-white shadow-md sm:h-[72vh] sm:min-h-[560px] xl:min-h-[620px] transition-all duration-300 hover:shadow-lg">
+            <header className="border-b border-orange-100/30 bg-gradient-to-r from-orange-600 via-orange-500 to-amber-900 px-4 py-4 text-white sm:px-6 shadow-sm">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-lg font-semibold">AI Assistant</h1>
+                  <h1 className="text-sm font-bold uppercase tracking-wider">
+                    AI Assistant
+                  </h1>
+                  <p className="text-[10px] text-orange-100/80 mt-0.5 font-medium">
+                    Hệ thống gợi ý & đặt phòng thông minh
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setIsMobileHistoryOpen(true)}
-                    className="rounded-full border border-white/35 bg-white/15 px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-white/20 xl:hidden"
+                    className="rounded-xl border border-white/35 bg-white/15 px-3 py-1.5 text-[10px] font-bold text-white transition hover:bg-white/20 xl:hidden"
                   >
-                    Conversations
+                    Lịch sử
                   </button>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[11px] font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live
-                  </span>
-                  <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[11px] font-medium">
-                    {selectedSession ? "Active Session" : "New Session"}
-                  </span>
                 </div>
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto bg-white px-4 py-5 sm:px-6">
+            <div className="flex-1 overflow-y-auto bg-gradient-to-b from-orange-50/20 via-white to-orange-50/10 px-4 py-5 sm:px-6">
               {isSelectedSessionLoading && (
                 <div className="mb-5 flex justify-center">
                   <div className="rounded-xl border border-orange-200 bg-white px-4 py-2 text-xs font-medium text-orange-600">
@@ -1710,7 +2188,16 @@ const AIAssistantPage: React.FC = () => {
                 selectedMessages.map((message) => renderMessage(message))}
 
               {isSending && (
-                <div className="mb-5 flex justify-start">
+                <motion.div
+                  className="mb-5 flex justify-start"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    type: "spring" as const,
+                    stiffness: 400,
+                    damping: 30,
+                  }}
+                >
                   <div className="flex items-end gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">
                       AI
@@ -1729,7 +2216,7 @@ const AIAssistantPage: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )}
 
               <div ref={messagesEndRef} />
@@ -1787,17 +2274,17 @@ const AIAssistantPage: React.FC = () => {
               </div>
             )}
 
-            <div className="sticky bottom-0 z-10 border-t border-orange-100 bg-white px-4 py-3 sm:px-6">
-              <div className="relative mb-3 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-sky-50 px-3 py-3 shadow-sm">
-                <div className="pointer-events-none absolute -right-12 -top-10 h-24 w-24 rounded-full bg-sky-200/40 blur-2xl" />
-                <div className="pointer-events-none absolute -left-10 bottom-0 h-16 w-16 rounded-full bg-teal-200/40 blur-2xl" />
+            <div className="sticky bottom-0 z-10 border-t border-orange-100 bg-white/95 backdrop-blur-md px-4 py-3 sm:px-6">
+              <div className="relative mb-3 overflow-hidden rounded-2xl border border-orange-100/70 bg-gradient-to-br from-white via-orange-50/25 to-amber-50/30 px-3.5 py-3 shadow-sm">
+                <div className="pointer-events-none absolute -right-12 -top-10 h-24 w-24 rounded-full bg-orange-200/20 blur-2xl" />
+                <div className="pointer-events-none absolute -left-10 bottom-0 h-16 w-16 rounded-full bg-amber-200/20 blur-2xl" />
 
                 <div className="relative flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold text-slate-700">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-orange-700">
                       Quick actions
                     </p>
-                    <p className="mt-0.5 text-[11px] text-slate-600">
+                    <p className="mt-0.5 text-[11px] font-medium text-slate-600">
                       Vui lòng chọn chức năng: (1) Đặt phòng, (2) Hủy phòng, (3)
                       Gia hạn thời gian, (4) Tra cứu.
                     </p>
@@ -1806,23 +2293,28 @@ const AIAssistantPage: React.FC = () => {
 
                 <div className="relative mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {activeMenuOptions.length > 0
-                    ? activeMenuOptions.map((option) => (
-                        <button
-                          key={option.code}
-                          type="button"
-                          onClick={() => void handleQuickActionSelect(option)}
-                          disabled={isSending || !selectedSession}
-                          className="group relative flex flex-col items-start rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-left text-[11px] font-semibold text-slate-900 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1">
-                            {option.code}
-                          </span>
-                          <span className="text-xs font-semibold">
-                            {resolveQuickActionLabel(option)}
-                          </span>
-                          <span className="mt-1 h-0.5 w-6 rounded-full bg-sky-400/60 transition-all duration-200 group-hover:w-9" />
-                        </button>
-                      ))
+                    ? activeMenuOptions.map((option) => {
+                        const showCode = shouldShowMenuCode(option.code);
+                        return (
+                          <button
+                            key={option.code || option.label}
+                            type="button"
+                            onClick={() => void handleQuickActionSelect(option)}
+                            disabled={isSending || !selectedSession}
+                            className="group relative flex flex-col items-start rounded-2xl border border-orange-100 bg-white px-3.5 py-2.5 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {showCode && (
+                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1.5 transition-colors group-hover:bg-orange-200">
+                                {option.code}
+                              </span>
+                            )}
+                            <span className="text-xs font-bold text-slate-800">
+                              {resolveQuickActionLabel(option)}
+                            </span>
+                            <span className="mt-1 h-0.5 w-5 rounded-full bg-orange-400 transition-all duration-200 group-hover:w-8" />
+                          </button>
+                        );
+                      })
                     : [
                         { code: "1", label: "Đặt phòng", intent: "BOOK_ROOM" },
                         {
@@ -1842,89 +2334,35 @@ const AIAssistantPage: React.FC = () => {
                           type="button"
                           onClick={() => void handleQuickActionSelect(option)}
                           disabled={isSending || !selectedSession}
-                          className="group relative flex flex-col items-start rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-left text-[11px] font-semibold text-slate-900 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="group relative flex flex-col items-start rounded-2xl border border-orange-100 bg-white px-3.5 py-2.5 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-200 hover:bg-orange-50/40 hover:shadow active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1">
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-[9px] font-bold text-orange-700 mb-1.5 transition-colors group-hover:bg-orange-200">
                             {option.code}
                           </span>
-                          <span className="text-xs font-semibold">
+                          <span className="text-xs font-bold text-slate-800">
                             {option.label}
                           </span>
-                          <span className="mt-1 h-0.5 w-6 rounded-full bg-sky-400/60 transition-all duration-200 group-hover:w-9" />
+                          <span className="mt-1 h-0.5 w-5 rounded-full bg-orange-400 transition-all duration-200 group-hover:w-8" />
                         </button>
                       ))}
                 </div>
-
-                {showLookupOptions && (
-                  <div className="relative mt-3 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">
-                        Tra cứu
-                      </p>
-                      {lookupMode !== "NONE" && (
-                        <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold text-orange-700">
-                          {lookupMode === "DETAIL"
-                            ? "Chi tiết phòng"
-                            : "Theo sức chứa"}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {LOOKUP_OPTIONS.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => void handleLookupOptionSelect(option)}
-                          disabled={isSending || !selectedSession}
-                          className="group rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-300 hover:bg-orange-50 hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-orange-300 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                            {option.label}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {lookupMode === "CAPACITY" && (
-                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                        {CAPACITY_RANGE_OPTIONS.map((option) => (
-                          <button
-                            key={option.id}
-                            type="button"
-                            onClick={() =>
-                              void handleCapacityRangeSelect(option.label)
-                            }
-                            disabled={isSending || !selectedSession}
-                            className="group rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] font-semibold text-orange-700 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-orange-300 hover:bg-orange-100 hover:shadow-md active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-orange-500 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                              {option.label}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
 
-              {lookupMode === "DETAIL" && (
-                <div className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-3">
+              {showLookupDetailInput && (
+                <div className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 px-3 py-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <p className="text-xs font-semibold text-orange-700">
                     Nhập location code để xem chi tiết phòng
                   </p>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <input
                       value={lookupLocationCode}
-                      onChange={(e) => setLookupLocationCode(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          void handleLookupDetailSubmit();
-                        }
+                      onChange={(event) =>
+                        setLookupLocationCode(event.target.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        void handleLookupDetailSubmit();
                       }}
                       placeholder="VD: A19-003"
                       className="flex-1 rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-200"
@@ -2102,7 +2540,7 @@ const AIAssistantPage: React.FC = () => {
           onClose={() => setDeleteToast(null)}
         />
       )}
-    </section>
+    </motion.section>
   );
 };
 export default AIAssistantPage;

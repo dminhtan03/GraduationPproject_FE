@@ -569,15 +569,8 @@ const TaskDetailPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-2 mt-2">
-                    <Tag color={task.reviewerStatus === "ACCEPTED" ? "success"
-                      : task.reviewerStatus === "REJECTED" ? "error" : "processing"}>
-                      {task.reviewerStatus}
-                    </Tag>
-                    {task.reviewDecision && (
-                      <Tag color={task.reviewDecision === "APPROVED" ? "success" : "error"}>
-                        {task.reviewDecision}
-                      </Tag>
-                    )}
+                    <Badge value={task.reviewerStatus ?? ""} />
+                    {task.reviewDecision && <Badge value={task.reviewDecision} />}
                   </div>
                   {task.reviewComment && (
                     <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 italic text-slate-500 mt-2">
@@ -630,7 +623,7 @@ const TaskDetailPage: React.FC = () => {
                         </div>
                         <span className="font-bold text-slate-800">{a.assigneeName}</span>
                       </div>
-                      <Tag color={a.status === "ACCEPTED" ? "success" : a.status === "REJECTED" ? "error" : "default"}>{a.status}</Tag>
+                      <Badge value={a.status} />
                     </div>
                     {a.brief && <p className="text-slate-500 text-[11px] leading-relaxed italic">{a.brief}</p>}
                     
@@ -681,7 +674,7 @@ const TaskDetailPage: React.FC = () => {
                   <div key={s.id} className="flex justify-between items-center text-xs p-2 rounded-xl bg-slate-50 border border-slate-100">
                     <span className="font-semibold text-slate-700">{s.userName}</span>
                     <div className="flex items-center gap-2">
-                      <Tag color={s.status === "ACCEPTED" ? "success" : s.status === "REJECTED" ? "error" : "default"}>{s.status}</Tag>
+                      <Badge value={s.status} />
                       
                       {me?.id === s.userId && s.status === "PENDING" && (
                         <div className="flex gap-1">
@@ -845,9 +838,9 @@ const TaskDetailPage: React.FC = () => {
 };
 
 const Field: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div>
-    <p className="text-xs font-semibold uppercase text-slate-400 mb-0.5 tracking-wider text-[9px]">{label}</p>
-    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{value}</p>
+  <div className="space-y-1">
+    <p className="text-xs font-bold uppercase tracking-widest text-orange-500">{label}</p>
+    <p className="text-base text-slate-800 whitespace-pre-wrap leading-relaxed font-medium">{value}</p>
   </div>
 );
 
@@ -856,6 +849,30 @@ const InfoItem: React.FC<{ icon: React.ReactNode; label: string; value: string }
     {icon}
     <span>{label}: <span className="font-semibold text-slate-800">{value}</span></span>
   </div>
+);
+
+const BADGE_STYLE: Record<string, string> = {
+  PENDING:          "bg-amber-50 text-amber-700 border border-amber-200",
+  ACCEPTED:         "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  REJECTED:         "bg-red-50 text-red-700 border border-red-200",
+  APPROVED:         "bg-blue-50 text-blue-700 border border-blue-200",
+  NOT_REQUIRED:     "bg-slate-100 text-slate-500 border border-slate-200",
+  TODO:             "bg-slate-100 text-slate-600 border border-slate-200",
+  DOING:            "bg-blue-50 text-blue-700 border border-blue-200",
+  WAITING_REVIEW:   "bg-amber-50 text-amber-700 border border-amber-200",
+  DONE:             "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  CANCELLED:        "bg-red-50 text-red-600 border border-red-200",
+  REWORK:           "bg-purple-50 text-purple-700 border border-purple-200",
+  LOW:              "bg-slate-100 text-slate-500 border border-slate-200",
+  MEDIUM:           "bg-blue-50 text-blue-600 border border-blue-200",
+  HIGH:             "bg-orange-50 text-orange-700 border border-orange-200",
+  URGENT:           "bg-red-50 text-red-700 border border-red-200",
+};
+
+const Badge: React.FC<{ value: string; className?: string }> = ({ value, className = "" }) => (
+  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${BADGE_STYLE[value] ?? "bg-slate-100 text-slate-600"} ${className}`}>
+    {value.replace(/_/g, " ")}
+  </span>
 );
 
 export default TaskDetailPage;

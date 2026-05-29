@@ -142,13 +142,22 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
     const key = taskKey(task, idx);
     setCreatingKey(key);
     try {
-      await taskService.createTask({
+      const created = await taskService.createTask({
         title: task.title,
         description: task.description,
         priority: task.priority ?? "MEDIUM",
         dueAt: task.dueAt,
         meetingId: result?.meetingId,
       });
+      // Lưu taskId vào localStorage để TaskList highlight
+      if (created?.id) {
+        try {
+          const stored = localStorage.getItem("new_tasks_from_ai");
+          const existing: string[] = stored ? JSON.parse(stored) : [];
+          existing.push(created.id);
+          localStorage.setItem("new_tasks_from_ai", JSON.stringify(existing));
+        } catch { /* non-fatal */ }
+      }
       // Nếu có draftId, approve draft để liên kết task
       if (task.draftId) {
         try { await meetingService.approveDraft(task.draftId); } catch { /* non-fatal */ }
