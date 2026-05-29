@@ -574,10 +574,12 @@ const TaskListPage: React.FC = () => {
                               {task.status?.replace(/_/g, " ")}
                             </Tag>
                           </Dropdown>
-                          <button type="button" onClick={(e) => handleDeleteTask(task.id, e)}
-                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
+                          {task.createdById === userId && (
+                            <button type="button" onClick={(e) => handleDeleteTask(task.id, e)}
+                              className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -849,10 +851,12 @@ const TaskListPage: React.FC = () => {
                                       </div>
                                     </Tooltip>
 
-                                    <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
-                                      className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
-                                      <TrashIcon className="h-3.5 w-3.5" />
-                                    </button>
+                                    {t.createdById === userId && (
+                                      <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
+                                        className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
+                                        <TrashIcon className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -946,10 +950,12 @@ const TaskListPage: React.FC = () => {
                                 </div>
                               </Tooltip>
 
-                              <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
-                                className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
-                                <TrashIcon className="h-3.5 w-3.5" />
-                              </button>
+                              {t.createdById === userId && (
+                                <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
+                                  className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
+                                  <TrashIcon className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
