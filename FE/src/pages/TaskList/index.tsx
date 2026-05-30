@@ -88,6 +88,10 @@ const TaskListPage: React.FC = () => {
   // AI task highlight
   const [newTaskIds, setNewTaskIds] = useState<Set<string>>(new Set());
 
+  // Delete confirm modal
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+
   const workplaceSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const quickAssignSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -357,22 +361,24 @@ const TaskListPage: React.FC = () => {
 
   const handleDeleteTask = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    Modal.confirm({
-      title: "Delete Task",
-      content: "Are you sure you want to delete this task? This action cannot be undone.",
-      okText: "Delete",
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          await taskService.deleteTask(taskId);
-          show("success", "Task deleted");
-          void loadData();
-          void loadWorkplaceItems(searchQuery, statusFilter);
-        } catch {
-          show("error", "Failed to delete task");
-        }
-      }
-    });
+    setDeleteTaskId(taskId);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTaskId) return;
+    try {
+      await taskService.deleteTask(deleteTaskId);
+      show("success", "Task deleted");
+      setDeleteModalOpen(false);
+      setDeleteTaskId(null);
+      void loadData();
+      void loadWorkplaceItems(searchQuery, statusFilter);
+    } catch {
+      show("error", "Failed to delete task");
+      setDeleteModalOpen(false);
+      setDeleteTaskId(null);
+    }
   };
 
   const handleQuickAssignSearch = (val: string) => {
@@ -385,20 +391,30 @@ const TaskListPage: React.FC = () => {
     }, 350);
   };
 
-  const handleQuickAssign = async (assigneeId: string) => {
-    if (!quickAssignTaskId) return;
-    try {
-      await taskService.assignTask(quickAssignTaskId, { assigneeId });
-      show("success", "Task assigned");
-      setQuickAssignModal(false);
-      setQuickAssignTaskId(null);
-      setQuickAssignSearch("");
-      setQuickAssignResults([]);
+  const handleQuickAssign = (user: { id: string; fullName: string }) => {
+    const taskId = quickAssignTaskId;
+    if (!taskId) return;
+
+    // Optimistic update — reflect immediately in UI
+    const patchAssignment = (t: any) => t.id !== taskId ? t
+      : { ...t, assignments: [{ assigneeId: user.id, assigneeName: user.fullName, status: "ACCEPTED" }] };
+    setTasks(prev => prev.map(patchAssignment));
+    setWorkplaceItems(prev => prev.map(patchAssignment));
+
+    setQuickAssignModal(false);
+    setQuickAssignTaskId(null);
+    setQuickAssignSearch("");
+    setQuickAssignResults([]);
+
+    // Fire API in background — email sends on server side asynchronously
+    taskService.assignTask(taskId, { assigneeId: user.id }).then(() => {
       void loadData();
       void loadWorkplaceItems(searchQuery, statusFilter);
-    } catch {
+    }).catch(() => {
       show("error", "Failed to assign task");
-    }
+      void loadData();
+      void loadWorkplaceItems(searchQuery, statusFilter);
+    });
   };
 
   // Analytics Data
@@ -558,10 +574,12 @@ const TaskListPage: React.FC = () => {
                               {task.status?.replace(/_/g, " ")}
                             </Tag>
                           </Dropdown>
-                          <button type="button" onClick={(e) => handleDeleteTask(task.id, e)}
-                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
+                          {task.createdById === userId && (
+                            <button type="button" onClick={(e) => handleDeleteTask(task.id, e)}
+                              className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -833,10 +851,12 @@ const TaskListPage: React.FC = () => {
                                       </div>
                                     </Tooltip>
 
-                                    <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
-                                      className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
-                                      <TrashIcon className="h-3.5 w-3.5" />
-                                    </button>
+                                    {t.createdById === userId && (
+                                      <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
+                                        className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
+                                        <TrashIcon className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -930,10 +950,12 @@ const TaskListPage: React.FC = () => {
                                 </div>
                               </Tooltip>
 
-                              <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
-                                className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
-                                <TrashIcon className="h-3.5 w-3.5" />
-                              </button>
+                              {t.createdById === userId && (
+                                <button type="button" onClick={(e) => handleDeleteTask(t.id, e)}
+                                  className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition opacity-0 group-hover:opacity-100">
+                                  <TrashIcon className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -1040,7 +1062,7 @@ const TaskListPage: React.FC = () => {
           {quickAssignResults.length > 0 && (
             <div className="border border-slate-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
               {quickAssignResults.map((u) => (
-                <div key={u.id} onClick={() => handleQuickAssign(u.id)}
+                <div key={u.id} onClick={() => handleQuickAssign(u)}
                   className="flex items-center gap-3 px-4 py-2.5 hover:bg-orange-50 cursor-pointer border-b border-slate-100 last:border-0 transition">
                   <div className="w-8 h-8 rounded-full bg-[#172b4d] flex items-center justify-center text-[11px] font-bold text-white shrink-0">
                     {getInitials(u.fullName)}
@@ -1057,6 +1079,18 @@ const TaskListPage: React.FC = () => {
             <p className="text-xs text-slate-400 text-center py-2">No users found</p>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        title="Delete Task"
+        open={deleteModalOpen}
+        onCancel={() => { setDeleteModalOpen(false); setDeleteTaskId(null); }}
+        onOk={confirmDelete}
+        okText="Delete"
+        okButtonProps={{ danger: true }}
+        cancelText="Cancel"
+      >
+        <p className="text-slate-600 mt-2">Are you sure you want to delete this task? This action cannot be undone.</p>
       </Modal>
 
       {toast && <CustomMessage type={toast.type} message={toast.message} onClose={() => setToast(null)} />}

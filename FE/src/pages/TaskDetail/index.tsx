@@ -66,6 +66,8 @@ const TaskDetailPage: React.FC = () => {
   const [inviteReviewerModal, setInviteReviewerModal] = useState(false);
   const [assignModal, setAssignModal] = useState(false);
   const [editDueDate, setEditDueDate] = useState(false);
+  const [editingSubtaskDueId, setEditingSubtaskDueId] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Subtask modal state
   const [subtaskModal, setSubtaskModal] = useState(false);
@@ -165,9 +167,27 @@ const TaskDetailPage: React.FC = () => {
   const handleDueDateChange = (date: dayjs.Dayjs | null) => {
     if (!date) return;
     doAction(async () => {
-      await taskService.updateTask(taskId!, { dueAt: date.toISOString() });
+      await taskService.updateTask(taskId!, { dueAt: date.format("YYYY-MM-DDTHH:mm:ss") });
       setEditDueDate(false);
     }, "Due date updated");
+  };
+
+  const handleSubtaskDueDateChange = (subtaskId: string, date: dayjs.Dayjs | null) => {
+    setEditingSubtaskDueId(null);
+    if (!date) return;
+    doAction(() => taskService.updateTask(subtaskId, { dueAt: date.format("YYYY-MM-DDTHH:mm:ss") }), "Due date updated");
+  };
+
+  const handleDeleteTask = () => setDeleteConfirmOpen(true);
+
+  const confirmDeleteTask = async () => {
+    try {
+      await taskService.deleteTask(taskId!);
+      navigate("/tasks");
+    } catch {
+      show("error", "Failed to delete task");
+      setDeleteConfirmOpen(false);
+    }
   };
 
   const handleFileAttach = async (file: File) => {
@@ -229,7 +249,7 @@ const TaskDetailPage: React.FC = () => {
         title: subtaskTitle,
         description: subtaskDesc,
         priority: subtaskPriority,
-        dueAt: subtaskDueDate ? subtaskDueDate.toISOString() : undefined,
+        dueAt: subtaskDueDate ? subtaskDueDate.format("YYYY-MM-DDTHH:mm:ss") : undefined,
         parentTaskId: taskId,
         sprintId: task.sprintId || "", // inherit sprint from parent
         assigneeId: subtaskAssigneeId || undefined
@@ -276,8 +296,7 @@ const TaskDetailPage: React.FC = () => {
   const isReviewer = me?.id === task.reviewerUserId;
   const myAssignment = task.assignments?.find((a: any) => a.assigneeId === me?.id);
   const mySupporter = task.supporters?.find((s: any) => s.userId === me?.id);
-  const canSubmit = !!myAssignment && myAssignment.status === "ACCEPTED"
-    && (task.status === "DOING" || task.status === "REWORK");
+  const canSubmit = !!myAssignment && (task.status === "DOING" || task.status === "REWORK");
   const canReview = isReviewer && task.status === "WAITING_REVIEW"
     && task.reviewerStatus === "ACCEPTED";
 
@@ -311,7 +330,7 @@ const TaskDetailPage: React.FC = () => {
             <h1 className="text-xl font-bold text-slate-900 truncate leading-snug">{task.title}</h1>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <Tag color={PRIORITY_COLOR[task.priority]}>{task.priority}</Tag>
-              {(isCreator || myAssignment?.status === "ACCEPTED") ? (
+              {(isCreator || !!myAssignment) ? (
                 <Select
                   size="small"
                   value={task.status}
@@ -360,6 +379,12 @@ const TaskDetailPage: React.FC = () => {
               Review Work
             </button>
           )}
+          {isCreator && (
+            <button type="button" onClick={handleDeleteTask} disabled={busy}
+              className="rounded-xl border border-red-200 p-2 text-red-400 hover:bg-red-50 hover:text-red-600 transition">
+              <TrashIcon className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -386,7 +411,7 @@ const TaskDetailPage: React.FC = () => {
               )}
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100 text-xs">
-                {isCreator ? (
+                {(isCreator || !!myAssignment) ? (
                   <div className="flex items-center gap-2 text-slate-600">
                     <CalendarIcon className="h-4 w-4 text-orange-400 shrink-0" />
                     {editDueDate ? (
@@ -452,9 +477,25 @@ const TaskDetailPage: React.FC = () => {
                       <div className="min-w-0 flex-1 cursor-pointer"
                         onClick={(e) => { e.stopPropagation(); navigate(`/tasks/${sub.id}`); }}>
                         <p className="font-semibold text-slate-800 text-sm leading-snug truncate">{sub.title}</p>
-                        <div className="flex gap-2.5 items-center text-[10px] text-slate-400 mt-1">
+                        <div className="flex gap-2.5 items-center text-[10px] text-slate-400 mt-1" onClick={e => e.stopPropagation()}>
                           <span>Assignee: <span className="font-semibold text-slate-600">{sub.assignments?.[0]?.assigneeName || "Unassigned"}</span></span>
-                          <span>Due: {fmt(sub.dueAt)}</span>
+                          {canChangeSubStatus ? (
+                            editingSubtaskDueId === sub.id ? (
+                              <DatePicker size="small" autoFocus
+                                defaultValue={sub.dueAt ? dayjs(sub.dueAt) : undefined}
+                                onChange={(d) => handleSubtaskDueDateChange(sub.id, d)}
+                                onOpenChange={(open) => { if (!open) setEditingSubtaskDueId(null); }}
+                              />
+                            ) : (
+                              <span className="cursor-pointer hover:text-orange-500 transition"
+                                onClick={() => setEditingSubtaskDueId(sub.id)}>
+                                Due: <span className="font-semibold text-slate-600">{fmt(sub.dueAt)}</span>
+                                <span className="ml-1 text-orange-400">[edit]</span>
+                              </span>
+                            )
+                          ) : (
+                            <span>Due: {fmt(sub.dueAt)}</span>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -616,32 +657,14 @@ const TaskDetailPage: React.FC = () => {
               ) : (
                 task.assignments.map((a: any) => (
                   <div key={a.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 space-y-2 text-xs">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[10px]">
-                          {getInitials(a.assigneeName)}
-                        </div>
-                        <span className="font-bold text-slate-800">{a.assigneeName}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[10px]">
+                        {getInitials(a.assigneeName)}
                       </div>
-                      <Badge value={a.status} />
+                      <span className="font-bold text-slate-800">{a.assigneeName}</span>
                     </div>
                     {a.brief && <p className="text-slate-500 text-[11px] leading-relaxed italic">{a.brief}</p>}
                     
-                    {/* Respond buttons for active user */}
-                    {me?.id === a.assigneeId && a.status === "PENDING" && (
-                      <div className="flex gap-2 pt-1.5 border-t border-slate-200/50">
-                        <button type="button"
-                          onClick={() => doAction(() => taskService.respondToAssignment(taskId!, a.id, "ACCEPT"), "Assignment accepted")}
-                          className="flex-1 rounded bg-green-600 text-white font-semibold py-1 text-center hover:bg-green-700 transition">
-                          Accept
-                        </button>
-                        <button type="button"
-                          onClick={() => doAction(() => taskService.respondToAssignment(taskId!, a.id, "REJECT"), "Assignment declined")}
-                          className="flex-1 border border-red-200 text-red-600 font-semibold py-1 text-center hover:bg-red-50 transition">
-                          Decline
-                        </button>
-                      </div>
-                    )}
 
                     {/* Creator approve assignment */}
                     {isCreator && a.approvalStatus === "PENDING" && (
@@ -655,11 +678,20 @@ const TaskDetailPage: React.FC = () => {
                 ))
               )}
 
-              {isCreator && task.status !== "DONE" && task.status !== "CANCELLED" && (
-                <button type="button" onClick={() => { setSelectedUserId(""); setAssignBrief(""); setAssignHow(""); setAssignModal(true); }}
-                  className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition w-full bg-white shadow-sm mt-1">
-                  <PlusIcon className="h-3.5 w-3.5" /> Assign to Someone
-                </button>
+              {(isCreator || !!myAssignment) && task.status !== "DONE" && task.status !== "CANCELLED" && (
+                <div className="space-y-2 mt-1">
+                  <button type="button" onClick={() => { setSelectedUserId(""); setAssignBrief(""); setAssignHow(""); setAssignModal(true); }}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition w-full bg-white shadow-sm">
+                    <PlusIcon className="h-3.5 w-3.5" /> Assign to Someone
+                  </button>
+                  {isCreator && !task.assignments?.some((a: any) => a.assigneeId === me?.id) && (
+                    <button type="button" disabled={busy}
+                      onClick={() => doAction(() => taskService.assignTask(taskId!, { assigneeId: me!.id }), "Assigned to you")}
+                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-orange-200 px-3 py-2 text-xs font-semibold text-orange-600 hover:bg-orange-50 transition w-full bg-white shadow-sm disabled:opacity-60">
+                      <UserIcon className="h-3.5 w-3.5" /> Assign to Me
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </Section>
@@ -831,6 +863,18 @@ const TaskDetailPage: React.FC = () => {
           </div>
         </Modal>
       ))}
+
+      <Modal
+        title="Delete Task"
+        open={deleteConfirmOpen}
+        onCancel={() => setDeleteConfirmOpen(false)}
+        onOk={confirmDeleteTask}
+        okText="Delete"
+        okButtonProps={{ danger: true }}
+        cancelText="Cancel"
+      >
+        <p className="text-slate-600 mt-2">Are you sure you want to delete this task? This action cannot be undone.</p>
+      </Modal>
 
       {toast && <CustomMessage type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
     </div>
