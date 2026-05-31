@@ -213,7 +213,7 @@ const AIAssistantPage: React.FC = () => {
         setSessions([session]);
         setSelectedSessionId(session.id);
         setMessagesBySession({
-          [session.id]: [createWelcomeMessage()],
+          [session.id]: [],
         });
       } catch {
         if (cancelled) return;
@@ -244,7 +244,7 @@ const AIAssistantPage: React.FC = () => {
         ]);
         setSelectedSessionId(fallbackId);
         setMessagesBySession({
-          [fallbackId]: [createWelcomeMessage()],
+          [fallbackId]: [],
         });
       } finally {
         if (!cancelled) {
@@ -430,7 +430,7 @@ const AIAssistantPage: React.FC = () => {
             [selectedSession.id]:
               mappedMessages.length > 0
                 ? mappedMessages
-                : [createWelcomeMessage()],
+                : [],
           };
         });
 
@@ -459,7 +459,7 @@ const AIAssistantPage: React.FC = () => {
 
           return {
             ...prev,
-            [selectedSession.id]: [createWelcomeMessage()],
+            [selectedSession.id]: [],
           };
         });
       } finally {
@@ -1964,7 +1964,7 @@ const AIAssistantPage: React.FC = () => {
       } catch {
         setMessagesBySession((prev) => ({
           ...prev,
-          [newSession.id]: [createWelcomeMessage()],
+          [newSession.id]: [],
         }));
       }
     } catch {
