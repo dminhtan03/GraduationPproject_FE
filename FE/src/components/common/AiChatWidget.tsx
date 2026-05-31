@@ -16,8 +16,16 @@ import {
   MessageOutlined,
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { useAiChat } from "../../hooks/useAiChat";
 import type { AiRoomSuggestion } from "../../types/api";
+import {
+  resolveBookingRoomCode,
+  CAPACITY_RANGE_OPTIONS,
+  type BookingTimeMode,
+  getAvailableTimeSlots,
+} from "../../utils/aiAssistant";
+import { ROUTES } from "../../constants";
 
 import "../../styles/AiChatWidget.css";
 
@@ -60,6 +68,7 @@ const fabVariants = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export const AiChatWidget: React.FC = () => {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = React.useState(false);
   const {
     messages,
@@ -91,6 +100,17 @@ export const AiChatWidget: React.FC = () => {
     formatDateTimeLabel,
     toText,
     toNumberOrNull,
+    // Interactive states & helpers
+    bookingImageByCode,
+    bookingTimeUiByMessage,
+    lookupLocationCode,
+    bookingDayOptions,
+    showLookupDetailInput,
+    setLookupLocationCode,
+    sendMessageToAi,
+    updateBookingTimeState,
+    handleLookupDetailSubmit,
+    handleCapacityRangeSelect,
   } = useAiChat();
 
   // Greet on first open
@@ -105,7 +125,10 @@ export const AiChatWidget: React.FC = () => {
 
   const toggleOpen = useCallback(() => setIsOpen((p) => !p), []);
 
-  // ── Render helpers ────────────────────────────────────────────────────────
+  const shouldShowMenuCode = (code?: string | number | null) => {
+    const value = String(code ?? "").trim();
+    return value.length > 0 && value.length <= 3;
+  };
 
   const renderMenuOptions = (msgMenuOptions?: typeof menuOptions) => {
     const options =
@@ -119,18 +142,23 @@ export const AiChatWidget: React.FC = () => {
         initial="hidden"
         animate="visible"
       >
-        {options.map((option) => (
-          <button
-            key={option.code}
-            type="button"
-            onClick={() => void handleQuickAction(option)}
-            disabled={isSending}
-            className="wcw-menu-option"
-          >
-            <span className="wcw-menu-option__code">{option.code}</span>
-            <span className="wcw-menu-option__label">{option.label}</span>
-          </button>
-        ))}
+        {options.map((option) => {
+          const showCode = shouldShowMenuCode(option.code);
+          return (
+            <button
+              key={option.code || option.label}
+              type="button"
+              onClick={() => void handleQuickAction(option)}
+              disabled={isSending}
+              className="wcw-menu-option"
+            >
+              {showCode && (
+                <span className="wcw-menu-option__code">{option.code}</span>
+              )}
+              <span className="wcw-menu-option__label">{option.label}</span>
+            </button>
+          );
+        })}
       </motion.div>
     );
   };
@@ -374,6 +402,309 @@ export const AiChatWidget: React.FC = () => {
     );
   };
 
+  const renderBookingItems = (bookingItems?: any[]) => {
+    if (!bookingItems || bookingItems.length === 0) return null;
+
+    return (
+      <div className="wcw-booking-items-list" style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+        {bookingItems.map((item, index) => {
+          const roomCode = resolveBookingRoomCode(item);
+          const labelParts = item.label ? item.label.split("|") : [];
+          const labelRange = labelParts[1]?.trim() || "";
+          const statusPart = labelParts[2]?.trim() || "";
+          const timeRange =
+            item.startTime && item.endTime
+              ? `${item.startTime} - ${item.endTime}`
+              : labelRange;
+          const imageUrl =
+            (roomCode && bookingImageByCode[roomCode]) ||
+            "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=800";
+          const bookingItemId = item.id || "";
+
+          let statusBadge = null;
+          if (statusPart) {
+            let statusColorClasses = "wcw-status--default";
+            if (statusPart.toLowerCase().includes("không đến")) {
+              statusColorClasses = "wcw-status--absent";
+            } else if (statusPart.toLowerCase().includes("hủy")) {
+              statusColorClasses = "wcw-status--cancelled";
+            } else if (
+              statusPart.toLowerCase().includes("đã") ||
+              statusPart.toLowerCase().includes("hoạt động")
+            ) {
+              statusColorClasses = "wcw-status--active";
+            }
+
+            statusBadge = (
+              <span className={`wcw-item-status-badge ${statusColorClasses}`}>
+                {statusPart}
+              </span>
+            );
+          }
+
+          return (
+            <div
+              key={`${bookingItemId}-${roomCode}-${index}`}
+              onClick={() => {
+                if (bookingItemId) {
+                  navigate(ROUTES.BOOKING_DETAIL.replace(":bookingId", bookingItemId), {
+                    state: { booking: item },
+                  });
+                }
+              }}
+              className="wcw-booking-item-card"
+              style={{
+                cursor: bookingItemId ? "pointer" : "default",
+                display: "flex",
+                gap: 8,
+                padding: 8,
+                borderRadius: 12,
+                border: "1px solid #f0f0f0",
+                backgroundColor: "#fff",
+                transition: "all 0.2s",
+              }}
+            >
+              <img
+                src={imageUrl}
+                alt={roomCode}
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 8,
+                  objectFit: "cover",
+                  flexShrink: 0,
+                }}
+              />
+              <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, fontWeight: "bold", color: "#262626" }}>{roomCode}</span>
+                  {statusBadge}
+                </div>
+                <span style={{ fontSize: 10, color: "#8c8c8c", marginTop: 2 }}>{timeRange}</span>
+                {item.purpose && (
+                  <span style={{ fontSize: 10, color: "#595959", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {item.purpose}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderBookingTimePrompt = (messageId: string) => {
+    const bookingTimeState = bookingTimeUiByMessage[messageId] ?? {
+      mode: "quick" as BookingTimeMode,
+      dayIndex: 0,
+      time: "",
+      manualMessage: "",
+    };
+
+    const activeBookingDay =
+      bookingDayOptions[bookingTimeState.dayIndex] || bookingDayOptions[0];
+    const availableTimeSlots = getAvailableTimeSlots(
+      activeBookingDay.offsetDays,
+      new Date(),
+    );
+    const resolvedBookingTime =
+      bookingTimeState.time || availableTimeSlots[0] || "";
+
+    return (
+      <div className="wcw-booking-time-picker" style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div>
+          <span style={{ fontSize: 10, fontWeight: "bold", textTransform: "uppercase", color: "#8c8c8c" }}>Ngày</span>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 4 }}>
+            {bookingDayOptions.map((day, index) => {
+              const isActive = index === bookingTimeState.dayIndex;
+              return (
+                <button
+                  key={day.id}
+                  type="button"
+                  onClick={() => {
+                    updateBookingTimeState(messageId, (current) => {
+                      const nextDay =
+                        bookingDayOptions[index] || bookingDayOptions[0];
+                      const nextSlots = getAvailableTimeSlots(
+                        nextDay.offsetDays,
+                        new Date(),
+                      );
+                      const shouldAutoPick = nextDay.offsetDays === 0;
+                      const nextTime = shouldAutoPick
+                        ? nextSlots[0] || ""
+                        : current.time;
+                      const resolvedTime = nextSlots.includes(current.time)
+                        ? current.time
+                        : nextTime;
+
+                      return {
+                        ...current,
+                        dayIndex: index,
+                        time: resolvedTime,
+                      };
+                    });
+                  }}
+                  className={`wcw-day-btn ${isActive ? "wcw-day-btn--active" : ""}`}
+                >
+                  <div style={{ fontWeight: "bold" }}>{day.label}</div>
+                  <div style={{ fontSize: 9, opacity: 0.8 }}>{day.dateLabel}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <span style={{ fontSize: 10, fontWeight: "bold", textTransform: "uppercase", color: "#8c8c8c" }}>Giờ bắt đầu</span>
+          {availableTimeSlots.length > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: 4,
+                marginTop: 4,
+                maxHeight: 120,
+                overflowY: "auto",
+                padding: "2px 0",
+              }}
+            >
+              {availableTimeSlots.map((time) => {
+                const isActive = time === resolvedBookingTime;
+                return (
+                  <button
+                    key={time}
+                    type="button"
+                    onClick={() =>
+                      updateBookingTimeState(messageId, (current) => ({
+                        ...current,
+                        time,
+                      }))
+                    }
+                    className={`wcw-time-slot-btn ${isActive ? "wcw-time-slot-btn--active" : ""}`}
+                  >
+                    {time}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: "#8c8c8c", marginTop: 4 }}>
+              Hôm nay đã hết khung giờ trống.
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: 8,
+            borderRadius: 8,
+            border: "1px solid #ffe7ba",
+            backgroundColor: "#fffbe6",
+          }}
+        >
+          <span style={{ fontSize: 11, color: "#d48806", fontWeight: "medium" }}>
+            {resolvedBookingTime
+              ? `Đặt lúc ${resolvedBookingTime} — ${activeBookingDay.label}`
+              : "Chọn giờ bắt đầu"}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!resolvedBookingTime) return;
+              void sendMessageToAi(`${activeBookingDay.label} lúc ${resolvedBookingTime}`);
+            }}
+            disabled={!resolvedBookingTime || isSending}
+            className="wcw-confirm-btn"
+          >
+            Xác nhận
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDurationPrompt = (messageId: string) => {
+    const DURATION_STEP = 30;
+    const DURATION_MIN = 30;
+    const DURATION_MAX = 480;
+    const currentMinutes =
+      bookingTimeUiByMessage[messageId]?.durationMinutes ?? 60;
+    const hours = Math.floor(currentMinutes / 60);
+    const mins = currentMinutes % 60;
+    const durationLabel =
+      hours > 0 && mins > 0
+        ? `${hours} tiếng ${mins} phút`
+        : hours > 0
+          ? `${hours} tiếng`
+          : `${mins} phút`;
+
+    return (
+      <div className="wcw-duration-picker" style={{ marginTop: 8, padding: 12, borderRadius: 12, border: "1px solid #f0f0f0", backgroundColor: "#fff" }}>
+        <span style={{ fontSize: 10, fontWeight: "bold", textTransform: "uppercase", color: "#8c8c8c" }}>Chọn thời lượng</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+          <input
+            type="range"
+            min={DURATION_MIN}
+            max={DURATION_MAX}
+            step={DURATION_STEP}
+            value={currentMinutes}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              updateBookingTimeState(messageId, (current) => ({
+                ...current,
+                durationMinutes: val,
+              }));
+            }}
+            style={{ flex: 1, accentColor: "#ff7a45" }}
+          />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+          <span style={{ fontSize: 9, color: "#bfbfbf" }}>30 phút</span>
+          <span className="wcw-duration-badge">{durationLabel}</span>
+          <span style={{ fontSize: 9, color: "#bfbfbf" }}>8 tiếng</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+          <button
+            type="button"
+            onClick={() => void sendMessageToAi(durationLabel)}
+            disabled={isSending}
+            className="wcw-confirm-btn"
+          >
+            Xác nhận
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCapacityOptions = (isLookup = false) => {
+    return (
+      <div className="wcw-capacity-options" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginTop: 8 }}>
+        {CAPACITY_RANGE_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => {
+              if (isLookup) {
+                void handleCapacityRangeSelect(option.label);
+              } else {
+                void sendMessageToAi(option.message);
+              }
+            }}
+            disabled={isSending}
+            className="wcw-capacity-btn"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   const renderSuggestionItem = (item: AiRoomSuggestion) => {
     const metaParts = [
       item.building,
@@ -492,6 +823,26 @@ export const AiChatWidget: React.FC = () => {
                 messages.map((m) => {
                   const isUser = m.sender === "user";
                   const booking = getBookingCardData(m.reservation);
+
+                  // Extract prompt detection logic matching AIAssistant page
+                  const textNormalized = toText(m.text).toLowerCase();
+                  const isBookingTimePrompt = !isUser && textNormalized.includes("muốn đặt khi nào");
+                  const isLookupCapacityPrompt =
+                    !isUser &&
+                    (textNormalized.includes("khoảng sức chứa") ||
+                      textNormalized.includes("nhập sức chứa"));
+                  const isDurationPrompt =
+                    !isUser &&
+                    (textNormalized.includes("trong bao lâu") ||
+                      textNormalized.includes("thêm bao lâu"));
+                  const isCapacityPrompt = !isUser && textNormalized.includes("bao nhiêu người");
+                  const isNoCapacityMatchPrompt =
+                    !isUser &&
+                    (textNormalized.includes("không tìm thấy phòng phù hợp") ||
+                      textNormalized.includes("không tìm thấy phòng nào phù hợp") ||
+                      textNormalized.includes("không có phòng phù hợp")) &&
+                    textNormalized.includes("người");
+
                   return (
                     <motion.div
                       key={m.id}
@@ -519,6 +870,20 @@ export const AiChatWidget: React.FC = () => {
 
                           {/* Inline Menu Options from bot message */}
                           {!isUser && renderMenuOptions(m.menuOptions)}
+
+                          {/* Booking Time Selection Picker Prompt */}
+                          {isBookingTimePrompt && renderBookingTimePrompt(m.id)}
+
+                          {/* Capacity Selection Buttons Prompts */}
+                          {isLookupCapacityPrompt && renderCapacityOptions(true)}
+                          {isCapacityPrompt && !isNoCapacityMatchPrompt && renderCapacityOptions(false)}
+                          {isNoCapacityMatchPrompt && renderCapacityOptions(false)}
+
+                          {/* Duration Selection Slider Prompt */}
+                          {isDurationPrompt && renderDurationPrompt(m.id)}
+
+                          {/* Booking Item Grids / Lists */}
+                          {!isUser && m.bookingItems && renderBookingItems(m.bookingItems)}
 
                           {/* Room Detail */}
                           {!isUser &&
@@ -623,28 +988,64 @@ export const AiChatWidget: React.FC = () => {
               <div ref={messagesEndRef} />
             </div>
 
+            {/* Lookup Location Code Drawer */}
+            {showLookupDetailInput && (
+              <div className="wcw-lookup-panel animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <span className="wcw-lookup-panel__title">
+                  Nhập location code để xem chi tiết
+                </span>
+                <div className="wcw-lookup-panel__row">
+                  <input
+                    value={lookupLocationCode}
+                    onChange={(e) => setLookupLocationCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleLookupDetailSubmit();
+                      }
+                    }}
+                    placeholder="VD: A19-003"
+                    className="wcw-lookup-panel__input"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleLookupDetailSubmit()}
+                    disabled={isSending || !lookupLocationCode.trim()}
+                    className="wcw-lookup-panel__btn"
+                  >
+                    Tra cứu
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Quick Actions Bar */}
             <div className="wcw-quick-actions">
               <div className="wcw-quick-actions__label">
                 <ThunderboltOutlined /> Quick actions
               </div>
               <div className="wcw-quick-actions__grid">
-                {menuOptions.map((option) => (
-                  <button
-                    key={option.code}
-                    type="button"
-                    onClick={() => void handleQuickAction(option)}
-                    disabled={isSending}
-                    className="wcw-quick-action"
-                  >
-                    <span className="wcw-quick-action__code">
-                      {option.code}
-                    </span>
-                    <span className="wcw-quick-action__text">
-                      {option.label}
-                    </span>
-                  </button>
-                ))}
+                {menuOptions.map((option) => {
+                  const showCode = shouldShowMenuCode(option.code);
+                  return (
+                    <button
+                      key={option.code || option.label}
+                      type="button"
+                      onClick={() => void handleQuickAction(option)}
+                      disabled={isSending}
+                      className="wcw-quick-action"
+                    >
+                      {showCode && (
+                        <span className="wcw-quick-action__code">
+                          {option.code}
+                        </span>
+                      )}
+                      <span className="wcw-quick-action__text">
+                        {option.label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -728,3 +1129,4 @@ export const AiChatWidget: React.FC = () => {
 };
 
 export default AiChatWidget;
+

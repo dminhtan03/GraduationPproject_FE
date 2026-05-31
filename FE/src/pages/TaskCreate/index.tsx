@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Select, Input, DatePicker } from "antd";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import dayjs from "dayjs";
@@ -9,6 +9,10 @@ import CustomMessage, { type MessageType } from "../../components/common/CustomM
 
 const TaskCreatePage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sprintId = searchParams.get("sprintId") ?? undefined;
+  const projectId = searchParams.get("projectId") ?? undefined;
+
   const [form, setForm] = useState({
     title: "", description: "", goal: "", expectedResult: "",
     assignmentBrief: "", assignmentHow: "",
@@ -58,10 +62,12 @@ const TaskCreatePage: React.FC = () => {
       if (form.dueAt) payload.dueAt = form.dueAt + "T00:00:00";
       if (assigneeId) payload.assigneeId = assigneeId;
       if (reviewerUserId) payload.reviewerUserId = reviewerUserId;
+      if (sprintId) payload.sprintId = sprintId;
 
       const task = await taskService.createTask(payload);
       show("success", "Task created!");
-      setTimeout(() => navigate(`/tasks/${task.id}`), 600);
+      const backUrl = projectId ? `/projects/${projectId}` : `/tasks/${task.id}`;
+      setTimeout(() => navigate(backUrl), 600);
     } catch {
       show("error", "Failed to create task");
     } finally {
@@ -91,13 +97,16 @@ const TaskCreatePage: React.FC = () => {
   return (
     <div className="fade-in p-6 max-w-2xl mx-auto">
       <div className="mb-6 flex items-center gap-3">
-        <button type="button" onClick={() => navigate("/tasks")}
+        <button type="button"
+          onClick={() => navigate(projectId ? `/projects/${projectId}` : "/tasks")}
           className="rounded-xl border border-slate-200 p-2 hover:bg-slate-50 transition">
           <ArrowLeftIcon className="h-5 w-5 text-slate-600" />
         </button>
         <div>
           <h1 className="text-xl font-bold text-slate-900">Create Task</h1>
-          <p className="text-sm text-slate-500">Fill in the task details below</p>
+          <p className="text-sm text-slate-500">
+            {sprintId ? "Task sẽ được thêm vào sprint hiện tại" : "Fill in the task details below"}
+          </p>
         </div>
       </div>
 
@@ -159,7 +168,7 @@ const TaskCreatePage: React.FC = () => {
         </div>
 
         <div className="flex gap-3 pt-2 justify-end">
-          <button type="button" onClick={() => navigate("/tasks")} disabled={loading}
+          <button type="button" onClick={() => navigate(projectId ? `/projects/${projectId}` : "/tasks")} disabled={loading}
             className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60">
             Cancel
           </button>

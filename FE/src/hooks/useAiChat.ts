@@ -22,6 +22,16 @@ import type {
   AiRoomSuggestion,
 } from "../types/api";
 import type { Reservation, UserProfile } from "../types";
+import {
+  resolveBookingRoomCode,
+  resolveQuickActionLabel,
+  CAPACITY_RANGE_OPTIONS,
+  type BookingTimeMode,
+  type BookingTimeUiState,
+  buildBookingDayOptions,
+  getAvailableTimeSlots,
+} from "../utils/aiAssistant";
+import { normalizeRoomsMap } from "../utils/roomList";
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -39,6 +49,7 @@ export interface ChatBubbleMessage {
   reservation?: Reservation | null;
   reservationCreated?: boolean;
   roomDetail?: Record<string, unknown> | null;
+  bookingItems?: any[];
 }
 
 interface StoredWidgetState {
@@ -76,6 +87,134 @@ export function useAiChat() {
   const [dismissedSuggestionMessageId, setDismissedSuggestionMessageId] =
     useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // New States and Memos for AIAssistant equivalent features
+  const [bookingImageByCode, setBookingImageByCode] = useState<
+    Record<string, string>
+  >({});
+  const [bookingTimeUiByMessage, setBookingTimeUiByMessage] = useState<
+    Record<string, BookingTimeUiState>
+  >({});
+  const [lookupLocationCode, setLookupLocationCode] = useState("");
+
+  const todayKey = new Date().toDateString();
+  const bookingDayOptions = useMemo(
+    () => buildBookingDayOptions(new Date()),
+    [todayKey],
+  );
+
+  const latestBotMessageText = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message.sender === "bot") {
+        return message.text.toLowerCase();
+      }
+    }
+    return "";
+  }, [messages]);
+
+  const showLookupDetailInput = useMemo(() => {
+    return (
+      latestBotMessageText.includes("chi tiết phòng") ||
+      latestBotMessageText.includes("location code") ||
+      latestBotMessageText.includes("nhập location") ||
+      latestBotMessageText.includes("nhập location code") ||
+      latestBotMessageText.includes("nhập phòng") ||
+      latestBotMessageText.includes("nhập mã phòng") ||
+      latestBotMessageText.includes("không hợp lệ") ||
+      latestBotMessageText.includes("không tồn tại") ||
+      latestBotMessageText.includes("vui lòng nhập lại")
+    );
+  }, [latestBotMessageText]);
+
+  const bookingRoomCodes = useMemo(() => {
+    const codes = new Set<string>();
+    messages.forEach((message) => {
+      (message.bookingItems || []).forEach((item) => {
+        const roomCode = resolveBookingRoomCode(item);
+        if (roomCode) {
+          codes.add(roomCode);
+        }
+      });
+      if (message.roomDetail) {
+        const rd = message.roomDetail;
+        if (rd.locationCode) {
+          codes.add(String(rd.locationCode));
+        }
+        if (rd.id) {
+          codes.add(String(rd.id));
+        }
+      }
+      (message.suggestions || []).forEach((s) => {
+        if (s.locationCode) {
+          codes.add(s.locationCode);
+        }
+        if (s.roomId) {
+          codes.add(s.roomId);
+        }
+      });
+    });
+    return Array.from(codes);
+  }, [messages]);
+
+  const missingBookingCodes = useMemo(
+    () => bookingRoomCodes.filter((code) => !bookingImageByCode[code]),
+    [bookingRoomCodes, bookingImageByCode],
+  );
+
+  useEffect(() => {
+    if (missingBookingCodes.length === 0) return;
+
+    let cancelled = false;
+
+    const loadImages = async () => {
+      try {
+        const cached = roomService.getRoomsMapCached();
+        const mapData = cached ?? (await roomService.getRoomsMap());
+        const rooms = normalizeRoomsMap(mapData);
+        const nextImages: Record<string, string> = {};
+
+        missingBookingCodes.forEach((code) => {
+          const match = rooms.find(
+            (room) => room.roomName.toLowerCase() === code.toLowerCase(),
+          );
+          if (match?.roomImage) {
+            nextImages[code] = match.roomImage;
+          }
+        });
+
+        if (!cancelled && Object.keys(nextImages).length > 0) {
+          setBookingImageByCode((prev) => ({ ...prev, ...nextImages }));
+        }
+      } catch {
+        // Ignore image lookup errors
+      }
+    };
+
+    void loadImages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [missingBookingCodes]);
+
+  const updateBookingTimeState = useCallback((
+    messageId: string,
+    updater: (current: BookingTimeUiState) => BookingTimeUiState,
+  ) => {
+    setBookingTimeUiByMessage((prev) => {
+      const current = prev[messageId] ?? {
+        mode: "quick" as BookingTimeMode,
+        dayIndex: 0,
+        time: getAvailableTimeSlots(0, new Date())[0] ?? "",
+        manualMessage: "",
+      };
+      return {
+        ...prev,
+        [messageId]: updater(current),
+      };
+    });
+  }, []);
 
   // ── Derived: menu options (from API or fallback) ──────────────────────────
 
@@ -220,6 +359,7 @@ export function useAiChat() {
           suggestionType: response.suggestionType,
           suggestions: response.suggestions,
           menuOptions: response.menuOptions,
+          bookingItems: response.bookingItems,
           reservation: response.reservation,
           reservationCreated: response.reservationCreated,
           roomDetail: response.roomDetail as
@@ -264,10 +404,28 @@ export function useAiChat() {
   const handleQuickAction = useCallback(
     async (option: AiMenuOption) => {
       if (isSending) return;
-      await sendMessageToAi(option.label);
+      setLookupLocationCode("");
+      await sendMessageToAi(resolveQuickActionLabel(option));
     },
     [isSending, sendMessageToAi],
   );
+
+  const handleCapacityRangeSelect = useCallback(
+    async (label: string) => {
+      if (isSending) return;
+      await sendMessageToAi(`Tìm kiếm theo sức chứa ${label}`);
+    },
+    [isSending, sendMessageToAi],
+  );
+
+  const handleLookupDetailSubmit = useCallback(async () => {
+    if (isSending) return;
+    const code = lookupLocationCode.trim();
+    if (!code) return;
+
+    await sendMessageToAi(`Chi tiết phòng ${code}`);
+    setLookupLocationCode("");
+  }, [isSending, lookupLocationCode, sendMessageToAi]);
 
   // ── Room navigation resolver ──────────────────────────────────────────────
 
@@ -419,7 +577,7 @@ export function useAiChat() {
       {
         id: createId(),
         sender: "bot",
-        text: "Hello! I am UniBot. I can help you find available rooms and book faster.",
+        text: "Xin chào! Tôi là UniBot. Tôi có thể giúp gì cho bạn hôm nay?",
         createdAt: new Date().toISOString(),
       },
     ]);
@@ -447,10 +605,18 @@ export function useAiChat() {
     suggestionLabel,
     showBestMatch,
     dismissedSuggestionMessageId,
+    // New states and memos
+    bookingImageByCode,
+    bookingTimeUiByMessage,
+    lookupLocationCode,
+    bookingDayOptions,
+    showLookupDetailInput,
+    latestBotMessageText,
     // Actions
     setInputValue,
     setPreviewImageUrl,
     setDismissedSuggestionMessageId,
+    setLookupLocationCode,
     handleSend,
     handleQuickAction,
     sendMessageToAi,
@@ -459,6 +625,9 @@ export function useAiChat() {
     handleViewBookingDetail,
     greetIfNeeded,
     scrollToBottom,
+    updateBookingTimeState,
+    handleLookupDetailSubmit,
+    handleCapacityRangeSelect,
     // Re-exports from chatHelpers for convenience
     getBookingCardData,
     bookingStatusClass,
@@ -468,3 +637,4 @@ export function useAiChat() {
     toRecord,
   };
 }
+

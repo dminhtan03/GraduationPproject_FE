@@ -90,6 +90,9 @@ const AdminFeedbackManagementPage = React.lazy(
 const TaskListPage = React.lazy(() => import("../pages/TaskList"));
 const TaskCreatePage = React.lazy(() => import("../pages/TaskCreate"));
 const TaskDetailPage = React.lazy(() => import("../pages/TaskDetail"));
+const ProjectListPage = React.lazy(() => import("../pages/ProjectList"));
+const ProjectCreatePage = React.lazy(() => import("../pages/ProjectCreate"));
+const ProjectDetailPage = React.lazy(() => import("../pages/ProjectDetail"));
 const MeetingListPage = React.lazy(() => import("../pages/MeetingList"));
 const MeetingDetailPage = React.lazy(() => import("../pages/MeetingDetail"));
 const ForbiddenPage = React.lazy(() => import("../pages/Forbidden"));
@@ -597,6 +600,19 @@ export const router = createBrowserRouter([
       {
         path: ROUTES.TASK_DETAIL,
         element: <SuspenseWrapper><TaskDetailPage /></SuspenseWrapper>,
+      },
+      // Project Management
+      {
+        path: ROUTES.PROJECTS,
+        element: <SuspenseWrapper><ProjectListPage /></SuspenseWrapper>,
+      },
+      {
+        path: ROUTES.PROJECT_CREATE,
+        element: <SuspenseWrapper><ProjectCreatePage /></SuspenseWrapper>,
+      },
+      {
+        path: ROUTES.PROJECT_DETAIL,
+        element: <SuspenseWrapper><ProjectDetailPage /></SuspenseWrapper>,
       },
       // Meeting Management
       {

@@ -64,6 +64,10 @@ export const ROUTES = {
   TASKS: "/tasks",
   TASK_CREATE: "/tasks/create",
   TASK_DETAIL: "/tasks/:taskId",
+  // Project Management
+  PROJECTS: "/projects",
+  PROJECT_CREATE: "/projects/create",
+  PROJECT_DETAIL: "/projects/:projectId",
   // Meeting Management
   MEETINGS: "/meetings",
   MEETING_DETAIL: "/meetings/:meetingId",
