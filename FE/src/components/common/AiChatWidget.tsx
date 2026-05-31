@@ -3,7 +3,6 @@ import { Badge, Avatar, Tooltip, Typography, Tag, Image } from "antd";
 import {
   RobotOutlined,
   CloseOutlined,
-  SendOutlined,
   EyeOutlined,
   CalendarOutlined,
   EnvironmentOutlined,
@@ -17,8 +16,8 @@ import {
 } from "@ant-design/icons";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { useAiChat } from "../../hooks/useAiChat";
-import type { AiRoomSuggestion } from "../../types/api";
+import { useAiChat, DEFAULT_MENU_OPTIONS } from "../../hooks/useAiChat";
+import type { AiRoomSuggestion, AiMenuOption } from "../../types/api";
 import {
   resolveBookingRoomCode,
   CAPACITY_RANGE_OPTIONS,
@@ -72,22 +71,18 @@ export const AiChatWidget: React.FC = () => {
   const [isOpen, setIsOpen] = React.useState(false);
   const {
     messages,
-    inputValue,
     isSending,
     isHydrated,
     aiSessionId,
     userInitials,
     messagesEndRef,
-    menuOptions,
     latestSuggestions,
     isSuggestionsVisible,
     suggestionLabel,
     showBestMatch,
     latestSuggestionMessage,
     // Actions
-    setInputValue,
     setDismissedSuggestionMessageId,
-    handleSend,
     handleQuickAction,
     handleBookNow,
     handleViewDetails,
@@ -130,7 +125,7 @@ export const AiChatWidget: React.FC = () => {
     return value.length > 0 && value.length <= 3;
   };
 
-  const renderMenuOptions = (msgMenuOptions?: typeof menuOptions) => {
+  const renderMenuOptions = (msgMenuOptions?: AiMenuOption[]) => {
     const options =
       msgMenuOptions && msgMenuOptions.length > 0 ? msgMenuOptions : null;
     if (!options) return null;
@@ -148,7 +143,7 @@ export const AiChatWidget: React.FC = () => {
             <button
               key={option.code || option.label}
               type="button"
-              onClick={() => void handleQuickAction(option)}
+              onClick={() => void sendMessageToAi(option.label)}
               disabled={isSending}
               className="wcw-menu-option"
             >
@@ -1025,64 +1020,25 @@ export const AiChatWidget: React.FC = () => {
                 <ThunderboltOutlined /> Quick actions
               </div>
               <div className="wcw-quick-actions__grid">
-                {menuOptions.map((option) => {
-                  const showCode = shouldShowMenuCode(option.code);
-                  return (
-                    <button
-                      key={option.code || option.label}
-                      type="button"
-                      onClick={() => void handleQuickAction(option)}
-                      disabled={isSending}
-                      className="wcw-quick-action"
-                    >
-                      {showCode && (
-                        <span className="wcw-quick-action__code">
-                          {option.code}
-                        </span>
-                      )}
-                      <span className="wcw-quick-action__text">
-                        {option.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Input */}
-            <div className="wcw-input-area">
-              <div className="wcw-input-area__row">
-                <textarea
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  rows={1}
-                  placeholder="Nhập tin nhắn cho UniBot..."
-                  className="wcw-input-area__textarea"
-                />
-
-                <Tooltip title="Send">
+                {DEFAULT_MENU_OPTIONS.map((option) => (
                   <button
+                    key={option.code}
                     type="button"
-                    onClick={() => handleSend()}
-                    disabled={isSending || !inputValue.trim()}
-                    className="wcw-btn-icon wcw-btn-icon--send"
-                    aria-label="Send"
+                    onClick={() => void handleQuickAction(option)}
+                    disabled={isSending}
+                    className="wcw-quick-action"
                   >
-                    {isSending ? (
-                      <span className="wcw-spinner" />
-                    ) : (
-                      <SendOutlined />
-                    )}
+                    <span className="wcw-quick-action__code">
+                      {option.code}
+                    </span>
+                    <span className="wcw-quick-action__text">
+                      {option.label}
+                    </span>
                   </button>
-                </Tooltip>
+                ))}
               </div>
             </div>
+
           </motion.div>
         )}
       </AnimatePresence>

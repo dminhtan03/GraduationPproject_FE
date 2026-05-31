@@ -62,7 +62,7 @@ const WIDGET_STORAGE_KEY = "ai_widget_chat_state_v1";
 
 // ── Default fallback quick‐action menu ────────────────────────────────────────
 
-const DEFAULT_MENU_OPTIONS: AiMenuOption[] = [
+export const DEFAULT_MENU_OPTIONS: AiMenuOption[] = [
   { code: "1", label: "Đặt phòng", intent: "BOOK_ROOM" },
   { code: "2", label: "Hủy phòng", intent: "CANCEL_RESERVATION" },
   { code: "3", label: "Gia hạn thời gian", intent: "EXTEND_RESERVATION" },

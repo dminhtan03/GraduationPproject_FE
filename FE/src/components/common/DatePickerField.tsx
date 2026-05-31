@@ -9,6 +9,8 @@ interface DatePickerFieldProps {
   minDate?: string;
   maxDate?: string;
   label?: string;
+  placeholder?: string;
+  className?: string;
   onInvalidSelect?: (reason: "past" | "future") => void;
 }
 
@@ -25,22 +27,14 @@ const toDateInputValue = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const formatDisplayDate = (value: string) => {
-  const date = parseDateOnly(value);
-  if (!date) return "Select date";
-
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  return `${day}/${month}/${year}`;
-};
-
 const DatePickerField: React.FC<DatePickerFieldProps> = ({
   value,
   onChange,
   minDate,
   maxDate,
   label,
+  placeholder = "Select date",
+  className = "",
   onInvalidSelect,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -73,8 +67,18 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
     };
   }, [open]);
 
+  const displayValue = useMemo(() => {
+    const date = parseDateOnly(value);
+    if (!date) return placeholder;
+
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  }, [value, placeholder]);
+
   return (
-    <div ref={containerRef} className="relative min-w-0 h-full">
+    <div ref={containerRef} className={`relative min-w-0 ${className}`}>
       {label && (
         <div className="mb-1 text-[11px] font-semibold tracking-wide uppercase text-slate-500">
           {label}
@@ -84,11 +88,11 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="relative w-full h-full min-h-[38px] overflow-hidden border border-gray-200 rounded-lg pl-8 pr-2.5 py-2 text-sm text-left bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+        className="relative w-full h-[38px] overflow-hidden border border-slate-200 rounded-xl pl-9 pr-3 text-sm text-left bg-white text-slate-700 hover:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-400 transition"
       >
-        <CalendarDaysIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <CalendarDaysIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <span className="block truncate tabular-nums">
-          {formatDisplayDate(value)}
+          {displayValue}
         </span>
       </button>
 
