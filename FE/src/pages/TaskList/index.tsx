@@ -171,15 +171,21 @@ const TaskListPage: React.FC = () => {
     });
   };
 
+  const endOfDay = (dueAt: string) => {
+    const d = new Date(dueAt);
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  };
+
   const isNearDeadline = (dueAt?: string) => {
     if (!dueAt) return false;
-    const ms = new Date(dueAt).getTime() - Date.now();
+    const ms = endOfDay(dueAt) - Date.now();
     return ms > 0 && ms <= 3 * 24 * 60 * 60 * 1000;
   };
 
   const isOverdue = (dueAt?: string, status?: string) => {
     if (!dueAt || status === "DONE" || status === "CANCELLED") return false;
-    return new Date(dueAt).getTime() < Date.now();
+    return endOfDay(dueAt) < Date.now();
   };
 
 

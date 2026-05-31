@@ -163,7 +163,7 @@ export const taskService = {
     return Array.isArray(data) ? data : [];
   },
 
-  createSprint: async (payload: { name: string; startDate?: string; endDate?: string; status?: string }) => {
+  createSprint: async (payload: { name: string; startDate?: string; endDate?: string; status?: string; projectId?: string }) => {
     const res = await api.post("/api/v1/sprints", payload);
     return extractData(res);
   },

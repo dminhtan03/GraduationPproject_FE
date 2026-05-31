@@ -10,6 +10,7 @@ import {
   CheckSquareOutlined,
   VideoCameraOutlined,
   HomeOutlined,
+  FolderOutlined,
 } from "@ant-design/icons";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -75,6 +76,11 @@ const Sidebar: React.FC = () => {
       label: "Recurring Bookings",
     },
     // end+ chức năng đặt phòng lặp lại (sidebar tab)
+    {
+      key: ROUTES.PROJECTS,
+      icon: <FolderOutlined />,
+      label: "Projects",
+    },
     {
       key: ROUTES.TASKS,
       icon: <CheckSquareOutlined />,
