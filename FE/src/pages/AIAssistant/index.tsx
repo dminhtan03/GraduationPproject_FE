@@ -41,7 +41,6 @@ import {
 } from "../../utils/aiAssistant";
 import {
   createId,
-  createWelcomeMessage,
   formatClock,
   formatDate,
   formatDateTimeLabel,
@@ -428,9 +427,7 @@ const AIAssistantPage: React.FC = () => {
           return {
             ...prev,
             [selectedSession.id]:
-              mappedMessages.length > 0
-                ? mappedMessages
-                : [],
+              mappedMessages.length > 0 ? mappedMessages : [],
           };
         });
 

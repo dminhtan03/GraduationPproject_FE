@@ -1041,20 +1041,48 @@ const TaskListPage: React.FC = () => {
       )}
 
       {/* Modals */}
-      <Modal title="Create Sprint" open={isSprintModalOpen} onCancel={() => setIsSprintModalOpen(false)} onOk={handleCreateSprint} okText="Create Sprint">
+      <Modal
+        title={
+          <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <span className="p-1.5 bg-orange-50 rounded-lg">
+              <CalendarIcon className="h-5 w-5 text-orange-500" />
+            </span>
+            <span className="font-bold text-slate-800 text-lg">Create Sprint</span>
+          </div>
+        }
+        open={isSprintModalOpen}
+        onCancel={() => setIsSprintModalOpen(false)}
+        onOk={handleCreateSprint}
+        okText="Create Sprint"
+        cancelText="Cancel"
+        className="rounded-2xl [&>.ant-modal-content]:!rounded-2xl"
+        okButtonProps={{ className: "!bg-orange-500 hover:!bg-orange-600 !border-none rounded-xl h-10 px-5 text-sm font-semibold text-white" }}
+        cancelButtonProps={{ className: "rounded-xl h-10 px-5 text-sm font-semibold border-slate-200" }}
+      >
         <div className="space-y-4 pt-4">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Sprint Name</label>
-            <Input placeholder="e.g. Sprint 1, Q3 Planning..." value={sprintForm.name} onChange={e => setSprintForm({ ...sprintForm, name: e.target.value })} />
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Sprint Name</label>
+            <Input
+              placeholder="e.g. Sprint 1, Q3 Planning..."
+              value={sprintForm.name}
+              onChange={e => setSprintForm({ ...sprintForm, name: e.target.value })}
+              className="rounded-xl h-[38px] border-slate-200 hover:border-orange-400 focus:border-orange-400 transition"
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Start Date</label>
-              <DatePicker className="w-full" value={sprintForm.startDate ? dayjs(sprintForm.startDate) : null} onChange={d => setSprintForm({ ...sprintForm, startDate: d ? d.toDate() : null })} />
+              <DatePickerField
+                label="Start Date"
+                value={sprintForm.startDate ? dayjs(sprintForm.startDate).format("YYYY-MM-DD") : ""}
+                onChange={dStr => setSprintForm({ ...sprintForm, startDate: dStr ? dayjs(dStr).toDate() : null })}
+              />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">End Date</label>
-              <DatePicker className="w-full" value={sprintForm.endDate ? dayjs(sprintForm.endDate) : null} onChange={d => setSprintForm({ ...sprintForm, endDate: d ? d.toDate() : null })} />
+              <DatePickerField
+                label="End Date"
+                value={sprintForm.endDate ? dayjs(sprintForm.endDate).format("YYYY-MM-DD") : ""}
+                onChange={dStr => setSprintForm({ ...sprintForm, endDate: dStr ? dayjs(dStr).toDate() : null })}
+              />
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Tag, Spin, Modal, Input, Select, DatePicker, Button, Tooltip, Upload } from "antd";
+import { Tag, Spin, Modal, Input, Select, Button, Tooltip, Upload } from "antd";
+import DatePickerField from "../../components/common/DatePickerField";
 import {
   ArrowLeftIcon,
   CalendarIcon,
@@ -329,38 +330,77 @@ const TaskDetailPage: React.FC = () => {
             )}
             <h1 className="text-xl font-bold text-slate-900 truncate leading-snug">{task.title}</h1>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <Tag color={PRIORITY_COLOR[task.priority]}>{task.priority}</Tag>
+              {/* Priority Badge */}
+              <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-bold tracking-wider uppercase border shadow-sm transition duration-150 select-none ${
+                task.priority === "URGENT" ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100/60" :
+                task.priority === "HIGH" ? "bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100/60" :
+                task.priority === "MEDIUM" ? "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100/60" :
+                "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+              }`}>
+                {task.priority}
+              </span>
+
+              {/* Status Select or Badge */}
               {(isCreator || !!myAssignment) ? (
                 <Select
-                  size="small"
+                  size="middle"
                   value={task.status}
                   disabled={busy}
                   onChange={(v) => doAction(() => taskService.changeStatus(taskId!, v), "Status updated")}
-                  style={{ minWidth: 130 }}
-                  options={
-                    isCreator
-                      ? [
-                          { value: "TODO", label: "TO DO" },
-                          { value: "DOING", label: "IN PROGRESS" },
-                          { value: "WAITING_REVIEW", label: "IN REVIEW" },
-                          { value: "DONE", label: "DONE" },
-                          { value: "REWORK", label: "REWORK" },
-                          { value: "CANCELLED", label: "CANCELLED" },
-                        ]
-                      : [
-                          { value: "TODO", label: "TO DO" },
-                          { value: "DOING", label: "IN PROGRESS" },
-                          ...(task.reviewerUserId
-                            ? [{ value: "WAITING_REVIEW", label: "SUBMIT FOR REVIEW" }]
-                            : [{ value: "DONE", label: "MARK AS DONE" }]),
-                        ]
-                  }
-                />
+                  className={`w-40 font-extrabold text-xs rounded-xl shadow-md transition [&>.ant-select-selector]:!rounded-xl [&>.ant-select-selector]:!border-none [&_.ant-select-selection-item]:!font-bold [&_.ant-select-selection-item]:!text-white [&_.ant-select-arrow]:!text-white ${
+                    task.status === "DONE" ? "[&>.ant-select-selector]:!bg-emerald-600 hover:[&>.ant-select-selector]:!bg-emerald-700" :
+                    task.status === "CANCELLED" ? "[&>.ant-select-selector]:!bg-red-600 hover:[&>.ant-select-selector]:!bg-red-700" :
+                    task.status === "WAITING_REVIEW" ? "[&>.ant-select-selector]:!bg-amber-500 hover:[&>.ant-select-selector]:!bg-amber-600" :
+                    task.status === "DOING" ? "[&>.ant-select-selector]:!bg-blue-600 hover:[&>.ant-select-selector]:!bg-blue-700" :
+                    task.status === "REWORK" ? "[&>.ant-select-selector]:!bg-purple-600 hover:[&>.ant-select-selector]:!bg-purple-700" :
+                    "[&>.ant-select-selector]:!bg-slate-500 hover:[&>.ant-select-selector]:!bg-slate-600"
+                  }`}
+                  optionLabelProp="label"
+                >
+                  {(isCreator
+                    ? [
+                        { value: "TODO", label: "TO DO", color: "bg-slate-500" },
+                        { value: "DOING", label: "IN PROGRESS", color: "bg-blue-600" },
+                        { value: "WAITING_REVIEW", label: "IN REVIEW", color: "bg-amber-500" },
+                        { value: "DONE", label: "DONE", color: "bg-emerald-600" },
+                        { value: "REWORK", label: "REWORK", color: "bg-purple-600" },
+                        { value: "CANCELLED", label: "CANCELLED", color: "bg-red-600" },
+                      ]
+                    : [
+                        { value: "TODO", label: "TO DO", color: "bg-slate-500" },
+                        { value: "DOING", label: "IN PROGRESS", color: "bg-blue-600" },
+                        ...(task.reviewerUserId
+                          ? [{ value: "WAITING_REVIEW", label: "SUBMIT FOR REVIEW", color: "bg-amber-500" }]
+                          : [{ value: "DONE", label: "MARK AS DONE", color: "bg-emerald-600" }]),
+                      ]
+                  ).map((opt) => (
+                    <Select.Option key={opt.value} value={opt.value} label={opt.label}>
+                      <div className="flex items-center gap-2 py-0.5">
+                        <span className={`w-2.5 h-2.5 rounded-full ${opt.color} shrink-0 shadow-sm`} />
+                        <span className="text-xs font-bold text-slate-700">{opt.label}</span>
+                      </div>
+                    </Select.Option>
+                  ))}
+                </Select>
               ) : (
-                <Tag color={STATUS_COLOR[task.status]}>{task.status?.replace(/_/g, " ")}</Tag>
+                <span className={`inline-flex items-center px-3 py-1.5 text-xs font-extrabold text-white rounded-xl shadow-md select-none ${
+                  task.status === "DONE" ? "bg-emerald-600" :
+                  task.status === "CANCELLED" ? "bg-red-600" :
+                  task.status === "WAITING_REVIEW" ? "bg-amber-500" :
+                  task.status === "DOING" ? "bg-blue-600" :
+                  task.status === "REWORK" ? "bg-purple-600" :
+                  "bg-slate-500"
+                }`}>
+                  {task.status?.replace(/_/g, " ")}
+                </span>
               )}
+
+              {/* Sprint Badge */}
               {task.sprintName && (
-                <span className="px-2 py-0.5 text-xs bg-orange-50 text-orange-600 rounded-lg border border-orange-100 font-bold">{task.sprintName}</span>
+                <span className="inline-flex items-center px-3 py-1 text-xs bg-gradient-to-r from-orange-50 to-amber-50/50 text-orange-600 rounded-xl border border-orange-100 font-bold shadow-sm select-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 mr-1.5 animate-pulse" />
+                  {task.sprintName}
+                </span>
               )}
             </div>
           </div>
@@ -393,35 +433,96 @@ const TaskDetailPage: React.FC = () => {
         <div className="lg:col-span-8 space-y-6">
           {/* Details Section */}
           <Section title="Task Description">
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Main Description */}
               {task.description ? (
-                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{task.description}</p>
+                <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap bg-slate-50/30 p-4 rounded-xl border border-slate-100">
+                  {task.description}
+                </div>
               ) : (
-                <p className="text-sm text-slate-400 italic">No description provided.</p>
-              )}
-
-              {task.goal && <Field label="Target Goals" value={task.goal} />}
-              {task.expectedResult && <Field label="Expected Deliverables" value={task.expectedResult} />}
-              {task.assignmentBrief && <Field label="Assignment Brief" value={task.assignmentBrief} />}
-              {task.assignmentHow && <Field label="Execution Guidelines (How-to)" value={task.assignmentHow} />}
-              {task.resultNote && (
-                <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100 mt-4">
-                  <Field label="Deliverable Results Submitted" value={task.resultNote} />
+                <div className="text-sm text-slate-400 italic bg-slate-50/30 p-4 rounded-xl border border-slate-100 border-dashed">
+                  No description provided.
                 </div>
               )}
+
+              {/* Grid or stack for structured fields */}
+              <div className="space-y-4">
+                {task.goal && (
+                  <div className="p-4 rounded-xl border border-slate-100 bg-amber-50/20 border-l-4 border-l-amber-500 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <CheckCircleIcon className="h-4.5 w-4.5 text-amber-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Target Goals</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.goal}</p>
+                  </div>
+                )}
+
+                {task.expectedResult && (
+                  <div className="p-4 rounded-xl border border-slate-100 bg-indigo-50/20 border-l-4 border-l-indigo-500 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <ListBulletIcon className="h-4.5 w-4.5 text-indigo-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Expected Deliverables</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.expectedResult}</p>
+                  </div>
+                )}
+
+                {task.assignmentBrief && (
+                  <div className="p-4 rounded-xl border border-slate-100 bg-sky-50/20 border-l-4 border-l-sky-500 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <UserIcon className="h-4.5 w-4.5 text-sky-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Assignment Brief</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.assignmentBrief}</p>
+                  </div>
+                )}
+
+                {task.assignmentHow && (
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 border-l-4 border-l-slate-400 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <ChatBubbleLeftRightIcon className="h-4.5 w-4.5 text-slate-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Execution Guidelines (How-to)</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.assignmentHow}</p>
+                  </div>
+                )}
+
+                {task.resultNote && (
+                  <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/20 border-l-4 border-l-emerald-500 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <CheckCircleIcon className="h-4.5 w-4.5 text-emerald-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Deliverable Results Submitted</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.resultNote}</p>
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100 text-xs">
                 {(isCreator || !!myAssignment) ? (
                   <div className="flex items-center gap-2 text-slate-600">
                     <CalendarIcon className="h-4 w-4 text-orange-400 shrink-0" />
                     {editDueDate ? (
-                      <DatePicker
-                        size="small"
-                        defaultValue={task.dueAt ? dayjs(task.dueAt) : undefined}
-                        autoFocus
-                        onChange={(d) => handleDueDateChange(d)}
-                        onOpenChange={(open) => { if (!open) setEditDueDate(false); }}
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-40 h-[38px]">
+                          <DatePickerField
+                            value={task.dueAt ? dayjs(task.dueAt).format("YYYY-MM-DD") : ""}
+                            onChange={(dStr) => {
+                              if (dStr) {
+                                handleDueDateChange(dayjs(dStr));
+                              }
+                              setEditDueDate(false);
+                            }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditDueDate(false)}
+                          className="px-2.5 py-1 text-xs font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition h-[38px]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     ) : (
                       <span
                         className="cursor-pointer hover:text-orange-500 transition"
@@ -481,11 +582,26 @@ const TaskDetailPage: React.FC = () => {
                           <span>Assignee: <span className="font-semibold text-slate-600">{sub.assignments?.[0]?.assigneeName || "Unassigned"}</span></span>
                           {canChangeSubStatus ? (
                             editingSubtaskDueId === sub.id ? (
-                              <DatePicker size="small" autoFocus
-                                defaultValue={sub.dueAt ? dayjs(sub.dueAt) : undefined}
-                                onChange={(d) => handleSubtaskDueDateChange(sub.id, d)}
-                                onOpenChange={(open) => { if (!open) setEditingSubtaskDueId(null); }}
-                              />
+                              <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                                <div className="w-36 h-[34px]">
+                                  <DatePickerField
+                                    value={sub.dueAt ? dayjs(sub.dueAt).format("YYYY-MM-DD") : ""}
+                                    onChange={(dStr) => {
+                                      if (dStr) {
+                                        handleSubtaskDueDateChange(sub.id, dayjs(dStr));
+                                      }
+                                      setEditingSubtaskDueId(null);
+                                    }}
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingSubtaskDueId(null)}
+                                  className="px-2 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition h-[34px] flex items-center"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             ) : (
                               <span className="cursor-pointer hover:text-orange-500 transition"
                                 onClick={() => setEditingSubtaskDueId(sub.id)}>
@@ -561,8 +677,23 @@ const TaskDetailPage: React.FC = () => {
                       size="middle"
                       className="w-48 [&>.ant-select-selector]:!rounded-xl [&>.ant-select-selector]:!border-slate-200 hover:[&>.ant-select-selector]:!border-orange-400 focus:[&>.ant-select-selector]:!border-orange-400"
                       onChange={(val) => setCommentText(prev => prev ? `${prev} @${val} ` : `@${val} `)}
-                      options={users.map(u => ({ value: u.fullName, label: u.fullName }))}
-                    />
+                      value={undefined}
+                      optionLabelProp="label"
+                    >
+                      {users.map(u => {
+                        const initials = getInitials(u.fullName);
+                        return (
+                          <Select.Option key={u.id} value={u.fullName} label={u.fullName}>
+                            <div className="flex items-center gap-2 py-0.5">
+                              <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[9px] font-bold text-white shrink-0 shadow-sm">
+                                {initials}
+                              </div>
+                              <span className="text-sm font-medium text-slate-700">{u.fullName}</span>
+                            </div>
+                          </Select.Option>
+                        );
+                      })}
+                    </Select>
                   </div>
                   <button
                     type="button"
@@ -630,14 +761,15 @@ const TaskDetailPage: React.FC = () => {
                       {getInitials(task.reviewerName)}
                     </div>
                     <div>
-                      <p className="font-bold text-slate-800 text-sm">{task.reviewerName}</p>
-                      <p className="text-[10px] text-slate-400">Review status: <span className="font-bold">{task.reviewerStatus}</span></p>
+                      <p className="font-bold text-slate-800 text-sm leading-normal">{task.reviewerName}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {task.reviewDecision ? (
+                          <Badge value={task.reviewDecision} />
+                        ) : (
+                          <Badge value={task.reviewerStatus ?? ""} />
+                        )}
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge value={task.reviewerStatus ?? ""} />
-                    {task.reviewDecision && <Badge value={task.reviewDecision} />}
                   </div>
                   {task.reviewComment && (
                     <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 italic text-slate-500 mt-2">
@@ -785,7 +917,10 @@ const TaskDetailPage: React.FC = () => {
             </div>
             <div className="space-y-1">
               <span className="text-xs font-semibold text-slate-500">Due Date</span>
-              <DatePicker className="w-full" value={subtaskDueDate} onChange={setSubtaskDueDate} />
+              <DatePickerField
+                value={subtaskDueDate ? subtaskDueDate.format("YYYY-MM-DD") : ""}
+                onChange={(dStr) => setSubtaskDueDate(dStr ? dayjs(dStr) : null)}
+              />
             </div>
           </div>
           <div className="space-y-1">

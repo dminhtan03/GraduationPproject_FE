@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from "react";
-import { Badge, Avatar, Tooltip, Typography, Tag, Image } from "antd";
+import { Badge, Avatar, Typography, Tag, Image, Tooltip } from "antd";
 import {
   RobotOutlined,
   CloseOutlined,
@@ -17,7 +17,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useAiChat, DEFAULT_MENU_OPTIONS } from "../../hooks/useAiChat";
-import type { AiRoomSuggestion, AiMenuOption } from "../../types/api";
+import type { AiRoomSuggestion } from "../../types/api";
 import {
   resolveBookingRoomCode,
   CAPACITY_RANGE_OPTIONS,
@@ -125,7 +125,7 @@ export const AiChatWidget: React.FC = () => {
     return value.length > 0 && value.length <= 3;
   };
 
-  const renderMenuOptions = (msgMenuOptions?: AiMenuOption[]) => {
+  const renderMenuOptions = (msgMenuOptions?: typeof DEFAULT_MENU_OPTIONS) => {
     const options =
       msgMenuOptions && msgMenuOptions.length > 0 ? msgMenuOptions : null;
     if (!options) return null;

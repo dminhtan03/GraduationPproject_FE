@@ -11,6 +11,7 @@ import { taskService } from "../../services/taskService";
 import { userService } from "../../services/userService";
 import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
 import { ROUTES } from "../../constants";
+import DatePickerField from "../../components/common/DatePickerField";
 
 const STATUS_COLOR: Record<string, string> = {
   TODO: "default", DOING: "processing", WAITING_REVIEW: "warning",
@@ -23,7 +24,7 @@ const SPRINT_STATUS_COLOR: Record<string, string> = {
 const fmt = (v?: string | null) => {
   if (!v) return "-";
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("vi-VN");
+  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("en-US");
 };
 
 const getInitials = (name?: string) => {
@@ -44,7 +45,9 @@ const ProjectDetailPage: React.FC = () => {
 
   // Sprint create modal
   const [sprintModal, setSprintModal] = useState(false);
-  const [sprintForm, setSprintForm] = useState({ name: "", startDate: null as any, endDate: null as any });
+  const [sprintForm, setSprintForm] = useState<{ name: string; startDate: string | null; endDate: string | null }>({
+    name: "", startDate: null, endDate: null
+  });
   const [savingSprint, setSavingSprint] = useState(false);
 
   // Delete project modal
@@ -73,7 +76,7 @@ const ProjectDetailPage: React.FC = () => {
       // Filter sprints belonging to this project
       setSprints(allSprints.filter((s: any) => s.projectId === projectId));
     } catch {
-      show("error", "Không thể tải dự án");
+      show("error", "Failed to load project details");
     } finally {
       setLoading(false);
     }
@@ -96,21 +99,21 @@ const ProjectDetailPage: React.FC = () => {
   }, [memberSearch, project]);
 
   const handleCreateSprint = async () => {
-    if (!sprintForm.name.trim()) { show("warning", "Vui lòng nhập tên sprint"); return; }
+    if (!sprintForm.name.trim()) { show("warning", "Please enter sprint name"); return; }
     setSavingSprint(true);
     try {
       await taskService.createSprint({
         name: sprintForm.name.trim(),
-        startDate: sprintForm.startDate ? sprintForm.startDate.format("YYYY-MM-DD") : undefined,
-        endDate: sprintForm.endDate ? sprintForm.endDate.format("YYYY-MM-DD") : undefined,
+        startDate: sprintForm.startDate ?? undefined,
+        endDate: sprintForm.endDate ?? undefined,
         projectId,
       });
-      show("success", "Sprint đã được tạo");
+      show("success", "Sprint created successfully");
       setSprintModal(false);
       setSprintForm({ name: "", startDate: null, endDate: null });
       void load();
     } catch {
-      show("error", "Tạo sprint thất bại");
+      show("error", "Failed to create sprint");
     } finally {
       setSavingSprint(false);
     }
@@ -119,10 +122,10 @@ const ProjectDetailPage: React.FC = () => {
   const handleDeleteProject = async () => {
     try {
       await projectService.deleteProject(projectId!);
-      show("success", "Đã xóa dự án");
+      show("success", "Project deleted successfully");
       setTimeout(() => navigate(ROUTES.PROJECTS), 600);
     } catch {
-      show("error", "Xóa dự án thất bại");
+      show("error", "Failed to delete project");
     } finally {
       setDeleteProjectModal(false);
     }
@@ -134,9 +137,9 @@ const ProjectDetailPage: React.FC = () => {
       setMemberSearch("");
       setMemberResults([]);
       void load();
-      show("success", `Đã thêm ${user.fullName}`);
+      show("success", `Added ${user.fullName}`);
     } catch {
-      show("error", "Không thể thêm thành viên");
+      show("error", "Failed to add member");
     }
   };
 
@@ -144,16 +147,16 @@ const ProjectDetailPage: React.FC = () => {
     try {
       await projectService.removeMember(projectId!, memberId);
       void load();
-      show("success", `Đã xóa ${memberName}`);
+      show("success", `Removed ${memberName}`);
     } catch (e: any) {
-      show("error", e?.response?.data?.meta?.message ?? "Không thể xóa thành viên");
+      show("error", e?.response?.data?.meta?.message ?? "Failed to remove member");
     }
   };
 
   const isOwner = project?.createdById === userId;
 
   if (loading) return <div className="flex justify-center items-center min-h-screen"><Spin size="large" /></div>;
-  if (!project) return <div className="p-8 text-center text-slate-500">Không tìm thấy dự án.</div>;
+  if (!project) return <div className="p-8 text-center text-slate-500">Project not found.</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
@@ -170,7 +173,7 @@ const ProjectDetailPage: React.FC = () => {
                 <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
                 <Tag color={project.status === "ACTIVE" ? "processing" : project.status === "COMPLETED" ? "success" : "default"}
                   className="m-0 text-xs font-semibold">
-                  {project.status === "ACTIVE" ? "Đang hoạt động" : project.status === "COMPLETED" ? "Hoàn thành" : "Lưu trữ"}
+                  {project.status === "ACTIVE" ? "Active" : project.status === "COMPLETED" ? "Completed" : "Archived"}
                 </Tag>
               </div>
               {project.description && (
@@ -181,7 +184,7 @@ const ProjectDetailPage: React.FC = () => {
           <div className="flex items-center gap-2 shrink-0">
             <button type="button" onClick={() => setSprintModal(true)}
               className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition shadow-sm">
-              <PlusIcon className="h-4 w-4" /> Tạo Sprint
+              <PlusIcon className="h-4 w-4" /> Create Sprint
             </button>
             {isOwner && (
               <button type="button" onClick={() => setDeleteProjectModal(true)}
@@ -202,11 +205,11 @@ const ProjectDetailPage: React.FC = () => {
             {sprints.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-sm">
                 <FolderIcon className="h-12 w-12 text-slate-200 mx-auto mb-3" />
-                <p className="text-slate-500 font-medium">Chưa có sprint nào</p>
-                <p className="text-sm text-slate-400 mt-1">Tạo sprint đầu tiên để bắt đầu quản lý công việc</p>
+                <p className="text-slate-500 font-medium">No sprints found</p>
+                <p className="text-sm text-slate-400 mt-1">Create your first sprint to start managing tasks.</p>
                 <button type="button" onClick={() => setSprintModal(true)}
                   className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition">
-                  <PlusIcon className="h-4 w-4" /> Tạo Sprint
+                  <PlusIcon className="h-4 w-4" /> Create Sprint
                 </button>
               </div>
             ) : (
@@ -239,7 +242,7 @@ const ProjectDetailPage: React.FC = () => {
                     {!collapsed && (
                       <div>
                         {tasks.length === 0 ? (
-                          <p className="text-xs text-slate-400 text-center py-6">Chưa có task nào trong sprint này.</p>
+                          <p className="text-xs text-slate-400 text-center py-6">No tasks in this sprint.</p>
                         ) : (
                           tasks.map((t: any) => {
                             const assigneeName = t.assignments?.[0]?.assigneeName ?? "Unassigned";
@@ -271,7 +274,7 @@ const ProjectDetailPage: React.FC = () => {
                         {/* Create task in sprint */}
                         <div className="px-5 py-3 text-xs text-slate-400 hover:bg-slate-50 cursor-pointer flex items-center gap-2 transition"
                           onClick={() => navigate(`/tasks/create?sprintId=${sprint.id}&projectId=${projectId}`)}>
-                          <PlusIcon className="h-3.5 w-3.5" /> Tạo task
+                          <PlusIcon className="h-3.5 w-3.5" /> Create Task
                         </div>
                       </div>
                     )}
@@ -285,10 +288,10 @@ const ProjectDetailPage: React.FC = () => {
           <div className="space-y-4">
             {/* Project info */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm text-sm space-y-3">
-              <p className="font-semibold text-slate-700">Thông tin dự án</p>
+              <p className="font-semibold text-slate-700">Project Information</p>
               {project.goal && (
                 <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Mục tiêu</p>
+                  <p className="text-xs text-slate-400 mb-0.5">Goal</p>
                   <p className="text-slate-700 text-xs leading-relaxed">{project.goal}</p>
                 </div>
               )}
@@ -298,14 +301,14 @@ const ProjectDetailPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <UserGroupIcon className="h-3.5 w-3.5" />
-                <span>Tạo bởi: <span className="font-semibold text-slate-700">{project.createdByName}</span></span>
+                <span>Created by: <span className="font-semibold text-slate-700">{project.createdByName}</span></span>
               </div>
             </div>
 
             {/* Members */}
             <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
               <p className="text-sm font-semibold text-slate-700 mb-3">
-                Thành viên ({project.members?.length ?? 0})
+                Members ({project.members?.length ?? 0})
               </p>
               <div className="space-y-2 mb-3">
                 {project.members?.map((m: any) => (
@@ -316,7 +319,7 @@ const ProjectDetailPage: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-slate-800 leading-tight">{m.userName}</p>
-                        <p className="text-[10px] text-slate-400">{m.role === "OWNER" ? "Chủ sở hữu" : "Thành viên"}</p>
+                        <p className="text-[10px] text-slate-400">{m.role === "OWNER" ? "Owner" : "Member"}</p>
                       </div>
                     </div>
                     {isOwner && m.role !== "OWNER" && (
@@ -333,7 +336,7 @@ const ProjectDetailPage: React.FC = () => {
               {/* Add member */}
               {isOwner && (
                 <div className="relative">
-                  <Input size="small" placeholder="Thêm thành viên..."
+                  <Input size="small" placeholder="Add member..."
                     value={memberSearch} onChange={e => setMemberSearch(e.target.value)}
                     className="rounded-lg text-xs" />
                   {memberResults.length > 0 && (
@@ -360,38 +363,76 @@ const ProjectDetailPage: React.FC = () => {
       </div>
 
       {/* Create Sprint Modal */}
-      <Modal title="Tạo Sprint mới" open={sprintModal}
-        onCancel={() => { setSprintModal(false); setSprintForm({ name: "", startDate: null, endDate: null }); }}
-        onOk={handleCreateSprint} okText="Tạo Sprint" cancelText="Hủy"
-        confirmLoading={savingSprint}>
-        <div className="space-y-4 py-2">
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Tên Sprint <span className="text-red-500">*</span></label>
-            <Input placeholder="VD: Sprint 1" value={sprintForm.name}
-              onChange={e => setSprintForm({ ...sprintForm, name: e.target.value })} />
+      <Modal
+        title={
+          <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <span className="p-1.5 bg-orange-50 rounded-lg">
+              <CalendarIcon className="h-5 w-5 text-orange-500" />
+            </span>
+            <span className="font-bold text-slate-800 text-lg">Create Sprint</span>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+        }
+        open={sprintModal}
+        onCancel={() => { setSprintModal(false); setSprintForm({ name: "", startDate: null, endDate: null }); }}
+        onOk={handleCreateSprint}
+        okText="Create Sprint"
+        cancelText="Cancel"
+        confirmLoading={savingSprint}
+        className="rounded-2xl [&>.ant-modal-content]:!rounded-2xl"
+        okButtonProps={{ className: "!bg-orange-500 hover:!bg-orange-600 !border-none rounded-xl h-10 px-5 text-sm font-semibold text-white" }}
+        cancelButtonProps={{ className: "rounded-xl h-10 px-5 text-sm font-semibold border-slate-200" }}
+      >
+        <div className="space-y-4 pt-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Sprint Name</label>
+            <Input
+              placeholder="e.g. Sprint 1, Q3 Planning..."
+              value={sprintForm.name}
+              onChange={e => setSprintForm({ ...sprintForm, name: e.target.value })}
+              className="rounded-xl h-[38px] border-slate-200 hover:border-orange-400 focus:border-orange-400 transition"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Ngày bắt đầu</label>
-              <DatePicker className="w-full" value={sprintForm.startDate}
-                onChange={d => setSprintForm({ ...sprintForm, startDate: d })} format="DD/MM/YYYY" />
+              <DatePickerField
+                label="Start Date"
+                value={sprintForm.startDate ?? ""}
+                onChange={dStr => setSprintForm({ ...sprintForm, startDate: dStr || null })}
+              />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Ngày kết thúc</label>
-              <DatePicker className="w-full" value={sprintForm.endDate}
-                onChange={d => setSprintForm({ ...sprintForm, endDate: d })} format="DD/MM/YYYY" />
+              <DatePickerField
+                label="End Date"
+                value={sprintForm.endDate ?? ""}
+                onChange={dStr => setSprintForm({ ...sprintForm, endDate: dStr || null })}
+              />
             </div>
           </div>
         </div>
       </Modal>
 
       {/* Delete project confirm */}
-      <Modal title="Xóa Dự Án" open={deleteProjectModal}
+      <Modal
+        title={
+          <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <span className="p-1.5 bg-rose-50 rounded-lg">
+              <TrashIcon className="h-5 w-5 text-rose-500" />
+            </span>
+            <span className="font-bold text-slate-800 text-lg">Delete Project</span>
+          </div>
+        }
+        open={deleteProjectModal}
         onCancel={() => setDeleteProjectModal(false)}
-        onOk={handleDeleteProject} okText="Xóa" okButtonProps={{ danger: true }} cancelText="Hủy">
-        <p className="text-slate-600 mt-2">
-          Bạn có chắc muốn xóa dự án <strong>{project.name}</strong>?
-          Các sprint trong dự án sẽ không bị xóa nhưng sẽ không còn thuộc dự án này.
+        onOk={handleDeleteProject}
+        okText="Delete Project"
+        cancelText="Cancel"
+        className="rounded-2xl overflow-hidden [&>.ant-modal-content]:!rounded-2xl"
+        okButtonProps={{ className: "bg-rose-500 hover:bg-rose-600 border-none rounded-xl h-10 px-5 text-sm font-semibold" }}
+        cancelButtonProps={{ className: "rounded-xl h-10 px-5 text-sm font-semibold border-slate-200" }}
+      >
+        <p className="text-slate-600 mt-4 leading-relaxed">
+          Are you sure you want to delete project <strong>{project.name}</strong>?
+          Sprints in this project will not be deleted but they will no longer belong to this project.
         </p>
       </Modal>
 

@@ -97,7 +97,7 @@ const DatePickerField: React.FC<DatePickerFieldProps> = ({
       </button>
 
       {open && (
-        <div className="absolute left-0 z-40 mt-2 min-w-[18rem] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+        <div className="absolute left-0 z-[9999] mt-2 min-w-[18rem] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
           <DayPicker
             mode="single"
             selected={selectedDate}
