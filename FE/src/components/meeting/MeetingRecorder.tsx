@@ -442,6 +442,7 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
         )}
       </div>
     </div>
+  );
 };
 
 export default MeetingRecorder;
