@@ -9,13 +9,13 @@ const STATUS_COLOR: Record<string, string> = {
   ACTIVE: "processing", COMPLETED: "success", ARCHIVED: "default",
 };
 const STATUS_LABEL: Record<string, string> = {
-  ACTIVE: "Đang hoạt động", COMPLETED: "Hoàn thành", ARCHIVED: "Lưu trữ",
+  ACTIVE: "Active", COMPLETED: "Completed", ARCHIVED: "Archived",
 };
 
 const fmt = (v?: string) => {
   if (!v) return "-";
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("vi-VN");
+  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("en-US");
 };
 
 const ProjectListPage: React.FC = () => {
@@ -41,14 +41,14 @@ const ProjectListPage: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Dự Án</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Projects</h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Quản lý các dự án và sprint của bạn
+              Manage your projects and sprints.
             </p>
           </div>
           <button type="button" onClick={() => navigate(ROUTES.PROJECT_CREATE)}
             className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 transition shadow-sm">
-            <PlusIcon className="h-4 w-4" /> Tạo Dự Án
+            <PlusIcon className="h-4 w-4" /> Create Project
           </button>
         </div>
 
@@ -59,8 +59,8 @@ const ProjectListPage: React.FC = () => {
             image={<FolderIcon className="h-20 w-20 text-slate-200 mx-auto" />}
             description={
               <div className="text-center">
-                <p className="text-slate-500 font-medium">Chưa có dự án nào</p>
-                <p className="text-sm text-slate-400 mt-1">Tạo dự án đầu tiên của bạn để bắt đầu</p>
+                <p className="text-slate-500 font-medium">No projects found</p>
+                <p className="text-sm text-slate-400 mt-1">Create your first project to get started.</p>
               </div>
             }
             className="py-20 bg-white rounded-3xl border border-slate-100 shadow-sm"
@@ -69,7 +69,7 @@ const ProjectListPage: React.FC = () => {
           <div className="grid gap-4 md:grid-cols-2">
             {projects.map((project: any) => (
               <div key={project.id}
-                onClick={() => navigate(`/projects/${project.id}`)}
+                onClick={() => navigate(`/tasks?projectId=${project.id}`)}
                 className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition duration-200 cursor-pointer">
                 {/* Top row */}
                 <div className="flex items-start justify-between gap-3 mb-3">
@@ -97,7 +97,7 @@ const ProjectListPage: React.FC = () => {
                   </span>
                   <span className="flex items-center gap-1.5">
                     <UserGroupIcon className="h-3.5 w-3.5" />
-                    {project.members?.length ?? 0} thành viên
+                    {project.members?.length ?? 0} members
                   </span>
                 </div>
 

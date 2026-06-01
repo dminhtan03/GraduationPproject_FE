@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Tag, Spin, Modal, Input, Select, DatePicker, Button, Tooltip, Upload } from "antd";
+import { Tag, Spin, Modal, Input, Select, Button, Tooltip, Upload } from "antd";
+import DatePickerField from "../../components/common/DatePickerField";
 import {
   ArrowLeftIcon,
   CalendarIcon,
@@ -329,38 +330,77 @@ const TaskDetailPage: React.FC = () => {
             )}
             <h1 className="text-xl font-bold text-slate-900 truncate leading-snug">{task.title}</h1>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <Tag color={PRIORITY_COLOR[task.priority]}>{task.priority}</Tag>
+              {/* Priority Badge */}
+              <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-bold tracking-wider uppercase border shadow-sm transition duration-150 select-none ${
+                task.priority === "URGENT" ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100/60" :
+                task.priority === "HIGH" ? "bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100/60" :
+                task.priority === "MEDIUM" ? "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100/60" :
+                "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+              }`}>
+                {task.priority}
+              </span>
+
+              {/* Status Select or Badge */}
               {(isCreator || !!myAssignment) ? (
                 <Select
-                  size="small"
+                  size="middle"
                   value={task.status}
                   disabled={busy}
                   onChange={(v) => doAction(() => taskService.changeStatus(taskId!, v), "Status updated")}
-                  style={{ minWidth: 130 }}
-                  options={
-                    isCreator
-                      ? [
-                          { value: "TODO", label: "TO DO" },
-                          { value: "DOING", label: "IN PROGRESS" },
-                          { value: "WAITING_REVIEW", label: "IN REVIEW" },
-                          { value: "DONE", label: "DONE" },
-                          { value: "REWORK", label: "REWORK" },
-                          { value: "CANCELLED", label: "CANCELLED" },
-                        ]
-                      : [
-                          { value: "TODO", label: "TO DO" },
-                          { value: "DOING", label: "IN PROGRESS" },
-                          ...(task.reviewerUserId
-                            ? [{ value: "WAITING_REVIEW", label: "SUBMIT FOR REVIEW" }]
-                            : [{ value: "DONE", label: "MARK AS DONE" }]),
-                        ]
-                  }
-                />
+                  className={`w-40 font-extrabold text-xs rounded-xl shadow-md transition [&>.ant-select-selector]:!rounded-xl [&>.ant-select-selector]:!border-none [&_.ant-select-selection-item]:!font-bold [&_.ant-select-selection-item]:!text-white [&_.ant-select-arrow]:!text-white ${
+                    task.status === "DONE" ? "[&>.ant-select-selector]:!bg-emerald-600 hover:[&>.ant-select-selector]:!bg-emerald-700" :
+                    task.status === "CANCELLED" ? "[&>.ant-select-selector]:!bg-red-600 hover:[&>.ant-select-selector]:!bg-red-700" :
+                    task.status === "WAITING_REVIEW" ? "[&>.ant-select-selector]:!bg-amber-500 hover:[&>.ant-select-selector]:!bg-amber-600" :
+                    task.status === "DOING" ? "[&>.ant-select-selector]:!bg-blue-600 hover:[&>.ant-select-selector]:!bg-blue-700" :
+                    task.status === "REWORK" ? "[&>.ant-select-selector]:!bg-purple-600 hover:[&>.ant-select-selector]:!bg-purple-700" :
+                    "[&>.ant-select-selector]:!bg-slate-500 hover:[&>.ant-select-selector]:!bg-slate-600"
+                  }`}
+                  optionLabelProp="label"
+                >
+                  {(isCreator
+                    ? [
+                        { value: "TODO", label: "TO DO", color: "bg-slate-500" },
+                        { value: "DOING", label: "IN PROGRESS", color: "bg-blue-600" },
+                        { value: "WAITING_REVIEW", label: "IN REVIEW", color: "bg-amber-500" },
+                        { value: "DONE", label: "DONE", color: "bg-emerald-600" },
+                        { value: "REWORK", label: "REWORK", color: "bg-purple-600" },
+                        { value: "CANCELLED", label: "CANCELLED", color: "bg-red-600" },
+                      ]
+                    : [
+                        { value: "TODO", label: "TO DO", color: "bg-slate-500" },
+                        { value: "DOING", label: "IN PROGRESS", color: "bg-blue-600" },
+                        ...(task.reviewerUserId
+                          ? [{ value: "WAITING_REVIEW", label: "SUBMIT FOR REVIEW", color: "bg-amber-500" }]
+                          : [{ value: "DONE", label: "MARK AS DONE", color: "bg-emerald-600" }]),
+                      ]
+                  ).map((opt) => (
+                    <Select.Option key={opt.value} value={opt.value} label={opt.label}>
+                      <div className="flex items-center gap-2 py-0.5">
+                        <span className={`w-2.5 h-2.5 rounded-full ${opt.color} shrink-0 shadow-sm`} />
+                        <span className="text-xs font-bold text-slate-700">{opt.label}</span>
+                      </div>
+                    </Select.Option>
+                  ))}
+                </Select>
               ) : (
-                <Tag color={STATUS_COLOR[task.status]}>{task.status?.replace(/_/g, " ")}</Tag>
+                <span className={`inline-flex items-center px-3 py-1.5 text-xs font-extrabold text-white rounded-xl shadow-md select-none ${
+                  task.status === "DONE" ? "bg-emerald-600" :
+                  task.status === "CANCELLED" ? "bg-red-600" :
+                  task.status === "WAITING_REVIEW" ? "bg-amber-500" :
+                  task.status === "DOING" ? "bg-blue-600" :
+                  task.status === "REWORK" ? "bg-purple-600" :
+                  "bg-slate-500"
+                }`}>
+                  {task.status?.replace(/_/g, " ")}
+                </span>
               )}
+
+              {/* Sprint Badge */}
               {task.sprintName && (
-                <span className="px-2 py-0.5 text-xs bg-orange-50 text-orange-600 rounded-lg border border-orange-100 font-bold">{task.sprintName}</span>
+                <span className="inline-flex items-center px-3 py-1 text-xs bg-gradient-to-r from-orange-50 to-amber-50/50 text-orange-600 rounded-xl border border-orange-100 font-bold shadow-sm select-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 mr-1.5 animate-pulse" />
+                  {task.sprintName}
+                </span>
               )}
             </div>
           </div>
@@ -393,35 +433,96 @@ const TaskDetailPage: React.FC = () => {
         <div className="lg:col-span-8 space-y-6">
           {/* Details Section */}
           <Section title="Task Description">
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Main Description */}
               {task.description ? (
-                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{task.description}</p>
+                <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap bg-slate-50/30 p-4 rounded-xl border border-slate-100">
+                  {task.description}
+                </div>
               ) : (
-                <p className="text-sm text-slate-400 italic">No description provided.</p>
-              )}
-
-              {task.goal && <Field label="Target Goals" value={task.goal} />}
-              {task.expectedResult && <Field label="Expected Deliverables" value={task.expectedResult} />}
-              {task.assignmentBrief && <Field label="Assignment Brief" value={task.assignmentBrief} />}
-              {task.assignmentHow && <Field label="Execution Guidelines (How-to)" value={task.assignmentHow} />}
-              {task.resultNote && (
-                <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-100 mt-4">
-                  <Field label="Deliverable Results Submitted" value={task.resultNote} />
+                <div className="text-sm text-slate-400 italic bg-slate-50/30 p-4 rounded-xl border border-slate-100 border-dashed">
+                  No description provided.
                 </div>
               )}
+
+              {/* Grid or stack for structured fields */}
+              <div className="space-y-4">
+                {task.goal && (
+                  <div className="p-4 rounded-xl border border-slate-100 bg-amber-50/20 border-l-4 border-l-amber-500 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <CheckCircleIcon className="h-4.5 w-4.5 text-amber-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Target Goals</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.goal}</p>
+                  </div>
+                )}
+
+                {task.expectedResult && (
+                  <div className="p-4 rounded-xl border border-slate-100 bg-indigo-50/20 border-l-4 border-l-indigo-500 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <ListBulletIcon className="h-4.5 w-4.5 text-indigo-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Expected Deliverables</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.expectedResult}</p>
+                  </div>
+                )}
+
+                {task.assignmentBrief && (
+                  <div className="p-4 rounded-xl border border-slate-100 bg-sky-50/20 border-l-4 border-l-sky-500 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <UserIcon className="h-4.5 w-4.5 text-sky-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Assignment Brief</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.assignmentBrief}</p>
+                  </div>
+                )}
+
+                {task.assignmentHow && (
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 border-l-4 border-l-slate-400 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <ChatBubbleLeftRightIcon className="h-4.5 w-4.5 text-slate-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Execution Guidelines (How-to)</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.assignmentHow}</p>
+                  </div>
+                )}
+
+                {task.resultNote && (
+                  <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/20 border-l-4 border-l-emerald-500 transition duration-150 hover:shadow-sm">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <CheckCircleIcon className="h-4.5 w-4.5 text-emerald-500 shrink-0" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">Deliverable Results Submitted</span>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">{task.resultNote}</p>
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100 text-xs">
                 {(isCreator || !!myAssignment) ? (
                   <div className="flex items-center gap-2 text-slate-600">
                     <CalendarIcon className="h-4 w-4 text-orange-400 shrink-0" />
                     {editDueDate ? (
-                      <DatePicker
-                        size="small"
-                        defaultValue={task.dueAt ? dayjs(task.dueAt) : undefined}
-                        autoFocus
-                        onChange={(d) => handleDueDateChange(d)}
-                        onOpenChange={(open) => { if (!open) setEditDueDate(false); }}
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-40 h-[38px]">
+                          <DatePickerField
+                            value={task.dueAt ? dayjs(task.dueAt).format("YYYY-MM-DD") : ""}
+                            onChange={(dStr) => {
+                              if (dStr) {
+                                handleDueDateChange(dayjs(dStr));
+                              }
+                              setEditDueDate(false);
+                            }}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditDueDate(false)}
+                          className="px-2.5 py-1 text-xs font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition h-[38px]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     ) : (
                       <span
                         className="cursor-pointer hover:text-orange-500 transition"
@@ -481,11 +582,26 @@ const TaskDetailPage: React.FC = () => {
                           <span>Assignee: <span className="font-semibold text-slate-600">{sub.assignments?.[0]?.assigneeName || "Unassigned"}</span></span>
                           {canChangeSubStatus ? (
                             editingSubtaskDueId === sub.id ? (
-                              <DatePicker size="small" autoFocus
-                                defaultValue={sub.dueAt ? dayjs(sub.dueAt) : undefined}
-                                onChange={(d) => handleSubtaskDueDateChange(sub.id, d)}
-                                onOpenChange={(open) => { if (!open) setEditingSubtaskDueId(null); }}
-                              />
+                              <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                                <div className="w-36 h-[34px]">
+                                  <DatePickerField
+                                    value={sub.dueAt ? dayjs(sub.dueAt).format("YYYY-MM-DD") : ""}
+                                    onChange={(dStr) => {
+                                      if (dStr) {
+                                        handleSubtaskDueDateChange(sub.id, dayjs(dStr));
+                                      }
+                                      setEditingSubtaskDueId(null);
+                                    }}
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingSubtaskDueId(null)}
+                                  className="px-2 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition h-[34px] flex items-center"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             ) : (
                               <span className="cursor-pointer hover:text-orange-500 transition"
                                 onClick={() => setEditingSubtaskDueId(sub.id)}>
@@ -536,56 +652,97 @@ const TaskDetailPage: React.FC = () => {
 
           {/* Collaborative Discussions Section */}
           <Section title="Collaboration Discussion">
-            <div className="space-y-4">
-              {/* Comment Input */}
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-inner">
-                  {getInitials(me?.fullName)}
-                </div>
-                <div className="flex-1 space-y-2">
-                  <Input.TextArea rows={2} placeholder="Write comments or collaborate with team members... Select team member below to mention."
-                    value={commentText} onChange={(e) => setCommentText(e.target.value)} />
-                  <div className="flex justify-between items-center gap-2">
-                    <Select placeholder="Mention team member..." size="small" className="w-48"
-                      onChange={(val) => setCommentText(prev => prev ? `${prev} @${val} ` : `@${val} `)}
-                      options={users.map(u => ({ value: u.fullName, label: u.fullName }))}
-                    />
-                    <button type="button" onClick={handleAddComment}
-                      className="inline-flex items-center gap-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition">
-                      <PaperAirplaneIcon className="h-3 w-3" />
-                      Post Comment
-                    </button>
+            <div className="space-y-6">
+              {/* Comment Input Card */}
+              <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+                <div className="flex gap-3">
+                  <div className="w-9 h-9 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-inner">
+                    {getInitials(me?.fullName)}
                   </div>
+                  <div className="flex-1">
+                    <Input.TextArea
+                      rows={3}
+                      placeholder="Write a reply or collaborate with team members... Type @ to mention."
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      className="rounded-xl border-slate-200 hover:border-orange-400 focus:border-orange-400 transition"
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mention:</span>
+                    <Select
+                      placeholder="Select team member..."
+                      size="middle"
+                      className="w-48 [&>.ant-select-selector]:!rounded-xl [&>.ant-select-selector]:!border-slate-200 hover:[&>.ant-select-selector]:!border-orange-400 focus:[&>.ant-select-selector]:!border-orange-400"
+                      onChange={(val) => setCommentText(prev => prev ? `${prev} @${val} ` : `@${val} `)}
+                      value={undefined}
+                      optionLabelProp="label"
+                    >
+                      {users.map(u => {
+                        const initials = getInitials(u.fullName);
+                        return (
+                          <Select.Option key={u.id} value={u.fullName} label={u.fullName}>
+                            <div className="flex items-center gap-2 py-0.5">
+                              <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[9px] font-bold text-white shrink-0 shadow-sm">
+                                {initials}
+                              </div>
+                              <span className="text-sm font-medium text-slate-700">{u.fullName}</span>
+                            </div>
+                          </Select.Option>
+                        );
+                      })}
+                    </Select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddComment}
+                    className="inline-flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm hover:shadow transition duration-150 shrink-0"
+                  >
+                    <PaperAirplaneIcon className="h-3.5 w-3.5" />
+                    Post Comment
+                  </button>
                 </div>
               </div>
 
               {/* Comments Feed */}
-              <div className="space-y-3.5 border-t border-slate-100 pt-4 max-h-[400px] overflow-y-auto pr-1">
+              <div className="space-y-4 max-h-[420px] overflow-y-auto pr-2 scrollbar-thin">
                 {comments.length === 0 ? (
-                  <p className="text-center py-6 text-xs text-slate-400 italic">No comments yet. Start collaborative chat!</p>
+                  <div className="text-center py-10 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-sm font-semibold text-slate-400">No discussions yet</p>
+                    <p className="text-xs text-slate-400/80 mt-1">Start the conversation by posting a comment above.</p>
+                  </div>
                 ) : (
-                  comments.map(c => (
-                    <div key={c.id} className="flex gap-3 group">
-                      <div className="w-8 h-8 rounded-full bg-slate-300 text-slate-700 text-xs font-bold flex items-center justify-center shrink-0">
-                        {getInitials(c.authorName)}
-                      </div>
-                      <div className="flex-1 bg-slate-50/70 border border-slate-200/50 rounded-xl p-3 space-y-1 relative">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-800">{c.authorName}</span>
-                          <span className="text-[10px] text-slate-400">{fmt(c.createdAt)}</span>
+                  comments.map(c => {
+                    const initials = getInitials(c.authorName);
+                    return (
+                      <div key={c.id} className="flex gap-3 group">
+                        <div className="w-9 h-9 rounded-full bg-[#172b4d] text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-sm">
+                          {initials}
                         </div>
-                        <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{c.content}</p>
-                        
-                        {/* Delete comment */}
-                        {me?.id === c.authorId && (
-                          <button type="button" onClick={() => handleDeleteComment(c.id)}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition">
-                            <TrashIcon className="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                        <div className="flex-1 bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md transition duration-200 relative">
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="font-bold text-slate-800 text-sm">{c.authorName}</span>
+                            <span className="text-[11px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">{fmt(c.createdAt)}</span>
+                          </div>
+                          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap m-0 pr-6">{c.content}</p>
+                          
+                          {/* Delete comment */}
+                          {me?.id === c.authorId && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteComment(c.id)}
+                              className="absolute top-3.5 right-3.5 opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition duration-150"
+                              title="Delete comment"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -604,14 +761,15 @@ const TaskDetailPage: React.FC = () => {
                       {getInitials(task.reviewerName)}
                     </div>
                     <div>
-                      <p className="font-bold text-slate-800 text-sm">{task.reviewerName}</p>
-                      <p className="text-[10px] text-slate-400">Review status: <span className="font-bold">{task.reviewerStatus}</span></p>
+                      <p className="font-bold text-slate-800 text-sm leading-normal">{task.reviewerName}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {task.reviewDecision ? (
+                          <Badge value={task.reviewDecision} />
+                        ) : (
+                          <Badge value={task.reviewerStatus ?? ""} />
+                        )}
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge value={task.reviewerStatus ?? ""} />
-                    {task.reviewDecision && <Badge value={task.reviewDecision} />}
                   </div>
                   {task.reviewComment && (
                     <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 italic text-slate-500 mt-2">
@@ -759,7 +917,10 @@ const TaskDetailPage: React.FC = () => {
             </div>
             <div className="space-y-1">
               <span className="text-xs font-semibold text-slate-500">Due Date</span>
-              <DatePicker className="w-full" value={subtaskDueDate} onChange={setSubtaskDueDate} />
+              <DatePickerField
+                value={subtaskDueDate ? subtaskDueDate.format("YYYY-MM-DD") : ""}
+                onChange={(dStr) => setSubtaskDueDate(dStr ? dayjs(dStr) : null)}
+              />
             </div>
           </div>
           <div className="space-y-1">
@@ -833,36 +994,148 @@ const TaskDetailPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* User picker modal (shared for assign / invite reviewer / add supporter) */}
-      {[
-        { open: assignModal, title: "Assign Task", onOk: handleAssign, onCancel: () => setAssignModal(false), extra: (
-          <div className="space-y-3 mt-3">
-            <Input placeholder="Brief / reason for choosing this person"
-              value={assignBrief} onChange={(e) => setAssignBrief(e.target.value)} />
-            <Input placeholder="How-to guidance"
-              value={assignHow} onChange={(e) => setAssignHow(e.target.value)} />
+      {/* Assign Task Modal */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <span className="p-1.5 bg-orange-50 rounded-lg">
+              <UserIcon className="h-5 w-5 text-orange-500" />
+            </span>
+            <span className="font-bold text-slate-800 text-lg">Assign Task</span>
           </div>
-        )},
-        { open: inviteReviewerModal, title: "Invite Reviewer", onOk: handleInviteReviewer, onCancel: () => setInviteReviewerModal(false), extra: null },
-      ].map(({ open, title, onOk, onCancel, extra }) => (
-        <Modal key={title} title={title} open={open} onCancel={onCancel}
-          onOk={onOk} confirmLoading={busy} okText="Confirm"
-          okButtonProps={{ disabled: !selectedUserId, className: "bg-orange-500 hover:bg-orange-600 border-none" }}>
-          <div className="space-y-3">
+        }
+        open={assignModal}
+        onCancel={() => { setAssignModal(false); setSelectedUserId(""); setAssignBrief(""); setAssignHow(""); setUserResults([]); setUserSearch(""); }}
+        onOk={handleAssign}
+        confirmLoading={busy}
+        okText="Confirm Assignment"
+        cancelText="Cancel"
+        className="rounded-2xl overflow-hidden [&>.ant-modal-content]:!rounded-2xl"
+        okButtonProps={{
+          disabled: !selectedUserId,
+          className: `rounded-xl h-10 px-5 text-sm font-semibold border-none ${
+            selectedUserId ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-100 text-slate-400"
+          }`
+        }}
+        cancelButtonProps={{ className: "rounded-xl h-10 px-5 text-sm font-semibold border-slate-200" }}
+      >
+        <div className="space-y-4 pt-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Search Assignee</label>
             <Select
-              showSearch filterOption={false}
+              showSearch
+              filterOption={false}
+              optionLabelProp="label"
               placeholder="Search user by name or email..."
-              className="w-full"
+              className="w-full [&>.ant-select-selector]:!rounded-xl [&>.ant-select-selector]:!border-slate-200 hover:[&>.ant-select-selector]:!border-orange-400 focus:[&>.ant-select-selector]:!border-orange-400 [&>.ant-select-selector]:!h-[38px] [&>.ant-select-selector]:!flex [&>.ant-select-selector]:!items-center transition"
               value={selectedUserId || undefined}
               onSearch={handleSearchUsers}
               onChange={setSelectedUserId}
-              options={userSelectOptions}
+              allowClear
               notFoundContent={userSearch ? "No users found" : "Type to search"}
-            />
-            {extra}
+            >
+              {userResults.map((u) => {
+                const initials = getInitials(u.fullName);
+                return (
+                  <Select.Option key={u.id} value={u.id} label={u.fullName}>
+                    <div className="flex items-center gap-2.5 py-0.5">
+                      <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-sm">
+                        {initials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-800 leading-normal m-0">{u.fullName}</p>
+                        <p className="text-xs text-slate-400 m-0 truncate">{u.email}</p>
+                      </div>
+                    </div>
+                  </Select.Option>
+                );
+              })}
+            </Select>
           </div>
-        </Modal>
-      ))}
+
+          <div className="space-y-3.5 pt-2 border-t border-slate-100/60">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Assignment Brief (Optional)</label>
+              <Input
+                placeholder="Brief / reason for choosing this person"
+                value={assignBrief}
+                onChange={(e) => setAssignBrief(e.target.value)}
+                className="rounded-xl h-[38px] border-slate-200 hover:border-orange-400 focus:border-orange-400 transition"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">How-to Guidance (Optional)</label>
+              <Input
+                placeholder="How-to guidance"
+                value={assignHow}
+                onChange={(e) => setAssignHow(e.target.value)}
+                className="rounded-xl h-[38px] border-slate-200 hover:border-orange-400 focus:border-orange-400 transition"
+              />
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Invite Reviewer Modal */}
+      <Modal
+        title={
+          <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <span className="p-1.5 bg-orange-50 rounded-lg">
+              <UserIcon className="h-5 w-5 text-orange-500" />
+            </span>
+            <span className="font-bold text-slate-800 text-lg">Invite Reviewer</span>
+          </div>
+        }
+        open={inviteReviewerModal}
+        onCancel={() => { setInviteReviewerModal(false); setSelectedUserId(""); setUserResults([]); setUserSearch(""); }}
+        onOk={handleInviteReviewer}
+        confirmLoading={busy}
+        okText="Invite Reviewer"
+        cancelText="Cancel"
+        className="rounded-2xl overflow-hidden [&>.ant-modal-content]:!rounded-2xl"
+        okButtonProps={{
+          disabled: !selectedUserId,
+          className: `rounded-xl h-10 px-5 text-sm font-semibold border-none ${
+            selectedUserId ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-100 text-slate-400"
+          }`
+        }}
+        cancelButtonProps={{ className: "rounded-xl h-10 px-5 text-sm font-semibold border-slate-200" }}
+      >
+        <div className="space-y-4 pt-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Search Reviewer</label>
+            <Select
+              showSearch
+              filterOption={false}
+              optionLabelProp="label"
+              placeholder="Search user by name or email..."
+              className="w-full [&>.ant-select-selector]:!rounded-xl [&>.ant-select-selector]:!border-slate-200 hover:[&>.ant-select-selector]:!border-orange-400 focus:[&>.ant-select-selector]:!border-orange-400 [&>.ant-select-selector]:!h-[38px] [&>.ant-select-selector]:!flex [&>.ant-select-selector]:!items-center transition"
+              value={selectedUserId || undefined}
+              onSearch={handleSearchUsers}
+              onChange={setSelectedUserId}
+              allowClear
+              notFoundContent={userSearch ? "No users found" : "Type to search"}
+            >
+              {userResults.map((u) => {
+                const initials = getInitials(u.fullName);
+                return (
+                  <Select.Option key={u.id} value={u.id} label={u.fullName}>
+                    <div className="flex items-center gap-2.5 py-0.5">
+                      <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white shrink-0 shadow-sm">
+                        {initials}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-800 leading-normal m-0">{u.fullName}</p>
+                        <p className="text-xs text-slate-400 m-0 truncate">{u.email}</p>
+                      </div>
+                    </div>
+                  </Select.Option>
+                );
+              })}
+            </Select>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         title="Delete Task"

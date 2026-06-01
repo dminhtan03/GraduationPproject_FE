@@ -25,7 +25,6 @@ import type { Reservation, UserProfile } from "../types";
 import {
   resolveBookingRoomCode,
   resolveQuickActionLabel,
-  CAPACITY_RANGE_OPTIONS,
   type BookingTimeMode,
   type BookingTimeUiState,
   buildBookingDayOptions,
@@ -62,7 +61,7 @@ const WIDGET_STORAGE_KEY = "ai_widget_chat_state_v1";
 
 // ── Default fallback quick‐action menu ────────────────────────────────────────
 
-const DEFAULT_MENU_OPTIONS: AiMenuOption[] = [
+export const DEFAULT_MENU_OPTIONS: AiMenuOption[] = [
   { code: "1", label: "Đặt phòng", intent: "BOOK_ROOM" },
   { code: "2", label: "Hủy phòng", intent: "CANCEL_RESERVATION" },
   { code: "3", label: "Gia hạn thời gian", intent: "EXTEND_RESERVATION" },
@@ -198,28 +197,32 @@ export function useAiChat() {
     };
   }, [missingBookingCodes]);
 
-  const updateBookingTimeState = useCallback((
-    messageId: string,
-    updater: (current: BookingTimeUiState) => BookingTimeUiState,
-  ) => {
-    setBookingTimeUiByMessage((prev) => {
-      const current = prev[messageId] ?? {
-        mode: "quick" as BookingTimeMode,
-        dayIndex: 0,
-        time: getAvailableTimeSlots(0, new Date())[0] ?? "",
-        manualMessage: "",
-      };
-      return {
-        ...prev,
-        [messageId]: updater(current),
-      };
-    });
-  }, []);
+  const updateBookingTimeState = useCallback(
+    (
+      messageId: string,
+      updater: (current: BookingTimeUiState) => BookingTimeUiState,
+    ) => {
+      setBookingTimeUiByMessage((prev) => {
+        const current = prev[messageId] ?? {
+          mode: "quick" as BookingTimeMode,
+          dayIndex: 0,
+          time: getAvailableTimeSlots(0, new Date())[0] ?? "",
+          manualMessage: "",
+        };
+        return {
+          ...prev,
+          [messageId]: updater(current),
+        };
+      });
+    },
+    [],
+  );
 
   // ── Derived: menu options (from API or fallback) ──────────────────────────
 
   const menuOptions = useMemo(
-    () => (activeMenuOptions.length > 0 ? activeMenuOptions : DEFAULT_MENU_OPTIONS),
+    () =>
+      activeMenuOptions.length > 0 ? activeMenuOptions : DEFAULT_MENU_OPTIONS,
     [activeMenuOptions],
   );
 
@@ -501,9 +504,7 @@ export function useAiChat() {
           toText(roomNode?.building) ||
           toText(buildingNode?.name) ||
           toText(buildingNode?.buildingName) ||
-          toText(
-            (buildingNode as Record<string, unknown> | null)?.code,
-          ) ||
+          toText((buildingNode as Record<string, unknown> | null)?.code) ||
           toText(suggestion.building) ||
           resolvedBuilding,
         floorInfo:
@@ -515,9 +516,7 @@ export function useAiChat() {
           toText(roomNode?.floor) ||
           toText(floorNode?.name) ||
           toText(floorNode?.floorName) ||
-          toText(
-            (floorNode as Record<string, unknown> | null)?.floorInfo,
-          ) ||
+          toText((floorNode as Record<string, unknown> | null)?.floorInfo) ||
           toText(suggestion.floor) ||
           resolvedFloor,
         slot: toPositiveNumber(source.slot || source.capacity),
@@ -637,4 +636,3 @@ export function useAiChat() {
     toRecord,
   };
 }
-

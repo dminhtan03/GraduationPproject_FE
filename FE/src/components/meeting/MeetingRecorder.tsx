@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Spin, Tag } from "antd";
+import { Spin, Tag, Select } from "antd";
 import {
   MicrophoneIcon, StopIcon, ArrowUpTrayIcon,
   DocumentTextIcon, CheckCircleIcon, ClipboardDocumentListIcon,
@@ -7,6 +7,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { meetingService } from "../../services/meetingService";
 import { taskService } from "../../services/taskService";
+import { projectService } from "../../services/projectService";
 
 interface TaskInfo {
   draftId?: string;
@@ -60,12 +61,40 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
   });
   const [creatingKey, setCreatingKey] = useState<string | null>(null);
 
+  // Audio file for playback + download after recording/import
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  // Project / sprint selector for task assignment
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(undefined);
+  const [projectSprints, setProjectSprints] = useState<any[]>([]);
+  const [selectedSprintId, setSelectedSprintId] = useState<string | undefined>(undefined);
+
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => () => clearInterval(timerRef.current), []);
+  useEffect(() => () => {
+    clearInterval(timerRef.current);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load projects for task assignment selector
+  useEffect(() => {
+    projectService.listProjects().then(setProjects).catch(() => {});
+  }, []);
+
+  // Load sprints of selected project
+  useEffect(() => {
+    if (!selectedProjectId) { setProjectSprints([]); setSelectedSprintId(undefined); return; }
+    taskService.listSprints()
+      .then((all: any[]) => setProjectSprints(all.filter((s: any) => s.projectId === selectedProjectId)))
+      .catch(() => {});
+    setSelectedSprintId(undefined);
+  }, [selectedProjectId]);
 
   // Auto-stop at 15 minutes
   useEffect(() => {
@@ -131,6 +160,10 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
     setPhase("processing");
     setUploadPct(0);
     setErrorMsg("");
+    // Save audio for playback/download — revoke previous URL first
+    setAudioBlob(audio);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(URL.createObjectURL(audio));
     try {
       const data = await meetingService.processRecording(audio, reservationId, meetingTitle, setUploadPct);
       setResult(data);
@@ -154,6 +187,8 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
         priority: task.priority ?? "MEDIUM",
         dueAt: task.dueAt,
         meetingId: result?.meetingId,
+        sprintId: selectedSprintId,
+        projectId: selectedProjectId,
       });
       // Lưu taskId vào localStorage để TaskList highlight
       if (created?.id) {
@@ -164,9 +199,9 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
           localStorage.setItem("new_tasks_from_ai", JSON.stringify(existing));
         } catch { /* non-fatal */ }
       }
-      // Nếu có draftId, approve draft để liên kết task
+      // Link draft to the created task (pass taskId so backend doesn't create a duplicate)
       if (task.draftId) {
-        try { await meetingService.approveDraft(task.draftId); } catch { /* non-fatal */ }
+        try { await meetingService.approveDraft(task.draftId, created?.id); } catch { /* non-fatal */ }
       }
       setCreatedTasks((prev) => new Set(prev).add(key));
     } catch { /* ignore */ }
@@ -250,11 +285,40 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
       <div className="flex items-center justify-between">
         <p className="text-lg font-semibold text-slate-900">Biên bản cuộc họp</p>
         <button type="button"
-          onClick={() => { setPhase("idle"); setResult(null); setCreatedTasks(new Set()); }}
+          onClick={() => {
+            setPhase("idle"); setResult(null); setCreatedTasks(new Set());
+            setAudioBlob(null);
+            if (audioUrl) { URL.revokeObjectURL(audioUrl); setAudioUrl(null); }
+          }}
           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
           <ArrowPathIcon className="h-3.5 w-3.5" /> Ghi âm lại
         </button>
       </div>
+
+      {/* Audio player + download */}
+      {audioUrl && audioBlob && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+              <MicrophoneIcon className="h-4 w-4 text-slate-500" />
+              File ghi âm
+            </p>
+            <a
+              href={audioUrl}
+              download={`meeting-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}${audioBlob.type.includes("ogg") ? ".ogg" : ".webm"}`}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 transition"
+            >
+              <ArrowUpTrayIcon className="h-3.5 w-3.5 rotate-180" /> Tải về
+            </a>
+          </div>
+          <audio
+            controls
+            src={audioUrl}
+            className="w-full h-10"
+            style={{ borderRadius: "8px" }}
+          />
+        </div>
+      )}
 
       {/* Tóm tắt */}
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
@@ -277,6 +341,35 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
             <p className="text-sm font-semibold text-slate-800">
               Nhiệm vụ được trích xuất ({result.tasks.length})
             </p>
+          </div>
+
+          {/* Project + Sprint selector */}
+          <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <p className="text-xs font-semibold text-slate-600">Chọn dự án để gán nhiệm vụ (tuỳ chọn)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Select
+                placeholder="Chọn dự án..."
+                allowClear
+                size="small"
+                className="w-full"
+                value={selectedProjectId}
+                onChange={(v) => setSelectedProjectId(v)}
+                options={projects.map((p: any) => ({ value: p.id, label: p.name }))}
+              />
+              <Select
+                placeholder="Chọn sprint..."
+                allowClear
+                size="small"
+                className="w-full"
+                disabled={!selectedProjectId || projectSprints.length === 0}
+                value={selectedSprintId}
+                onChange={(v) => setSelectedSprintId(v)}
+                options={projectSprints.map((s: any) => ({ value: s.id, label: s.name }))}
+              />
+            </div>
+            {selectedProjectId && projectSprints.length === 0 && (
+              <p className="text-[11px] text-slate-400">Dự án này chưa có sprint nào.</p>
+            )}
           </div>
           <div className="space-y-2">
             {result.tasks.map((task, idx) => {

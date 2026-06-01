@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Tag, Tabs, Empty, Spin, Select, Modal, Input, DatePicker, Button, Tooltip, Dropdown, MenuProps } from "antd";
 import {
   PlusIcon,
@@ -13,16 +13,19 @@ import {
   TrashIcon,
   CalendarIcon,
   ChevronDownIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  MagnifyingGlassIcon
 } from "@heroicons/react/24/outline";
 import dayjs from "dayjs";
 import { taskService } from "../../services/taskService";
+import { projectService } from "../../services/projectService";
 import { getProfile } from "../../services/authService";
 import { userService } from "../../services/userService";
 import { useTaskNotifications } from "../../hooks/useTaskNotifications";
 import CustomMessage, { type MessageType } from "../../components/common/CustomMessage";
 import { Chart as ChartJS, ArcElement, Tooltip as ChartTooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
+import DatePickerField from "../../components/common/DatePickerField";
 
 ChartJS.register(ArcElement, ChartTooltip, Legend, CategoryScale, LinearScale, BarElement);
 
@@ -46,6 +49,10 @@ type TabKey = "tasks" | "board" | "backlog" | "analytics";
 
 const TaskListPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("projectId") ?? undefined;
+  const [projectInfo, setProjectInfo] = useState<any>(null);
+
   const [activeTab, setActiveTab] = useState<TabKey>("tasks");
   const [tasks, setTasks] = useState<any[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
@@ -94,6 +101,10 @@ const TaskListPage: React.FC = () => {
 
   const workplaceSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const quickAssignSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Holds sprint IDs belonging to the current project — used to filter tasks
+  const projectSprintIdsRef = useRef<Set<string>>(new Set());
+  // Tracks which project IDs have already been repaired this session
+  const repairedProjectsRef = useRef<Set<string>>(new Set());
 
   const show = (type: MessageType, message: string) => {
     setToast({ type, message });
@@ -103,23 +114,50 @@ const TaskListPage: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [tData, sData] = await Promise.all([
-        taskService.listMyTasks(),
-        taskService.listSprints()
+      // When in project context, backend filters tasks by project (sprint or direct tag)
+      const [tData, sData, pData] = await Promise.all([
+        taskService.listMyTasks(undefined, undefined, undefined, projectId),
+        taskService.listSprints(),
+        projectId ? projectService.getProject(projectId) : Promise.resolve(null),
       ]);
-      setTasks(tData);
-      setSprints(sData);
+
+      if (projectId) {
+        const projectSprints = sData.filter((s: any) => s.projectId === projectId);
+        const sprintIds = new Set<string>(projectSprints.map((s: any) => s.id));
+        projectSprintIdsRef.current = sprintIds;
+        setSprints(projectSprints);
+        // Silently repair tasks whose PROJECT_ID is wrong/missing (only once per session per project)
+        if (!repairedProjectsRef.current.has(projectId)) {
+          repairedProjectsRef.current.add(projectId);
+          projectService.repairTasks(projectId)
+            .then((res: any) => {
+              if (res?.fixed > 0) void loadData(); // reload only if something was actually fixed
+            })
+            .catch(() => {});
+        }
+        // Backend already filtered — tData contains only this project's tasks
+        setTasks(tData);
+        setWorkplaceItems(tData);
+      } else {
+        projectSprintIdsRef.current = new Set();
+        setSprints(sData);
+        setTasks(tData);
+      }
+
+      if (pData) setProjectInfo(pData);
     } catch {
       show("error", "Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [projectId]);
 
-  const loadWorkplaceItems = useCallback(async (search?: string, status?: string) => {
+  const loadWorkplaceItems = useCallback(async (search?: string, status?: string, projId?: string) => {
     setWorkplaceLoading(true);
     try {
-      const data = await taskService.listMyTasks(undefined, search, status !== "ALL" ? status : undefined);
+      // Pass projectId to backend so it filters correctly at DB level
+      const data = await taskService.listMyTasks(
+        undefined, search, status !== "ALL" ? status : undefined, projId);
       setWorkplaceItems(data);
     } catch { /* silent */ }
     finally { setWorkplaceLoading(false); }
@@ -139,7 +177,7 @@ const TaskListPage: React.FC = () => {
   useEffect(() => {
     clearTimeout(workplaceSearchTimer.current);
     workplaceSearchTimer.current = setTimeout(() => {
-      void loadWorkplaceItems(searchQuery, statusFilter);
+      void loadWorkplaceItems(searchQuery, statusFilter, projectId);
     }, 300);
     return () => clearTimeout(workplaceSearchTimer.current);
   }, [searchQuery, statusFilter, loadWorkplaceItems]);
@@ -197,6 +235,7 @@ const TaskListPage: React.FC = () => {
         name: sprintForm.name,
         startDate: sprintForm.startDate ? dayjs(sprintForm.startDate).format("YYYY-MM-DD") : undefined,
         endDate: sprintForm.endDate ? dayjs(sprintForm.endDate).format("YYYY-MM-DD") : undefined,
+        projectId: projectId,
       });
       show("success", "Sprint created");
       setIsSprintModalOpen(false);
@@ -379,7 +418,7 @@ const TaskListPage: React.FC = () => {
       setDeleteModalOpen(false);
       setDeleteTaskId(null);
       void loadData();
-      void loadWorkplaceItems(searchQuery, statusFilter);
+      void loadWorkplaceItems(searchQuery, statusFilter, projectId);
     } catch {
       show("error", "Failed to delete task");
       setDeleteModalOpen(false);
@@ -415,11 +454,11 @@ const TaskListPage: React.FC = () => {
     // Fire API in background — email sends on server side asynchronously
     taskService.assignTask(taskId, { assigneeId: user.id }).then(() => {
       void loadData();
-      void loadWorkplaceItems(searchQuery, statusFilter);
+      void loadWorkplaceItems(searchQuery, statusFilter, projectId);
     }).catch(() => {
       show("error", "Failed to assign task");
       void loadData();
-      void loadWorkplaceItems(searchQuery, statusFilter);
+      void loadWorkplaceItems(searchQuery, statusFilter, projectId);
     });
   };
 
@@ -464,8 +503,20 @@ const TaskListPage: React.FC = () => {
       {/* Header */}
       <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
+          {projectId && projectInfo && (
+            <div className="flex items-center gap-2 mb-2">
+              <button type="button" onClick={() => navigate("/projects")}
+                className="text-xs text-slate-400 hover:text-orange-500 transition font-medium">
+                Projects
+              </button>
+              <span className="text-slate-300 text-xs">/</span>
+              <span className="text-xs font-semibold text-orange-500">{projectInfo.name}</span>
+            </div>
+          )}
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Task Workspace</h1>
-          <p className="text-sm text-slate-500 mt-1.5 font-medium">Plan, track, and ship your next big thing.</p>
+          <p className="text-sm text-slate-500 mt-1.5 font-medium">
+            {projectInfo ? `${projectInfo.name} · ` : ""}Plan, track, and ship your next big thing.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => setIsSprintModalOpen(true)}
@@ -473,7 +524,7 @@ const TaskListPage: React.FC = () => {
             <PlusIcon className="h-4 w-4 text-slate-500" />
             Create Sprint
           </button>
-          <button type="button" onClick={() => navigate("/tasks/create")}
+          <button type="button" onClick={() => navigate(projectId ? `/tasks/create?projectId=${projectId}` : "/tasks/create")}
             className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-600 transition">
             <PlusIcon className="h-4 w-4" />
             New Task
@@ -514,21 +565,37 @@ const TaskListPage: React.FC = () => {
           {/* TAB 1: Workplace List View */}
           {activeTab === "tasks" && (
             <div className="space-y-4">
-              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <Select value={statusFilter} onChange={setStatusFilter} className="w-44"
+              <div className="bg-white p-4.5 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 flex-1 max-w-2xl">
+                  <Input
+                    placeholder="Search tasks..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full sm:w-80 rounded-xl font-medium"
+                    allowClear
+                    prefix={<MagnifyingGlassIcon className="h-4 w-4 text-slate-400 mr-1 shrink-0" />}
+                  />
+                  <Select
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    className="w-full sm:w-48 font-semibold"
                     options={[
                       { value: "ALL", label: "All Statuses" },
                       { value: "TODO", label: "To Do" },
                       { value: "DOING", label: "In Progress" },
-                      { value: "WAITING_REVIEW", label: "Currently Reviewing" },
+                      { value: "WAITING_REVIEW", label: "Waiting Review" },
                       { value: "DONE", label: "Done" },
                       { value: "CANCELLED", label: "Cancelled" },
                       { value: "REWORK", label: "Rework" },
-                    ]} />
-                  <Input placeholder="Search tasks..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-64" />
+                    ]}
+                  />
                 </div>
-                <span className="text-sm font-medium text-slate-500">{workplaceItems.length} tasks</span>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Total:</span>
+                  <span className="px-3 py-1 bg-orange-50 border border-orange-100 text-orange-600 text-sm font-bold rounded-xl shadow-sm">
+                    {workplaceItems.length} tasks
+                  </span>
+                </div>
               </div>
 
               {workplaceLoading ? (
@@ -536,7 +603,7 @@ const TaskListPage: React.FC = () => {
               ) : workplaceItems.length === 0 ? (
                 <Empty className="py-20 bg-white rounded-3xl border border-slate-100 shadow-sm"
                   image={<ClipboardDocumentListIcon className="h-16 w-16 text-slate-200 mx-auto" />}
-                  description="Không có nhiệm vụ nào." />
+                  description="No tasks found." />
               ) : (
                 <div className="grid gap-3.5">
                   {workplaceItems.map((task) => {
@@ -556,16 +623,16 @@ const TaskListPage: React.FC = () => {
                             <p className="font-bold text-slate-900 text-base truncate">{task.title}</p>
                             <Tag color={PRIORITY_COLOR[task.priority]} className="m-0 text-xs font-bold px-2 py-0.5 border-0 rounded-md">{task.priority}</Tag>
                             {isNew && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full animate-pulse">NEW</span>}
-                            {over && <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">QUÁ HẠN</span>}
-                            {near && !over && <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">GẦN HẠN</span>}
+                            {over && <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">OVERDUE</span>}
+                            {near && !over && <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">NEAR DEADLINE</span>}
                           </div>
                           {task.description && <p className="text-sm text-slate-500 line-clamp-1">{task.description}</p>}
                           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-slate-500">
                             <span className={`flex items-center gap-1.5 ${over ? "text-red-600 font-bold" : near ? "text-orange-600 font-bold" : ""}`}>
                               <div className={`w-2 h-2 rounded-full ${over ? "bg-red-400" : near ? "bg-orange-400" : "bg-slate-300"}`} />
-                              Hạn: <span>{fmt(task.dueAt)}</span>
+                              Due: <span>{fmt(task.dueAt)}</span>
                             </span>
-                            {task.assignments?.[0] && <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-300" />Giao cho: <span className="text-slate-700">{task.assignments[0].assigneeName}</span></span>}
+                            {task.assignments?.[0] && <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-300" />Assignee: <span className="text-slate-700">{task.assignments[0].assigneeName}</span></span>}
                             {task.reviewerName && <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-300" />Reviewer: <span className="text-slate-700">{task.reviewerName}</span></span>}
                           </div>
                         </div>
@@ -725,23 +792,48 @@ const TaskListPage: React.FC = () => {
           {activeTab === "backlog" && (
             <div className="space-y-6 max-w-[1200px] mx-auto pb-12">
               {/* Backlog Header + Filters */}
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                <h3 className="font-bold text-slate-800 text-xl">Backlog</h3>
-                <div className="flex flex-wrap items-center gap-3">
-                  <Input
-                    placeholder="Filter by assignee..."
-                    value={backlogAssigneeFilter}
-                    onChange={e => setBacklogAssigneeFilter(e.target.value)}
-                    allowClear className="w-44" size="small"
-                    prefix={<span className="text-[10px] text-slate-400">Assignee</span>}
-                  />
-                  <DatePicker placeholder="From date" size="small" className="w-32"
-                    value={backlogDateFrom} onChange={setBacklogDateFrom} allowClear />
-                  <DatePicker placeholder="To date" size="small" className="w-32"
-                    value={backlogDateTo} onChange={setBacklogDateTo} allowClear />
+              {/* Backlog Header + Filters */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-xl">Backlog Pool</h3>
+                </div>
+                <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 max-w-3xl lg:flex-1 lg:justify-end">
+                  <div className="w-full sm:w-48">
+                    <Input
+                      placeholder="Filter by assignee..."
+                      value={backlogAssigneeFilter}
+                      onChange={e => setBacklogAssigneeFilter(e.target.value)}
+                      allowClear
+                      className="w-full rounded-xl"
+                      prefix={<MagnifyingGlassIcon className="h-4 w-4 text-slate-400 mr-1 shrink-0" />}
+                    />
+                  </div>
+                  <div className="w-full sm:w-40 h-[38px]">
+                    <DatePickerField
+                      value={backlogDateFrom ? backlogDateFrom.format("YYYY-MM-DD") : ""}
+                      onChange={(d) => setBacklogDateFrom(d ? dayjs(d) : null)}
+                      placeholder="From date"
+                    />
+                  </div>
+                  <div className="w-full sm:w-40 h-[38px]">
+                    <DatePickerField
+                      value={backlogDateTo ? backlogDateTo.format("YYYY-MM-DD") : ""}
+                      onChange={(d) => setBacklogDateTo(d ? dayjs(d) : null)}
+                      placeholder="To date"
+                    />
+                  </div>
                   {(backlogAssigneeFilter || backlogDateFrom || backlogDateTo) && (
-                    <button type="button" onClick={() => { setBacklogAssigneeFilter(""); setBacklogDateFrom(null); setBacklogDateTo(null); }}
-                      className="text-xs text-red-500 hover:underline">Clear filters</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBacklogAssigneeFilter("");
+                        setBacklogDateFrom(null);
+                        setBacklogDateTo(null);
+                      }}
+                      className="text-xs font-semibold text-red-500 hover:text-red-600 hover:underline px-2.5 py-1.5 bg-red-50 rounded-lg self-end sm:self-center transition"
+                    >
+                      Clear filters
+                    </button>
                   )}
                 </div>
               </div>
@@ -869,7 +961,12 @@ const TaskListPage: React.FC = () => {
                             })
                           )}
                           <div className="px-4 py-2 text-xs text-slate-500 font-semibold hover:bg-slate-50 cursor-pointer flex items-center gap-2 transition"
-                               onClick={() => navigate('/tasks/create')}>
+                               onClick={() => {
+                                 const url = projectId
+                                   ? `/tasks/create?projectId=${projectId}&sprintId=${sprint.id}`
+                                   : `/tasks/create?sprintId=${sprint.id}`;
+                                 navigate(url);
+                               }}>
                             <PlusIcon className="h-3.5 w-3.5 font-bold" /> Create issue
                           </div>
                         </div>
@@ -968,7 +1065,7 @@ const TaskListPage: React.FC = () => {
                       })
                     )}
                     <div className="px-4 py-2 text-xs text-slate-500 font-semibold hover:bg-slate-50 cursor-pointer flex items-center gap-2 transition"
-                         onClick={() => navigate('/tasks/create')}>
+                         onClick={() => navigate(projectId ? `/tasks/create?projectId=${projectId}` : '/tasks/create')}>
                       <PlusIcon className="h-3.5 w-3.5 font-bold" /> Create issue
                     </div>
                   </div>
@@ -998,20 +1095,48 @@ const TaskListPage: React.FC = () => {
       )}
 
       {/* Modals */}
-      <Modal title="Create Sprint" open={isSprintModalOpen} onCancel={() => setIsSprintModalOpen(false)} onOk={handleCreateSprint} okText="Create Sprint">
+      <Modal
+        title={
+          <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <span className="p-1.5 bg-orange-50 rounded-lg">
+              <CalendarIcon className="h-5 w-5 text-orange-500" />
+            </span>
+            <span className="font-bold text-slate-800 text-lg">Create Sprint</span>
+          </div>
+        }
+        open={isSprintModalOpen}
+        onCancel={() => setIsSprintModalOpen(false)}
+        onOk={handleCreateSprint}
+        okText="Create Sprint"
+        cancelText="Cancel"
+        className="rounded-2xl [&>.ant-modal-content]:!rounded-2xl"
+        okButtonProps={{ className: "!bg-orange-500 hover:!bg-orange-600 !border-none rounded-xl h-10 px-5 text-sm font-semibold text-white" }}
+        cancelButtonProps={{ className: "rounded-xl h-10 px-5 text-sm font-semibold border-slate-200" }}
+      >
         <div className="space-y-4 pt-4">
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Sprint Name</label>
-            <Input placeholder="e.g. Sprint 1, Q3 Planning..." value={sprintForm.name} onChange={e => setSprintForm({ ...sprintForm, name: e.target.value })} />
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Sprint Name</label>
+            <Input
+              placeholder="e.g. Sprint 1, Q3 Planning..."
+              value={sprintForm.name}
+              onChange={e => setSprintForm({ ...sprintForm, name: e.target.value })}
+              className="rounded-xl h-[38px] border-slate-200 hover:border-orange-400 focus:border-orange-400 transition"
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">Start Date</label>
-              <DatePicker className="w-full" value={sprintForm.startDate ? dayjs(sprintForm.startDate) : null} onChange={d => setSprintForm({ ...sprintForm, startDate: d ? d.toDate() : null })} />
+              <DatePickerField
+                label="Start Date"
+                value={sprintForm.startDate ? dayjs(sprintForm.startDate).format("YYYY-MM-DD") : ""}
+                onChange={dStr => setSprintForm({ ...sprintForm, startDate: dStr ? dayjs(dStr).toDate() : null })}
+              />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1">End Date</label>
-              <DatePicker className="w-full" value={sprintForm.endDate ? dayjs(sprintForm.endDate) : null} onChange={d => setSprintForm({ ...sprintForm, endDate: d ? d.toDate() : null })} />
+              <DatePickerField
+                label="End Date"
+                value={sprintForm.endDate ? dayjs(sprintForm.endDate).format("YYYY-MM-DD") : ""}
+                onChange={dStr => setSprintForm({ ...sprintForm, endDate: dStr ? dayjs(dStr).toDate() : null })}
+              />
             </div>
           </div>
         </div>
@@ -1034,55 +1159,137 @@ const TaskListPage: React.FC = () => {
         </div>
       </Modal>
 
-      <Modal title="Submit for Review" open={submitModalOpen} onCancel={() => setSubmitModalOpen(false)} onOk={handleSubmitTask} okText="Submit" cancelText="Cancel">
-        <p className="text-sm text-slate-600 mb-2">Provide any notes or links to your work for the reviewer.</p>
-        <Input.TextArea rows={4} placeholder="Result Note / PR Link..." value={resultNote} onChange={e => setResultNote(e.target.value)} />
+      <Modal
+        title={
+          <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <span className="p-1.5 bg-orange-50 rounded-lg">
+              <BoltIcon className="h-5 w-5 text-orange-500" />
+            </span>
+            <span className="font-bold text-slate-800 text-lg">Submit for Review</span>
+          </div>
+        }
+        open={submitModalOpen}
+        onCancel={() => setSubmitModalOpen(false)}
+        onOk={handleSubmitTask}
+        okText="Submit for Review"
+        cancelText="Cancel"
+        className="rounded-2xl overflow-hidden [&>.ant-modal-content]:!rounded-2xl"
+        okButtonProps={{ className: "bg-orange-500 hover:bg-orange-600 border-none rounded-xl h-10 px-5 text-sm font-semibold" }}
+        cancelButtonProps={{ className: "rounded-xl h-10 px-5 text-sm font-semibold border-slate-200" }}
+      >
+        <div className="space-y-3.5 pt-3">
+          <p className="text-sm font-medium text-slate-500 leading-relaxed">
+            Provide any result notes, links to pull requests, or key deliverables for the reviewer.
+          </p>
+          <Input.TextArea
+            rows={4}
+            placeholder="e.g. Completed page styling. PR link: github.com/..."
+            value={resultNote}
+            onChange={e => setResultNote(e.target.value)}
+            className="rounded-xl border-slate-200 hover:border-orange-400 focus:border-orange-400 transition"
+          />
+        </div>
       </Modal>
 
-      <Modal title="Review Task" open={reviewModalOpen} onCancel={() => setReviewModalOpen(false)} footer={null}>
-        <div className="space-y-4 mt-4">
-          <p className="text-sm text-slate-600">Please review the task completion. You can either approve or request rework.</p>
-          <Input.TextArea rows={3} placeholder="Review comment (optional)..." value={reviewComment} onChange={e => setReviewComment(e.target.value)} />
+      <Modal
+        title={
+          <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <span className="p-1.5 bg-emerald-50 rounded-lg">
+              <CheckIcon className="h-5 w-5 text-emerald-500" />
+            </span>
+            <span className="font-bold text-slate-800 text-lg">Review Task Completion</span>
+          </div>
+        }
+        open={reviewModalOpen}
+        onCancel={() => setReviewModalOpen(false)}
+        footer={null}
+        className="rounded-2xl overflow-hidden [&>.ant-modal-content]:!rounded-2xl"
+      >
+        <div className="space-y-4 pt-3">
+          <p className="text-sm font-medium text-slate-500 leading-relaxed">
+            Please evaluate the submitted deliverables. You can either approve and complete the task or request a rework with comments.
+          </p>
+          <Input.TextArea
+            rows={3}
+            placeholder="Add a review comment (optional)..."
+            value={reviewComment}
+            onChange={e => setReviewComment(e.target.value)}
+            className="rounded-xl border-slate-200 hover:border-orange-400 focus:border-orange-400 transition"
+          />
           <div className="flex items-center gap-3 justify-end pt-2">
-            <Button onClick={() => setReviewModalOpen(false)}>Cancel</Button>
-            <Button danger onClick={() => handleReviewTask("REJECTED")}>Request Rework</Button>
-            <Button type="primary" className="bg-emerald-500 hover:bg-emerald-600 border-none" onClick={() => handleReviewTask("APPROVED")}>Approve & Complete</Button>
+            <button
+              type="button"
+              onClick={() => setReviewModalOpen(false)}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReviewTask("REJECTED")}
+              className="rounded-xl bg-rose-50 border border-rose-100 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition"
+            >
+              Request Rework
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReviewTask("APPROVED")}
+              className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 transition"
+            >
+              Approve & Complete
+            </button>
           </div>
         </div>
       </Modal>
 
       {/* Quick Assign Modal */}
       <Modal
-        title="Assign Task"
+        title={
+          <div className="flex items-center gap-2 pb-2.5 border-b border-slate-100">
+            <span className="p-1.5 bg-orange-50 rounded-lg">
+              <PlusIcon className="h-5 w-5 text-orange-500" />
+            </span>
+            <span className="font-bold text-slate-800 text-lg">Assign Task</span>
+          </div>
+        }
         open={quickAssignModal}
         onCancel={() => { setQuickAssignModal(false); setQuickAssignTaskId(null); setQuickAssignSearch(""); setQuickAssignResults([]); }}
         footer={null}
+        className="rounded-2xl overflow-hidden [&>.ant-modal-content]:!rounded-2xl"
       >
-        <div className="space-y-3 py-2">
+        <div className="space-y-4 pt-3">
           <Input
             placeholder="Search user by name or email..."
             value={quickAssignSearch}
             onChange={(e) => handleQuickAssignSearch(e.target.value)}
+            className="w-full rounded-xl h-[42px] border-slate-200 hover:border-orange-400 focus:border-orange-400 transition"
+            prefix={<MagnifyingGlassIcon className="h-4 w-4 text-slate-400 mr-1.5 shrink-0" />}
             autoFocus
           />
           {quickAssignResults.length > 0 && (
-            <div className="border border-slate-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
-              {quickAssignResults.map((u) => (
-                <div key={u.id} onClick={() => handleQuickAssign(u)}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-orange-50 cursor-pointer border-b border-slate-100 last:border-0 transition">
-                  <div className="w-8 h-8 rounded-full bg-[#172b4d] flex items-center justify-center text-[11px] font-bold text-white shrink-0">
-                    {getInitials(u.fullName)}
+            <div className="border border-slate-100 rounded-xl overflow-hidden max-h-60 overflow-y-auto shadow-sm bg-slate-50/50">
+              {quickAssignResults.map((u) => {
+                const initials = getInitials(u.fullName);
+                return (
+                  <div key={u.id} onClick={() => handleQuickAssign(u)}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-orange-50/60 cursor-pointer border-b border-slate-100/70 last:border-0 transition duration-150">
+                    <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm">
+                      {initials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-800 leading-tight m-0">{u.fullName}</p>
+                      <p className="text-xs text-slate-400 mt-0.5 truncate">{u.email}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{u.fullName}</p>
-                    <p className="text-xs text-slate-400">{u.email}</p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {quickAssignSearch && quickAssignResults.length === 0 && (
-            <p className="text-xs text-slate-400 text-center py-2">No users found</p>
+            <div className="text-center py-6 bg-slate-50 rounded-xl border border-slate-100">
+              <p className="text-sm font-semibold text-slate-400">No users found</p>
+              <p className="text-xs text-slate-400/80 mt-1">Try another search term</p>
+            </div>
           )}
         </div>
       </Modal>

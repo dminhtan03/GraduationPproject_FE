@@ -81,11 +81,11 @@ const Sidebar: React.FC = () => {
       icon: <FolderOutlined />,
       label: "Projects",
     },
-    {
-      key: ROUTES.TASKS,
-      icon: <CheckSquareOutlined />,
-      label: "Tasks",
-    },
+    // {
+    //   key: ROUTES.TASKS,
+    //   icon: <CheckSquareOutlined />,
+    //   label: "Tasks",
+    // },
     // {
     //   key: ROUTES.MEETINGS,
     //   icon: <VideoCameraOutlined />,
