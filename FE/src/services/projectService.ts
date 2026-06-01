@@ -40,4 +40,9 @@ export const projectService = {
   removeMember: async (projectId: string, userId: string) => {
     await api.delete(`${BASE}/${projectId}/members/${userId}`);
   },
+
+  repairTasks: async (projectId: string) => {
+    const res = await api.post(`${BASE}/${projectId}/repair-tasks`);
+    return res?.data?.data ?? res?.data ?? res;
+  },
 };

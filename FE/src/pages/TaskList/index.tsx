@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Tag, Tabs, Empty, Spin, Select, Modal, Input, DatePicker, Button, Tooltip, Dropdown, MenuProps } from "antd";
 import {
   PlusIcon,
@@ -18,6 +18,7 @@ import {
 } from "@heroicons/react/24/outline";
 import dayjs from "dayjs";
 import { taskService } from "../../services/taskService";
+import { projectService } from "../../services/projectService";
 import { getProfile } from "../../services/authService";
 import { userService } from "../../services/userService";
 import { useTaskNotifications } from "../../hooks/useTaskNotifications";
@@ -49,6 +50,10 @@ type TabKey = "tasks" | "board" | "backlog" | "analytics";
 
 const TaskListPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("projectId") ?? undefined;
+  const [projectInfo, setProjectInfo] = useState<any>(null);
+
   const [activeTab, setActiveTab] = useState<TabKey>("tasks");
   const [tasks, setTasks] = useState<any[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
@@ -97,6 +102,10 @@ const TaskListPage: React.FC = () => {
 
   const workplaceSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const quickAssignSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Holds sprint IDs belonging to the current project — used to filter tasks
+  const projectSprintIdsRef = useRef<Set<string>>(new Set());
+  // Tracks which project IDs have already been repaired this session
+  const repairedProjectsRef = useRef<Set<string>>(new Set());
 
   const show = (type: MessageType, message: string) => {
     setToast({ type, message });
@@ -106,23 +115,50 @@ const TaskListPage: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [tData, sData] = await Promise.all([
-        taskService.listMyTasks(),
-        taskService.listSprints()
+      // When in project context, backend filters tasks by project (sprint or direct tag)
+      const [tData, sData, pData] = await Promise.all([
+        taskService.listMyTasks(undefined, undefined, undefined, projectId),
+        taskService.listSprints(),
+        projectId ? projectService.getProject(projectId) : Promise.resolve(null),
       ]);
-      setTasks(tData);
-      setSprints(sData);
+
+      if (projectId) {
+        const projectSprints = sData.filter((s: any) => s.projectId === projectId);
+        const sprintIds = new Set<string>(projectSprints.map((s: any) => s.id));
+        projectSprintIdsRef.current = sprintIds;
+        setSprints(projectSprints);
+        // Silently repair tasks whose PROJECT_ID is wrong/missing (only once per session per project)
+        if (!repairedProjectsRef.current.has(projectId)) {
+          repairedProjectsRef.current.add(projectId);
+          projectService.repairTasks(projectId)
+            .then((res: any) => {
+              if (res?.fixed > 0) void loadData(); // reload only if something was actually fixed
+            })
+            .catch(() => {});
+        }
+        // Backend already filtered — tData contains only this project's tasks
+        setTasks(tData);
+        setWorkplaceItems(tData);
+      } else {
+        projectSprintIdsRef.current = new Set();
+        setSprints(sData);
+        setTasks(tData);
+      }
+
+      if (pData) setProjectInfo(pData);
     } catch {
       show("error", "Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [projectId]);
 
-  const loadWorkplaceItems = useCallback(async (search?: string, status?: string) => {
+  const loadWorkplaceItems = useCallback(async (search?: string, status?: string, projId?: string) => {
     setWorkplaceLoading(true);
     try {
-      const data = await taskService.listMyTasks(undefined, search, status !== "ALL" ? status : undefined);
+      // Pass projectId to backend so it filters correctly at DB level
+      const data = await taskService.listMyTasks(
+        undefined, search, status !== "ALL" ? status : undefined, projId);
       setWorkplaceItems(data);
     } catch { /* silent */ }
     finally { setWorkplaceLoading(false); }
@@ -142,7 +178,7 @@ const TaskListPage: React.FC = () => {
   useEffect(() => {
     clearTimeout(workplaceSearchTimer.current);
     workplaceSearchTimer.current = setTimeout(() => {
-      void loadWorkplaceItems(searchQuery, statusFilter);
+      void loadWorkplaceItems(searchQuery, statusFilter, projectId);
     }, 300);
     return () => clearTimeout(workplaceSearchTimer.current);
   }, [searchQuery, statusFilter, loadWorkplaceItems]);
@@ -200,6 +236,7 @@ const TaskListPage: React.FC = () => {
         name: sprintForm.name,
         startDate: sprintForm.startDate ? dayjs(sprintForm.startDate).format("YYYY-MM-DD") : undefined,
         endDate: sprintForm.endDate ? dayjs(sprintForm.endDate).format("YYYY-MM-DD") : undefined,
+        projectId: projectId,
       });
       show("success", "Sprint created");
       setIsSprintModalOpen(false);
@@ -382,7 +419,7 @@ const TaskListPage: React.FC = () => {
       setDeleteModalOpen(false);
       setDeleteTaskId(null);
       void loadData();
-      void loadWorkplaceItems(searchQuery, statusFilter);
+      void loadWorkplaceItems(searchQuery, statusFilter, projectId);
     } catch {
       show("error", "Failed to delete task");
       setDeleteModalOpen(false);
@@ -418,11 +455,11 @@ const TaskListPage: React.FC = () => {
     // Fire API in background — email sends on server side asynchronously
     taskService.assignTask(taskId, { assigneeId: user.id }).then(() => {
       void loadData();
-      void loadWorkplaceItems(searchQuery, statusFilter);
+      void loadWorkplaceItems(searchQuery, statusFilter, projectId);
     }).catch(() => {
       show("error", "Failed to assign task");
       void loadData();
-      void loadWorkplaceItems(searchQuery, statusFilter);
+      void loadWorkplaceItems(searchQuery, statusFilter, projectId);
     });
   };
 
@@ -467,8 +504,20 @@ const TaskListPage: React.FC = () => {
       {/* Header */}
       <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
+          {projectId && projectInfo && (
+            <div className="flex items-center gap-2 mb-2">
+              <button type="button" onClick={() => navigate("/projects")}
+                className="text-xs text-slate-400 hover:text-orange-500 transition font-medium">
+                Projects
+              </button>
+              <span className="text-slate-300 text-xs">/</span>
+              <span className="text-xs font-semibold text-orange-500">{projectInfo.name}</span>
+            </div>
+          )}
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Task Workspace</h1>
-          <p className="text-sm text-slate-500 mt-1.5 font-medium">Plan, track, and ship your next big thing.</p>
+          <p className="text-sm text-slate-500 mt-1.5 font-medium">
+            {projectInfo ? `${projectInfo.name} · ` : ""}Plan, track, and ship your next big thing.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => setIsSprintModalOpen(true)}
@@ -476,7 +525,7 @@ const TaskListPage: React.FC = () => {
             <PlusIcon className="h-4 w-4 text-slate-500" />
             Create Sprint
           </button>
-          <button type="button" onClick={() => navigate("/tasks/create")}
+          <button type="button" onClick={() => navigate(projectId ? `/tasks/create?projectId=${projectId}` : "/tasks/create")}
             className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-600 transition">
             <PlusIcon className="h-4 w-4" />
             New Task
@@ -913,7 +962,12 @@ const TaskListPage: React.FC = () => {
                             })
                           )}
                           <div className="px-4 py-2 text-xs text-slate-500 font-semibold hover:bg-slate-50 cursor-pointer flex items-center gap-2 transition"
-                               onClick={() => navigate('/tasks/create')}>
+                               onClick={() => {
+                                 const url = projectId
+                                   ? `/tasks/create?projectId=${projectId}&sprintId=${sprint.id}`
+                                   : `/tasks/create?sprintId=${sprint.id}`;
+                                 navigate(url);
+                               }}>
                             <PlusIcon className="h-3.5 w-3.5 font-bold" /> Create issue
                           </div>
                         </div>
@@ -1012,7 +1066,7 @@ const TaskListPage: React.FC = () => {
                       })
                     )}
                     <div className="px-4 py-2 text-xs text-slate-500 font-semibold hover:bg-slate-50 cursor-pointer flex items-center gap-2 transition"
-                         onClick={() => navigate('/tasks/create')}>
+                         onClick={() => navigate(projectId ? `/tasks/create?projectId=${projectId}` : '/tasks/create')}>
                       <PlusIcon className="h-3.5 w-3.5 font-bold" /> Create issue
                     </div>
                   </div>
