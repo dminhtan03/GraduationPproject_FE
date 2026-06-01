@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
+import { motion, AnimatePresence } from "framer-motion";
 
 export type AnimatedDropdownOption<T extends string> = {
   value: T;
@@ -19,7 +20,7 @@ type AnimatedDropdownProps<T extends string> = {
   ariaLabel?: string;
 };
 
-function AnimatedDropdown<T extends string>({
+export function AnimatedDropdown<T extends string>({
   value,
   options,
   onChange,
@@ -30,20 +31,10 @@ function AnimatedDropdown<T extends string>({
   optionClassName = "",
   ariaLabel,
 }: AnimatedDropdownProps<T>) {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const [isSelecting, setIsSelecting] = React.useState(false);
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
-  const selectingTimerRef = React.useRef<number | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
-  React.useEffect(() => {
-    return () => {
-      if (selectingTimerRef.current != null) {
-        window.clearTimeout(selectingTimerRef.current);
-      }
-    };
-  }, []);
-
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isOpen) return;
 
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
@@ -74,7 +65,7 @@ function AnimatedDropdown<T extends string>({
     options.find((option) => option.value === value) || options[0];
 
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative w-full ${className}`}>
       <button
         type="button"
         aria-haspopup="listbox"
@@ -83,10 +74,10 @@ function AnimatedDropdown<T extends string>({
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
         className={[
-          "flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white/95 px-3 text-sm text-slate-800 shadow-sm outline-none transition-all",
-          "hover:border-orange-200 hover:bg-white focus-visible:border-orange-400 focus-visible:ring-2 focus-visible:ring-orange-100",
-          "disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 disabled:shadow-none",
-          isSelecting ? "border-orange-300 bg-orange-50/80 shadow-md" : "",
+          "flex w-full h-11 items-center justify-between rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm outline-none transition-all duration-200",
+          "hover:border-slate-300 hover:bg-slate-50/20 focus:border-orange-400 focus:ring-4 focus:ring-orange-100",
+          "disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none",
+          isOpen ? "border-orange-400 ring-4 ring-orange-100" : "",
           buttonClassName,
         ].join(" ")}
       >
@@ -96,55 +87,53 @@ function AnimatedDropdown<T extends string>({
         />
       </button>
 
-      <div
-        className={[
-          "absolute left-0 right-0 z-40 mt-2 max-h-60 overflow-y-auto origin-top rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-xl ring-1 ring-slate-100 transition-all duration-200",
-          isOpen
-            ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-            : "pointer-events-none -translate-y-1 scale-95 opacity-0",
-          menuClassName,
-        ].join(" ")}
-      >
-        <ul role="listbox" className="py-1">
-          {options.map((option) => {
-            const isSelected = option.value === value;
-            return (
-              <li key={option.value}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  disabled={option.disabled}
-                  onClick={() => {
-                    if (option.disabled) return;
-                    onChange(option.value);
-                    setIsSelecting(true);
-                    if (selectingTimerRef.current != null) {
-                      window.clearTimeout(selectingTimerRef.current);
-                    }
-                    selectingTimerRef.current = window.setTimeout(() => {
-                      setIsSelecting(false);
-                    }, 220);
-                    setIsOpen(false);
-                  }}
-                  className={[
-                    "flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition active:scale-[0.98]",
-                    isSelected
-                      ? "bg-orange-50 text-orange-700"
-                      : "text-slate-700 hover:bg-orange-50/60",
-                    option.disabled
-                      ? "cursor-not-allowed opacity-50 hover:bg-transparent"
-                      : "",
-                    optionClassName,
-                  ].join(" ")}
-                >
-                  {option.label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.95 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className={[
+              "absolute left-0 right-0 z-[1100] mt-2 max-h-60 overflow-y-auto rounded-2xl border border-slate-100 bg-white p-1.5 shadow-xl shadow-slate-900/5 scrollbar-thin shrink-0",
+              menuClassName,
+            ].join(" ")}
+          >
+            <ul role="listbox" className="py-0.5 space-y-0.5">
+              {options.map((option) => {
+                const isSelected = option.value === value;
+                return (
+                  <li key={option.value}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      disabled={option.disabled}
+                      onClick={() => {
+                        if (option.disabled) return;
+                        onChange(option.value);
+                        setIsOpen(false);
+                      }}
+                      className={[
+                        "flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition-all duration-150 active:scale-[0.98]",
+                        isSelected
+                          ? "bg-orange-50/60 text-orange-600 font-semibold"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-800 font-medium",
+                        option.disabled
+                          ? "cursor-not-allowed opacity-50 hover:bg-transparent"
+                          : "",
+                        optionClassName,
+                      ].join(" ")}
+                    >
+                      {option.label}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
