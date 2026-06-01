@@ -69,10 +69,11 @@ const TaskCreatePage: React.FC = () => {
       }
       if (form.dueAt) payload.dueAt = form.dueAt + "T00:00:00";
       if (sprintId) payload.sprintId = sprintId;
+      if (projectId) payload.projectId = projectId;
 
       const task = await taskService.createTask(payload);
       show("success", "Task created!");
-      const backUrl = projectId ? `/projects/${projectId}` : `/tasks/${task.id}`;
+      const backUrl = projectId ? `/tasks?projectId=${projectId}` : `/tasks/${task.id}`;
       setTimeout(() => navigate(backUrl), 600);
     } catch {
       show("error", "Failed to create task");
@@ -104,7 +105,7 @@ const TaskCreatePage: React.FC = () => {
     <div className="fade-in p-6 max-w-2xl mx-auto">
       <div className="mb-6 flex items-center gap-3">
         <button type="button"
-          onClick={() => navigate(projectId ? `/projects/${projectId}` : "/tasks")}
+          onClick={() => navigate(projectId ? `/tasks?projectId=${projectId}` : "/tasks")}
           className="rounded-xl border border-slate-200 p-2 hover:bg-slate-50 transition">
           <ArrowLeftIcon className="h-5 w-5 text-slate-600" />
         </button>
@@ -266,7 +267,7 @@ const TaskCreatePage: React.FC = () => {
         </div>
 
         <div className="flex gap-3 pt-2 justify-end">
-          <button type="button" onClick={() => navigate(projectId ? `/projects/${projectId}` : "/tasks")} disabled={loading}
+          <button type="button" onClick={() => navigate(projectId ? `/tasks?projectId=${projectId}` : "/tasks")} disabled={loading}
             className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60">
             Cancel
           </button>

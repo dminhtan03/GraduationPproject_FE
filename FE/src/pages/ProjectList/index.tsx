@@ -69,7 +69,7 @@ const ProjectListPage: React.FC = () => {
           <div className="grid gap-4 md:grid-cols-2">
             {projects.map((project: any) => (
               <div key={project.id}
-                onClick={() => navigate(`/projects/${project.id}`)}
+                onClick={() => navigate(`/tasks?projectId=${project.id}`)}
                 className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition duration-200 cursor-pointer">
                 {/* Top row */}
                 <div className="flex items-start justify-between gap-3 mb-3">

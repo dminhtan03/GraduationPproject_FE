@@ -73,8 +73,9 @@ export const meetingService = {
     } | null;
   },
 
-  approveDraft: async (draftId: string) => {
-    const res = await api.post(`${DRAFTS}/${draftId}/approve`);
+  approveDraft: async (draftId: string, taskId?: string) => {
+    const res = await api.post(`${DRAFTS}/${draftId}/approve`,
+      taskId ? { taskId } : undefined);
     return extractData(res);
   },
 
