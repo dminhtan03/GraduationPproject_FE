@@ -26,6 +26,7 @@ import CustomMessage, { type MessageType } from "../../components/common/CustomM
 import { Chart as ChartJS, ArcElement, Tooltip as ChartTooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import DatePickerField from "../../components/common/DatePickerField";
+import AnimatedDropdown from "../../components/common/AnimatedDropdown";
 
 ChartJS.register(ArcElement, ChartTooltip, Legend, CategoryScale, LinearScale, BarElement);
 
@@ -575,10 +576,10 @@ const TaskListPage: React.FC = () => {
                     allowClear
                     prefix={<MagnifyingGlassIcon className="h-4 w-4 text-slate-400 mr-1 shrink-0" />}
                   />
-                  <Select
+                  <AnimatedDropdown
                     value={statusFilter}
                     onChange={setStatusFilter}
-                    className="w-full sm:w-48 font-semibold"
+                    className="w-full sm:w-48"
                     options={[
                       { value: "ALL", label: "All Statuses" },
                       { value: "TODO", label: "To Do" },
