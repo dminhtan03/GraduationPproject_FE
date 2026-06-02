@@ -25,6 +25,7 @@ interface MeetingResult {
   summary: string;
   transcript: string;
   tasks: TaskInfo[];
+  hasAudio?: boolean;
 }
 
 interface Props {
@@ -115,6 +116,18 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
       setCreatedTasks(done);
     }
   }, [initialData]);
+
+  // Load audio từ BE khi có meetingId và hasAudio (meeting load từ DB)
+  useEffect(() => {
+    if (!initialData?.meetingId || !initialData?.hasAudio || audioUrl) return;
+    meetingService.getAudioBlob(initialData.meetingId).then((res) => {
+      if (res) {
+        setAudioBlob(res.blob);
+        setAudioUrl(res.url);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialData?.meetingId, initialData?.hasAudio]);
 
   const startRecording = async () => {
     try {
@@ -311,34 +324,34 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
         </button>
       </div>
 
-      <div className={hasTasks ? "grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" : "space-y-5 max-w-4xl"}>
-        {/* Left Section (File Audio + Tóm tắt) */}
-        <div className={hasTasks ? "lg:col-span-7 space-y-5" : "space-y-5"}>
-          {/* Audio player + download */}
-          {audioUrl && audioBlob && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-4.5 shadow-sm hover:shadow-md transition duration-200">
-              <div className="flex items-center justify-between gap-3 mb-3.5">
-                <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <MicrophoneIcon className="h-4 w-4 text-orange-500" />
-                  Meeting Recording
-                </p>
-                <a
-                  href={audioUrl}
-                  download={`meeting-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}${audioBlob.type.includes("ogg") ? ".ogg" : ".webm"}`}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition shadow-sm"
-                >
-                  <ArrowUpTrayIcon className="h-3.5 w-3.5 rotate-180" /> Download
-                </a>
-              </div>
-              <audio
-                controls
-                src={audioUrl}
-                className="w-full h-10 bg-slate-50 rounded-xl"
-                style={{ borderRadius: "12px" }}
-              />
-            </div>
-          )}
+      {/* Audio player + download — full width, ngay dưới tiêu đề */}
+      {audioUrl && audioBlob && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition duration-200">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <MicrophoneIcon className="h-4 w-4 text-orange-500" />
+              Meeting Recording
+            </p>
+            <a
+              href={audioUrl}
+              download={`meeting-recording-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}${audioBlob.type.includes("ogg") ? ".ogg" : ".webm"}`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition shadow-sm"
+            >
+              <ArrowUpTrayIcon className="h-3.5 w-3.5 rotate-180" /> Download
+            </a>
+          </div>
+          <audio
+            controls
+            src={audioUrl}
+            className="w-full h-10 bg-slate-50 rounded-xl"
+            style={{ borderRadius: "12px" }}
+          />
+        </div>
+      )}
 
+      <div className={hasTasks ? "grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" : "space-y-5 max-w-4xl"}>
+        {/* Left Section (Tóm tắt) */}
+        <div className={hasTasks ? "lg:col-span-7 space-y-5" : "space-y-5"}>
           {/* Tóm tắt cuộc họp */}
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5 shadow-sm hover:shadow-md transition duration-200">
             <div className="flex items-center gap-2 mb-3.5">

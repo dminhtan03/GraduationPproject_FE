@@ -61,6 +61,7 @@ export const meetingService = {
       transcript: string;
       status: string;
       createdAt: string;
+      hasAudio: boolean;
       tasks: {
         draftId: string;
         title: string;
@@ -71,6 +72,22 @@ export const meetingService = {
         createdTaskId: string | null;
       }[];
     } | null;
+  },
+
+  getAudioBlob: async (meetingId: string): Promise<{ blob: Blob; url: string } | null> => {
+    try {
+      const baseURL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+      const token = localStorage.getItem("user_token") ?? "";
+      const res = await axios.get(`${baseURL}/api/v1/meetings/${meetingId}/audio`, {
+        responseType: "blob",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        withCredentials: true,
+      });
+      const blob = res.data as Blob;
+      return { blob, url: URL.createObjectURL(blob) };
+    } catch {
+      return null;
+    }
   },
 
   approveDraft: async (draftId: string, taskId?: string) => {

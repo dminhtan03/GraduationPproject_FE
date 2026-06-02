@@ -31,9 +31,16 @@ export default defineConfig({
 
   // Development server
   server: {
+    host: true,
     port: 5173,
     open: true,
     cors: true,
+
+    // Cho phép Cloudflare Tunnel
+    allowedHosts: [
+      "unibooking.io.vn",
+      ".unibooking.io.vn",
+    ],
   },
 
   optimizeDeps: {

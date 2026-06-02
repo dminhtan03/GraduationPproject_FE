@@ -43,6 +43,6 @@ export const projectService = {
 
   repairTasks: async (projectId: string) => {
     const res = await api.post(`${BASE}/${projectId}/repair-tasks`);
-    return res?.data?.data ?? res?.data ?? res;
+    return (res as any)?.data?.data ?? (res as any)?.data ?? res;
   },
 };
