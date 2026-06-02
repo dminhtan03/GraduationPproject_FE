@@ -90,7 +90,7 @@ const extractData = (raw: unknown): unknown => {
   return firstData ?? raw;
 };
 
-const toAbsoluteImageUrl = (value: unknown): string | undefined => {
+export const toAbsoluteImageUrl = (value: unknown): string | undefined => {
   if (typeof value !== "string") return undefined;
 
   const trimmed = value.trim();

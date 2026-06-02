@@ -1,4 +1,7 @@
-import type { RoomsMapResponse } from "../services/roomService";
+import {
+  type RoomsMapResponse,
+  toAbsoluteImageUrl,
+} from "../services/roomService";
 import type {
   RoomListItem,
   RoomListStatus,
@@ -41,26 +44,30 @@ const resolveAmenityLabel = (value: unknown): string | undefined => {
 };
 
 const resolveRoomImage = (room: RawMapRoom): string => {
+  let rawUrl = "";
+
   if (Array.isArray(room.images) && room.images.length > 0) {
     const firstImage = room.images[0];
     if (firstImage && typeof firstImage === "object") {
       const imageRecord = firstImage as Record<string, unknown>;
-      const imageUrl =
+      rawUrl =
         resolveText(imageRecord.imageUrl) ??
         resolveText(imageRecord.url) ??
         resolveText(imageRecord.image) ??
-        resolveText(imageRecord.path);
-
-      if (imageUrl) return imageUrl;
+        resolveText(imageRecord.path) ??
+        "";
     }
   }
 
-  return (
-    resolveText(room.imageUrl) ??
-    resolveText(room.image) ??
-    resolveText(room.roomImage) ??
-    ""
-  );
+  if (!rawUrl) {
+    rawUrl =
+      resolveText(room.imageUrl) ??
+      resolveText(room.image) ??
+      resolveText(room.roomImage) ??
+      "";
+  }
+
+  return toAbsoluteImageUrl(rawUrl) ?? rawUrl;
 };
 
 const resolveAmenities = (room: RawMapRoom): string[] => {
