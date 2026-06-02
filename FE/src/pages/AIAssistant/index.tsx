@@ -18,7 +18,7 @@ import type { UserProfile } from "../../types";
 import { ROUTES } from "../../constants";
 import { api } from "../../services/api";
 import { API_ENDPOINTS } from "../../constants/endpoints";
-import { roomService } from "../../services/roomService";
+import { roomService, toAbsoluteImageUrl } from "../../services/roomService";
 import { ConfirmDialog } from "../../components/common";
 import CustomMessage, {
   type MessageType,
@@ -679,7 +679,9 @@ const AIAssistantPage: React.FC = () => {
     const roomDetailLocationCodeRaw = toText(roomDetail?.locationCode);
     const roomDetailLocationCode = roomDetailLocationCodeRaw || "-";
     const roomDetailImages = Array.isArray(roomDetail?.images)
-      ? roomDetail.images.filter(Boolean)
+      ? roomDetail.images
+          .map((img: any) => (typeof img === "string" ? img : img?.imageUrl || ""))
+          .filter(Boolean)
       : [];
     const resolvedImageFromMap = roomDetailLocationCodeRaw
       ? bookingImageByCode[roomDetailLocationCodeRaw] ||
@@ -1688,7 +1690,7 @@ const AIAssistantPage: React.FC = () => {
     const showMetaGrid = hasBuilding || hasFloor || hasCapacity;
 
     const resolvedImage =
-      s.imageUrl ||
+      (s.imageUrl ? toAbsoluteImageUrl(s.imageUrl) : null) ||
       (s.locationCode ? bookingImageByCode[s.locationCode] : null) ||
       (s.roomId ? bookingImageByCode[s.roomId] : null);
 
