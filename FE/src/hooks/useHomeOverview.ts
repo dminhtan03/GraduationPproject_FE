@@ -52,8 +52,6 @@ export const useHomeOverview = () => {
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<HomeStats>(() => buildHomeStats([]));
-  const [statsLoading, setStatsLoading] = useState(true);
 
   const loadRooms = useCallback(async (skipLoading = false) => {
     if (!skipLoading) {
@@ -71,33 +69,6 @@ export const useHomeOverview = () => {
     }
   }, []);
 
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true);
-    try {
-      const [totalResult, availableResult] = await Promise.all([
-        roomService.getRooms({ page: 0, size: 1 }),
-        roomService.getRooms({ page: 0, size: 1, status: "AVAILABLE" }),
-      ]);
-
-      const totalRooms = totalResult.total;
-      const availableRooms = availableResult.total;
-      const occupiedRooms = Math.max(0, totalRooms - availableRooms);
-      const occupancyRate =
-        totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
-
-      setStats({
-        totalRooms,
-        availableRooms,
-        occupiedRooms,
-        occupancyRate,
-      });
-    } catch (err) {
-      setError(extractApiMessage(err, "Unable to load room stats"));
-    } finally {
-      setStatsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     const cached = roomService.getRoomsMapCached();
     const hasCached = Boolean(cached);
@@ -108,13 +79,13 @@ export const useHomeOverview = () => {
     }
 
     void loadRooms(hasCached);
-    void loadStats();
-  }, [loadRooms, loadStats]);
+  }, [loadRooms]);
 
   const featuredRooms = useMemo(() => pickFeaturedRooms(rooms), [rooms]);
+  const stats = useMemo(() => buildHomeStats(rooms), [rooms]);
 
   return {
-    loading: loading || statsLoading,
+    loading,
     error,
     featuredRooms,
     stats,

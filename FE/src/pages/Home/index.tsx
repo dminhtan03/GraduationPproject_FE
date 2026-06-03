@@ -447,65 +447,99 @@ const HomePage: React.FC = () => {
             className="flex-1 w-full max-w-lg relative home-fade-up"
             style={{ animationDelay: "140ms" }}
           >
-            <div className="bg-white rounded-[2rem] shadow-2xl p-6 border border-slate-100 relative z-10">
-              <div className="space-y-5 mb-6">
+            {/* Realistic AI Assistant chat mockup */}
+            <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden relative z-10">
+              {/* Header — matching AI Assistant */}
+              <div className="bg-gradient-to-r from-orange-600 via-orange-500 to-amber-900 px-5 py-3.5 text-white">
+                <h3 className="text-xs font-bold uppercase tracking-wider">AI Assistant</h3>
+                <p className="text-[10px] text-orange-100/80 mt-0.5 font-medium">Hệ thống gợi ý &amp; đặt phòng thông minh</p>
+              </div>
+
+              {/* Chat messages area */}
+              <div className="px-5 py-5 space-y-4 bg-gradient-to-b from-orange-50/20 via-white to-orange-50/10">
+                {/* User message */}
                 <div
-                  className="flex gap-3 max-w-[85%] home-rise-in"
-                  style={{ animationDelay: "120ms" }}
+                  className="flex justify-end home-rise-in"
+                  style={{ animationDelay: "160ms" }}
                 >
-                  <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                    AI
-                  </div>
-                  <div className="bg-slate-100 rounded-2xl rounded-tl-none px-4 py-3 text-sm text-slate-700 leading-relaxed">
-                    Hi Pham! I noticed you have a group project today. Would you
-                    like me to find a room in Building Epsilon for 4 people
-                    around 3:00 PM?
+                  <div className="flex items-end gap-2 flex-row-reverse">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-orange-500 text-white text-[10px] font-bold shrink-0">
+                      PT
+                    </div>
+                    <div>
+                      <div className="rounded-2xl rounded-br-none bg-gradient-to-br from-orange-500 to-orange-600 px-3.5 py-2.5 text-xs leading-relaxed text-white font-medium shadow-sm shadow-orange-500/10">
+                        Đặt phòng
+                      </div>
+                      <div className="mt-1 text-right text-[10px] text-slate-400 flex items-center justify-end gap-1">
+                        <span>•</span>
+                        <span>21:26</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
+                {/* Bot message with menu options */}
                 <div
-                  className="flex gap-3 max-w-[85%] ml-auto flex-row-reverse home-rise-in"
-                  style={{ animationDelay: "200ms" }}
+                  className="flex justify-start home-rise-in"
+                  style={{ animationDelay: "260ms" }}
                 >
-                  <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                    PT
-                  </div>
-                  <div className="bg-orange-500 rounded-2xl rounded-tr-none px-4 py-3 text-sm text-white leading-relaxed font-medium">
-                    Yes, please! Ideally something with a whiteboard.
-                  </div>
-                </div>
+                  <div className="flex items-end gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-orange-50 border border-orange-400 text-orange-600 text-[10px] font-bold shrink-0 shadow-sm">
+                      AI
+                    </div>
+                    <div>
+                      <div className="rounded-2xl rounded-bl-none border border-slate-100 bg-white px-3.5 py-2.5 text-xs leading-relaxed text-slate-800 shadow-sm max-w-[280px]">
+                        <p>Bạn muốn đặt phòng ở tòa nào? Các tòa hiện có: Tòa nhà Epsilon, Delta, Beta, Gamma, Alpha.</p>
 
-                <div
-                  className="flex gap-3 max-w-[85%] home-rise-in"
-                  style={{ animationDelay: "280ms" }}
-                >
-                  <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                    AI
-                  </div>
-                  <div className="bg-slate-100 rounded-2xl rounded-tl-none px-4 py-3 text-sm text-slate-700 leading-relaxed">
-                    I've found Room V21-016. It's free from 3-5 PM and has two
-                    large whiteboards. Should I book it?
+                        {/* Menu option buttons */}
+                        <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+                          {["Tòa nhà Epsilon", "Tòa nhà Delta", "Tòa nhà Beta", "Tòa nhà Gamma", "Tòa nhà Alpha"].map((building) => (
+                            <div
+                              key={building}
+                              className="flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-2.5 py-1.5 text-left text-[10px] font-semibold text-slate-800"
+                            >
+                              {building}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-1 text-[10px] text-slate-400 flex items-center gap-1">
+                        <span>•</span>
+                        <span>21:26</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 pl-4 flex items-center justify-between">
-                <span className="text-slate-400 text-sm">
-                  Type your message...
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center text-white cursor-pointer hover:bg-orange-600">
-                  <svg
-                    className="w-4 h-4"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                  </svg>
+              {/* Quick actions bar — matching AI Assistant */}
+              <div className="border-t border-orange-100 bg-white/95 px-4 py-3">
+                <div className="rounded-2xl border border-orange-100/70 bg-gradient-to-br from-white via-orange-50/25 to-amber-50/30 px-3 py-2.5 shadow-sm">
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-orange-700">Quick actions</p>
+                  <div className="mt-2 grid grid-cols-4 gap-1.5">
+                    {[
+                      { code: "1", label: "Đặt phòng" },
+                      { code: "2", label: "Hủy phòng" },
+                      { code: "3", label: "Gia hạn" },
+                      { code: "4", label: "Tra cứu" },
+                    ].map((action) => (
+                      <div
+                        key={action.code}
+                        className="flex flex-col items-start rounded-xl border border-orange-100 bg-white px-2.5 py-2 text-left shadow-sm"
+                      >
+                        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-orange-100 text-[8px] font-bold text-orange-700 mb-1">
+                          {action.code}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-800">{action.label}</span>
+                        <span className="mt-0.5 h-0.5 w-4 rounded-full bg-orange-400" />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* abstract shapes behind chat box */}
+            {/* abstract shapes behind chat mockup */}
             <div className="absolute -top-10 -right-10 w-36 h-36 sm:w-40 sm:h-40 bg-orange-200 rounded-full mix-blend-multiply filter blur-2xl opacity-70 animate-blob"></div>
             <div className="absolute -bottom-10 -left-10 w-36 h-36 sm:w-40 sm:h-40 bg-purple-200 rounded-full mix-blend-multiply filter blur-2xl opacity-70 animate-blob animation-delay-2000"></div>
           </div>
