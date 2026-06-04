@@ -61,6 +61,7 @@ const resolveRoomImage = (room: RawMapRoom): string => {
 
   if (!rawUrl) {
     rawUrl =
+      resolveText(room.thumbnailUrl) ??
       resolveText(room.imageUrl) ??
       resolveText(room.image) ??
       resolveText(room.roomImage) ??

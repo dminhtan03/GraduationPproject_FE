@@ -72,7 +72,7 @@ const ProjectCreatePage: React.FC = () => {
         memberIds: selectedMembers.map(m => m.id),
       });
       show("success", "Project created successfully!");
-      setTimeout(() => navigate(`/projects/${project.id}`), 800);
+      setTimeout(() => navigate(`/tasks?projectId=${project.id}`), 800);
     } catch {
       show("error", "Failed to create project");
     } finally {

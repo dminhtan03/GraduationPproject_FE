@@ -21,6 +21,7 @@ export interface RawMapRoom {
   roomName?: string;
   status?: string;
   images?: Array<{ imageUrl?: string; url?: string; image?: string; path?: string }>;
+  thumbnailUrl?: string;
   imageUrl?: string;
   image?: string;
   roomImage?: string;

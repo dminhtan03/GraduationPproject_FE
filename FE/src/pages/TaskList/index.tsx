@@ -14,7 +14,10 @@ import {
   CalendarIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  UsersIcon,
+  UserPlusIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import dayjs from "dayjs";
 import { taskService } from "../../services/taskService";
@@ -46,7 +49,7 @@ const getInitials = (name?: string) => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
-type TabKey = "tasks" | "board" | "backlog" | "analytics";
+type TabKey = "tasks" | "board" | "backlog" | "analytics" | "members";
 
 const TaskListPage: React.FC = () => {
   const navigate = useNavigate();
@@ -95,6 +98,13 @@ const TaskListPage: React.FC = () => {
 
   // AI task highlight
   const [newTaskIds, setNewTaskIds] = useState<Set<string>>(new Set());
+
+  // Members tab
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberSearchResults, setMemberSearchResults] = useState<any[]>([]);
+  const [memberSearchTimer, setMemberSearchTimer] = useState<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [addingMemberId, setAddingMemberId] = useState<string | null>(null);
 
   // Delete confirm modal
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -433,7 +443,14 @@ const TaskListPage: React.FC = () => {
     if (!val.trim()) { setQuickAssignResults([]); return; }
     quickAssignSearchTimer.current = setTimeout(async () => {
       const r = await userService.searchUsers(val);
-      setQuickAssignResults(r);
+      // Filter to project members only when in project context
+      const memberIds = new Set<string>(
+        (projectInfo?.members ?? []).map((m: any) => m.userId ?? m.id)
+      );
+      const filtered = projectId && memberIds.size > 0
+        ? r.filter((u: any) => memberIds.has(u.id))
+        : r;
+      setQuickAssignResults(filtered);
     }, 350);
   };
 
@@ -461,6 +478,48 @@ const TaskListPage: React.FC = () => {
       void loadData();
       void loadWorkplaceItems(searchQuery, statusFilter, projectId);
     });
+  };
+
+  // Member handlers
+  const handleMemberSearch = (val: string) => {
+    setMemberSearch(val);
+    clearTimeout(memberSearchTimer);
+    if (!val.trim()) { setMemberSearchResults([]); return; }
+    setMemberSearchTimer(setTimeout(async () => {
+      const r = await userService.searchUsers(val);
+      setMemberSearchResults(r);
+    }, 350));
+  };
+
+  const handleAddMember = async (user: { id: string; fullName: string; email: string }) => {
+    if (!projectId) return;
+    setAddingMemberId(user.id);
+    try {
+      await projectService.addMember(projectId, user.id);
+      show("success", `Đã thêm ${user.fullName} vào project`);
+      setMemberSearch("");
+      setMemberSearchResults([]);
+      void loadData();
+    } catch {
+      show("error", "Không thể thêm thành viên");
+    } finally {
+      setAddingMemberId(null);
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string, memberName: string) => {
+    if (!projectId) return;
+    if (!window.confirm(`Xóa ${memberName} khỏi project?`)) return;
+    setRemovingMemberId(memberId);
+    try {
+      await projectService.removeMember(projectId, memberId);
+      show("success", `Đã xóa ${memberName} khỏi project`);
+      void loadData();
+    } catch {
+      show("error", "Không thể xóa thành viên");
+    } finally {
+      setRemovingMemberId(null);
+    }
   };
 
   // Analytics Data
@@ -552,6 +611,16 @@ const TaskListPage: React.FC = () => {
           Backlog Pool
           {backlogTasks.length > 0 && <span className="ml-1 px-2 py-0.5 text-xs bg-slate-200 text-slate-700 rounded-full font-bold">{backlogTasks.length}</span>}
         </button>
+        {projectId && (
+          <button type="button" onClick={() => setActiveTab("members")}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition ${activeTab === "members" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
+            <UsersIcon className="h-4 w-4" />
+            Members
+            {projectInfo?.members?.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-slate-200 text-slate-700 rounded-full font-bold">{projectInfo.members.length}</span>
+            )}
+          </button>
+        )}
         <button type="button" onClick={() => setActiveTab("analytics")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition ${activeTab === "analytics" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}>
           <ChartBarIcon className="h-4 w-4" />
@@ -1075,7 +1144,115 @@ const TaskListPage: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 4: Analytics */}
+          {/* TAB 4: Members */}
+          {activeTab === "members" && (
+            <div className="max-w-2xl mx-auto space-y-5 pb-12">
+              {/* Add member */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <UserPlusIcon className="h-5 w-5 text-orange-500" />
+                  <h3 className="font-bold text-slate-800 text-base">Thêm thành viên</h3>
+                </div>
+                <div className="relative">
+                  <Input
+                    placeholder="Tìm theo tên hoặc email..."
+                    value={memberSearch}
+                    onChange={e => handleMemberSearch(e.target.value)}
+                    className="rounded-xl h-[42px] border-slate-200"
+                    prefix={<MagnifyingGlassIcon className="h-4 w-4 text-slate-400 mr-1 shrink-0" />}
+                    allowClear
+                    onClear={() => { setMemberSearch(""); setMemberSearchResults([]); }}
+                  />
+                  {memberSearchResults.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden max-h-56 overflow-y-auto">
+                      {memberSearchResults.map(u => {
+                        const alreadyMember = projectInfo?.members?.some((m: any) => m.userId === u.id || m.id === u.id);
+                        return (
+                          <div key={u.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                                {getInitials(u.fullName)}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-slate-800 truncate">{u.fullName}</p>
+                                <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                              </div>
+                            </div>
+                            {alreadyMember ? (
+                              <span className="text-xs text-slate-400 font-medium shrink-0">Đã trong project</span>
+                            ) : (
+                              <button type="button" onClick={() => handleAddMember(u)}
+                                disabled={addingMemberId === u.id}
+                                className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 transition disabled:opacity-60">
+                                {addingMemberId === u.id ? "Đang thêm..." : <><PlusIcon className="h-3 w-3" /> Thêm</>}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Member list */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <UsersIcon className="h-5 w-5 text-slate-500" />
+                  <h3 className="font-bold text-slate-800 text-base">
+                    Thành viên
+                    <span className="ml-2 px-2 py-0.5 text-xs bg-orange-100 text-orange-600 rounded-full font-bold">
+                      {projectInfo?.members?.length ?? 0}
+                    </span>
+                  </h3>
+                </div>
+
+                {!projectInfo?.members?.length ? (
+                  <div className="text-center py-10 text-slate-400 text-sm">
+                    Chưa có thành viên nào trong project.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {projectInfo.members.map((m: any) => {
+                      const memberId = m.userId ?? m.id;
+                      const memberName = m.userName ?? m.fullName ?? m.name ?? "Unknown";
+                      const memberEmail = m.userEmail ?? m.email ?? "";
+                      const isOwner = m.role === "OWNER" || projectInfo?.createdById === memberId;
+                      return (
+                        <div key={memberId} className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50/60 transition">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm"
+                              style={{ background: isOwner ? "#ff9500" : "#334155" }}>
+                              {getInitials(memberName)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-slate-800 truncate">{memberName}</p>
+                                {isOwner && (
+                                  <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-100 px-1.5 py-0.5 rounded-full shrink-0">OWNER</span>
+                                )}
+                              </div>
+                              {memberEmail && <p className="text-xs text-slate-400 truncate">{memberEmail}</p>}
+                            </div>
+                          </div>
+                          {!isOwner && (
+                            <button type="button"
+                              onClick={() => handleRemoveMember(memberId, memberName)}
+                              disabled={removingMemberId === memberId}
+                              className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-100 hover:text-red-600 transition disabled:opacity-60">
+                              {removingMemberId === memberId ? "Đang xóa..." : <><XMarkIcon className="h-3 w-3" /> Xóa</>}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: Analytics */}
           {activeTab === "analytics" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto pb-12">
               <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200/80">

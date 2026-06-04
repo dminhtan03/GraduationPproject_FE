@@ -62,6 +62,7 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
     return done;
   });
   const [creatingKey, setCreatingKey] = useState<string | null>(null);
+  const [editedDueDates, setEditedDueDates] = useState<Record<string, string>>({});
 
   // Audio file for playback + download after recording/import
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -199,7 +200,7 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
         title: task.title,
         description: task.description,
         priority: task.priority ?? "MEDIUM",
-        dueAt: task.dueAt,
+        dueAt: editedDueDates[taskKey(task, idx)] ?? task.dueAt,
         meetingId: result?.meetingId,
         sprintId: selectedSprintId,
         projectId: selectedProjectId,
@@ -349,26 +350,22 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
         </div>
       )}
 
-      <div className={hasTasks ? "grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" : "space-y-5 max-w-4xl"}>
-        {/* Left Section (Tóm tắt) */}
-        <div className={hasTasks ? "lg:col-span-7 space-y-5" : "space-y-5"}>
-          {/* Tóm tắt cuộc họp */}
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5 shadow-sm hover:shadow-md transition duration-200">
-            <div className="flex items-center gap-2 mb-3.5">
-              <DocumentTextIcon className="h-5 w-5 text-emerald-600" />
-              <p className="text-sm font-bold text-emerald-800">Meeting Summary</p>
-            </div>
-            {result?.summary ? (
-              <p className="text-sm text-slate-700 leading-7 whitespace-pre-wrap font-medium">{result.summary}</p>
-            ) : (
-              <p className="text-sm text-slate-400 italic font-medium">No summary available.</p>
-            )}
-          </div>
+      {/* Meeting Summary — full width, trên cùng */}
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-5 shadow-sm hover:shadow-md transition duration-200">
+        <div className="flex items-center gap-2 mb-3.5">
+          <DocumentTextIcon className="h-5 w-5 text-emerald-600" />
+          <p className="text-sm font-bold text-emerald-800">Meeting Summary</p>
         </div>
+        {result?.summary ? (
+          <p className="text-sm text-slate-700 leading-7 whitespace-pre-wrap font-medium">{result.summary}</p>
+        ) : (
+          <p className="text-sm text-slate-400 italic font-medium">No summary available.</p>
+        )}
+      </div>
 
-        {/* Right Section (Extracted Tasks) */}
-        {hasTasks && (
-          <div className="lg:col-span-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4 hover:shadow-md transition duration-200">
+      {/* AI Extracted Tasks — full width, bên dưới Summary */}
+      {hasTasks && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4 hover:shadow-md transition duration-200">
             <div className="flex items-center gap-2 pb-1.5 border-b border-slate-100">
               <ClipboardDocumentListIcon className="h-5 w-5 text-orange-500" />
               <p className="text-sm font-bold text-slate-800">
@@ -402,6 +399,9 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
                   />
                 </div>
               </div>
+              {!selectedProjectId && (
+                <p className="text-[11px] text-orange-500 font-semibold">* Vui lòng chọn Project để thêm nhiệm vụ</p>
+              )}
               {selectedProjectId && projectSprints.length === 0 && (
                 <p className="text-[11px] text-slate-400 font-medium">This project has no active sprints.</p>
               )}
@@ -427,9 +427,15 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
                             {task.priority}
                           </Tag>
                         )}
-                        {task.dueAt && (
-                          <span className="text-[11px] font-semibold text-slate-400">Due: {fmt(task.dueAt)}</span>
-                        )}
+                        <label className="flex items-center gap-1 cursor-pointer group">
+                          <span className="text-[11px] font-semibold text-slate-400">Due:</span>
+                          <input
+                            type="date"
+                            value={editedDueDates[key] ?? task.dueAt?.slice(0, 10) ?? ""}
+                            onChange={e => setEditedDueDates(prev => ({ ...prev, [key]: e.target.value }))}
+                            className="text-[11px] font-semibold text-slate-600 bg-transparent border-b border-dashed border-slate-300 hover:border-orange-400 focus:border-orange-500 focus:outline-none cursor-pointer transition-colors"
+                          />
+                        </label>
                         {task.aiConfidence != null && (
                           <span className="text-[11px] font-semibold text-slate-400">
                             {Math.round(task.aiConfidence * 100)}% confidence
@@ -437,7 +443,8 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
                         )}
                       </div>
                     </div>
-                    <button type="button" disabled={isDone || isCreating}
+                    <button type="button" disabled={isDone || isCreating || !selectedProjectId}
+                      title={!selectedProjectId ? "Vui lòng chọn Project trước" : undefined}
                       onClick={() => createTask(task, idx)}
                       className="shrink-0 inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition shadow-sm
                         disabled:opacity-60 disabled:cursor-not-allowed
@@ -452,8 +459,7 @@ const MeetingRecorder: React.FC<Props> = ({ reservationId, meetingTitle, initial
               })}
             </div>
           </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };

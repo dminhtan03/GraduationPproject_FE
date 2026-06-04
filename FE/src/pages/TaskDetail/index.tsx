@@ -23,6 +23,7 @@ import {
   DocumentIcon,
   ArrowDownTrayIcon,
   PaperClipIcon,
+  PencilIcon,
 } from "@heroicons/react/24/outline";
 import { taskService } from "../../services/taskService";
 import { userService } from "../../services/userService";
@@ -55,23 +56,47 @@ const fmt = (v?: string) => {
     : d.toLocaleDateString("vi-VN", { hour12: false });
 };
 
+const downloadFile = async (url: string, fileName: string) => {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+  } catch {
+    window.open(url, "_blank");
+  }
+};
+
 const SubmittedWorkDisplay: React.FC<{ resultNote: string }> = ({ resultNote }) => {
+  const [lightbox, setLightbox] = React.useState<{ url: string; name: string } | null>(null);
+
   const lines = resultNote.split("\n");
   const summaryLines: string[] = [];
-  const files: { name: string; size?: string }[] = [];
+  const files: { name: string; size?: string; url?: string }[] = [];
   const links: string[] = [];
 
   lines.forEach((line) => {
     const trimmed = line.trim();
     if (trimmed.startsWith("📎")) {
       const content = trimmed.replace(/^📎\s*/, "");
-      const sizeMatch = content.match(/\(([^)]+)\)$/);
-      if (sizeMatch) {
-        const size = sizeMatch[1];
-        const name = content.replace(/\s*\([^)]+\)$/, "");
-        files.push({ name, size });
+      if (content.includes("|||")) {
+        // New format: "name|||url"
+        const [name, url] = content.split("|||");
+        files.push({ name: name.trim(), url: url.trim() });
       } else {
-        files.push({ name: content });
+        // Legacy format: "name (size)" — no URL available
+        const sizeMatch = content.match(/\(([^)]+)\)$/);
+        if (sizeMatch) {
+          files.push({ name: content.replace(/\s*\([^)]+\)$/, ""), size: sizeMatch[1] });
+        } else {
+          files.push({ name: content });
+        }
       }
     } else if (trimmed.startsWith("🔗")) {
       const url = trimmed.replace(/^🔗\s*/, "").trim();
@@ -164,35 +189,190 @@ const SubmittedWorkDisplay: React.FC<{ resultNote: string }> = ({ resultNote }) 
               })}
 
             {files.map((file, idx) => {
-              const isRenderedAsLink = links.some((url) =>
-                url.toLowerCase().includes(file.name.toLowerCase())
-              );
-              if (isRenderedAsLink) return null;
-
-              return (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="p-2 rounded-lg bg-slate-200 text-slate-600">
-                      <PaperClipIcon className="h-5 w-5" />
+              const isImg = file.url && /\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i.test(file.url);
+              if (isImg && file.url) {
+                return (
+                  <div key={idx} className="col-span-full">
+                    <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                      <img
+                        src={file.url}
+                        alt={file.name}
+                        className="w-full max-h-64 object-contain cursor-zoom-in"
+                        onClick={() => setLightbox({ url: file.url!, name: file.name })}
+                      />
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setLightbox({ url: file.url!, name: file.name })}
+                          className="inline-flex items-center gap-1 rounded-lg bg-slate-900/80 px-2.5 py-1.5 text-[10px] font-bold text-white backdrop-blur-sm hover:bg-slate-900 transition"
+                        >
+                          🔍 Xem
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-lg bg-orange-600/90 px-2.5 py-1.5 text-[10px] font-bold text-white backdrop-blur-sm hover:bg-orange-700 transition"
+                          onClick={e => { e.stopPropagation(); void downloadFile(file.url!, file.name); }}
+                        >
+                          <ArrowDownTrayIcon className="h-3 w-3" /> Tải về
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium px-2 py-1 truncate">{file.name}</p>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800 truncate">
-                        {file.name}
-                      </p>
-                      {file.size && (
-                        <p className="text-[10px] font-semibold text-slate-400">
-                          {file.size}
+                  </div>
+                );
+              }
+              if (file.url) {
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => void downloadFile(file.url!, file.name)}
+                    className="flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-orange-400 hover:bg-orange-50/10 hover:shadow-sm transition-all duration-150 group w-full text-left"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="p-2 rounded-lg bg-orange-50 text-orange-600">
+                        <PaperClipIcon className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 truncate group-hover:text-orange-600 transition-colors">
+                          {file.name}
                         </p>
-                      )}
+                        {file.size && <p className="text-[10px] text-slate-400">{file.size}</p>}
+                      </div>
                     </div>
+                    <ArrowDownTrayIcon className="h-4 w-4 text-slate-400 group-hover:text-orange-500 shrink-0" />
+                  </button>
+                );
+              }
+              // Legacy: no URL
+              return (
+                <div key={idx} className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                  <div className="p-2 rounded-lg bg-slate-200 text-slate-500">
+                    <PaperClipIcon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-700 truncate">{file.name}</p>
+                    {file.size && <p className="text-[10px] text-slate-400">{file.size}</p>}
                   </div>
                 </div>
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Lightbox overlay */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightbox(null)}
+        >
+          <div
+            className="relative max-w-5xl max-h-[90vh] w-full mx-4 flex flex-col items-center"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between w-full mb-2 px-1">
+              <span className="text-sm font-semibold text-white truncate max-w-xs">{lightbox.name}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-orange-600 transition"
+                  onClick={e => { e.stopPropagation(); void downloadFile(lightbox.url, lightbox.name); }}
+                >
+                  <ArrowDownTrayIcon className="h-3.5 w-3.5" /> Tải về
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLightbox(null)}
+                  className="rounded-lg bg-white/10 p-1.5 text-white hover:bg-white/20 transition"
+                >
+                  <XCircleIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            {/* Image */}
+            <img
+              src={lightbox.url}
+              alt={lightbox.name}
+              className="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── EditableField — phải đặt ngoài component để tránh cursor nhảy ──────────
+const EditableField: React.FC<{
+  field: string;
+  value?: string;
+  label: string;
+  multiline?: boolean;
+  placeholder?: string;
+  accentClass?: string;
+  icon: React.ReactNode;
+  iconClass?: string;
+  isCreator: boolean;
+  editingField: string | null;
+  editValues: Record<string, string>;
+  busy: boolean;
+  onStartEdit: (field: string, value: string) => void;
+  onCancel: () => void;
+  onSave: (field: string) => void;
+  onChangeValue: (field: string, value: string) => void;
+}> = ({
+  field, value, label, multiline = true, placeholder = "Chưa có nội dung...",
+  accentClass = "border-l-slate-400 bg-slate-50/50", icon, iconClass = "text-slate-500",
+  isCreator, editingField, editValues, busy, onStartEdit, onCancel, onSave, onChangeValue,
+}) => {
+  const isEditing = editingField === field;
+  return (
+    <div className={`p-4 rounded-xl border border-slate-100 border-l-4 ${accentClass} transition duration-150 hover:shadow-sm group`}>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="flex items-center gap-2">
+          <span className={`h-4.5 w-4.5 shrink-0 ${iconClass}`}>{icon}</span>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+        </div>
+        {isCreator && !isEditing && (
+          <button type="button" onClick={() => onStartEdit(field, value ?? "")}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-slate-200 transition">
+            <PencilIcon className="h-3.5 w-3.5 text-slate-400" />
+          </button>
+        )}
+      </div>
+      {isEditing ? (
+        <div className="space-y-2 pl-6">
+          {multiline ? (
+            <textarea rows={4} value={editValues[field] ?? ""}
+              onChange={e => onChangeValue(field, e.target.value)}
+              className="w-full text-sm text-slate-700 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-orange-400 resize-none"
+              autoFocus />
+          ) : (
+            <input type="text" value={editValues[field] ?? ""}
+              onChange={e => onChangeValue(field, e.target.value)}
+              className="w-full text-sm text-slate-700 border border-slate-300 rounded-xl p-2.5 focus:outline-none focus:border-orange-400"
+              autoFocus />
+          )}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => onSave(field)} disabled={busy}
+              className="px-3 py-1.5 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition disabled:opacity-60">
+              Lưu
+            </button>
+            <button type="button" onClick={onCancel}
+              className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+              Hủy
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="pl-6">
+          {value ? (
+            <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed">{value}</p>
+          ) : (
+            <p className="text-sm text-slate-400 italic">{placeholder}</p>
+          )}
         </div>
       )}
     </div>
@@ -272,9 +452,14 @@ const TaskDetailPage: React.FC = () => {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [assignBrief, setAssignBrief] = useState("");
   const [assignHow, setAssignHow] = useState("");
+  const [projectMemberIds, setProjectMemberIds] = useState<Set<string>>(new Set());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+
+  // Inline field editing (creator only)
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
 
   const show = (type: MessageType, message: string) => {
     setToast({ type, message });
@@ -293,7 +478,22 @@ const TaskDetailPage: React.FC = () => {
       setTask(tData);
       setMe(meData);
       setComments(commentList);
-      setUsers(allUsers);
+
+      // Filter users to project members only if task belongs to a project
+      if (tData?.projectId) {
+        try {
+          const proj = await projectService.getProject(tData.projectId);
+          const memberIds = new Set<string>(
+            (proj?.members ?? []).map((m: any) => m.userId ?? m.id)
+          );
+          setProjectMemberIds(memberIds);
+          setUsers(allUsers.filter((u: any) => memberIds.has(u.id)));
+        } catch {
+          setUsers(allUsers);
+        }
+      } else {
+        setUsers(allUsers);
+      }
     } catch {
       show("error", "Failed to load task details");
     } finally {
@@ -312,6 +512,22 @@ const TaskDetailPage: React.FC = () => {
     }
     show("info" as MessageType, n.title + ": " + n.content);
   });
+
+  const startEdit = (field: string, currentValue: string) => {
+    setEditingField(field);
+    setEditValues(prev => ({ ...prev, [field]: currentValue ?? "" }));
+  };
+
+  const cancelEdit = () => setEditingField(null);
+
+  const saveField = async (field: string) => {
+    const value = editValues[field] ?? "";
+    await doAction(
+      () => taskService.updateTask(taskId!, { [field]: value }),
+      "Đã cập nhật"
+    );
+    setEditingField(null);
+  };
 
   const doAction = async (fn: () => Promise<any>, successMsg: string) => {
     setBusy(true);
@@ -335,7 +551,10 @@ const TaskDetailPage: React.FC = () => {
     }
     searchTimer.current = setTimeout(async () => {
       const r = await userService.searchUsers(val);
-      setUserResults(r);
+      const filtered = projectMemberIds.size > 0
+        ? r.filter((u: any) => projectMemberIds.has(u.id))
+        : r;
+      setUserResults(filtered);
     }, 350);
   };
 
@@ -389,7 +608,7 @@ const TaskDetailPage: React.FC = () => {
   const confirmDeleteTask = async () => {
     try {
       await taskService.deleteTask(taskId!);
-      navigate("/tasks");
+      navigate(-1);
     } catch {
       show("error", "Failed to delete task");
       setDeleteConfirmOpen(false);
@@ -509,6 +728,7 @@ const TaskDetailPage: React.FC = () => {
     );
 
   const isCreator = me?.id === task.createdById;
+
   const isReviewer = me?.id === task.reviewerUserId;
   const myAssignment = task.assignments?.find(
     (a: any) => a.assigneeId === me?.id,
@@ -544,7 +764,7 @@ const TaskDetailPage: React.FC = () => {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate("/tasks")}
+            onClick={() => navigate(-1)}
             className="rounded-xl border border-slate-200 p-2 hover:bg-slate-50 transition bg-white shadow-sm"
           >
             <ArrowLeftIcon className="h-5 w-5 text-slate-600" />
@@ -558,24 +778,49 @@ const TaskDetailPage: React.FC = () => {
                 ← Subtask of: {task.parentTaskTitle}
               </span>
             )}
-            <h1 className="text-xl font-bold text-slate-900 truncate leading-snug">
-              {task.title}
-            </h1>
+            {/* Title — editable by creator */}
+            {isCreator && editingField === "title" ? (
+              <div className="flex items-center gap-2">
+                <input type="text" value={editValues["title"] ?? ""}
+                  onChange={e => setEditValues(prev => ({ ...prev, title: e.target.value }))}
+                  className="text-xl font-bold text-slate-900 border-b-2 border-orange-400 bg-transparent focus:outline-none w-full"
+                  autoFocus />
+                <button type="button" onClick={() => saveField("title")} disabled={busy}
+                  className="px-3 py-1 text-xs font-bold text-white bg-orange-500 rounded-lg shrink-0">Lưu</button>
+                <button type="button" onClick={cancelEdit}
+                  className="px-3 py-1 text-xs font-bold text-slate-500 bg-slate-100 rounded-lg shrink-0">Hủy</button>
+              </div>
+            ) : (
+              <h1 className={`text-xl font-bold text-slate-900 leading-snug ${isCreator ? "cursor-pointer hover:text-orange-600 transition" : "truncate"}`}
+                onClick={() => isCreator && startEdit("title", task.title)}>
+                {task.title}
+                {isCreator && <PencilIcon className="h-3.5 w-3.5 text-slate-300 inline ml-2 align-middle" />}
+              </h1>
+            )}
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              {/* Priority Badge */}
-              <span
-                className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-bold tracking-wider uppercase border shadow-sm transition duration-150 select-none ${
-                  task.priority === "URGENT"
-                    ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100/60"
-                    : task.priority === "HIGH"
-                      ? "bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100/60"
-                      : task.priority === "MEDIUM"
-                        ? "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100/60"
-                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                }`}
-              >
-                {task.priority}
-              </span>
+              {/* Priority Badge — editable by creator */}
+              {isCreator ? (
+                <select value={task.priority}
+                  onChange={e => doAction(() => taskService.updateTask(taskId!, { priority: e.target.value }), "Đã cập nhật")}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold tracking-wider uppercase border shadow-sm cursor-pointer focus:outline-none ${
+                    task.priority === "URGENT" ? "bg-red-50 text-red-600 border-red-100"
+                    : task.priority === "HIGH" ? "bg-orange-50 text-orange-600 border-orange-100"
+                    : task.priority === "MEDIUM" ? "bg-blue-50 text-blue-600 border-blue-100"
+                    : "bg-slate-50 text-slate-600 border-slate-200"
+                  }`}>
+                  <option value="LOW">LOW</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="URGENT">URGENT</option>
+                </select>
+              ) : (
+                <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-bold tracking-wider uppercase border shadow-sm select-none ${
+                  task.priority === "URGENT" ? "bg-red-50 text-red-600 border-red-100"
+                  : task.priority === "HIGH" ? "bg-orange-50 text-orange-600 border-orange-100"
+                  : task.priority === "MEDIUM" ? "bg-blue-50 text-blue-600 border-blue-100"
+                  : "bg-slate-50 text-slate-600 border-slate-200"
+                }`}>{task.priority}</span>
+              )}
 
               {/* Status Select or Badge */}
               {isCreator || !!myAssignment ? (
@@ -648,21 +893,11 @@ const TaskDetailPage: React.FC = () => {
                           label: "IN PROGRESS",
                           color: "bg-blue-600",
                         },
-                        ...(task.reviewerUserId
-                          ? [
-                              {
-                                value: "WAITING_REVIEW",
-                                label: "SUBMIT FOR REVIEW",
-                                color: "bg-amber-500",
-                              },
-                            ]
-                          : [
-                              {
-                                value: "DONE",
-                                label: "MARK AS DONE",
-                                color: "bg-emerald-600",
-                              },
-                            ]),
+                        {
+                          value: "DONE",
+                          label: "MARK AS DONE",
+                          color: "bg-emerald-600",
+                        },
                       ]
                   ).map((opt) => (
                     <Select.Option
@@ -752,8 +987,31 @@ const TaskDetailPage: React.FC = () => {
           {/* Details Section */}
           <Section title="Task Description">
             <div className="space-y-6">
-              {/* Main Description */}
-              {task.description ? (
+              {/* Main Description — editable */}
+              {isCreator ? (
+                <div className="group relative">
+                  {editingField === "description" ? (
+                    <div className="space-y-2">
+                      <textarea rows={4} value={editValues["description"] ?? ""}
+                        onChange={e => setEditValues(prev => ({ ...prev, description: e.target.value }))}
+                        className="w-full text-sm text-slate-700 border border-orange-300 rounded-xl p-3 focus:outline-none focus:border-orange-400 resize-none"
+                        autoFocus />
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => saveField("description")} disabled={busy}
+                          className="px-3 py-1.5 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition">Lưu</button>
+                        <button type="button" onClick={cancelEdit}
+                          className="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition">Hủy</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div onClick={() => startEdit("description", task.description ?? "")}
+                      className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap bg-slate-50/30 p-4 rounded-xl border border-slate-100 border-dashed cursor-text hover:border-orange-300 hover:bg-orange-50/10 transition min-h-[60px]">
+                      {task.description || <span className="text-slate-400 italic">Nhấn để thêm mô tả...</span>}
+                      <PencilIcon className="h-3.5 w-3.5 text-slate-300 absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition" />
+                    </div>
+                  )}
+                </div>
+              ) : task.description ? (
                 <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap bg-slate-50/30 p-4 rounded-xl border border-slate-100">
                   {task.description}
                 </div>
@@ -765,32 +1023,24 @@ const TaskDetailPage: React.FC = () => {
 
               {/* Grid or stack for structured fields */}
               <div className="space-y-4">
-                {task.goal && (
-                  <div className="p-4 rounded-xl border border-slate-100 bg-amber-50/20 border-l-4 border-l-amber-500 transition duration-150 hover:shadow-sm">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <CheckCircleIcon className="h-4.5 w-4.5 text-amber-500 shrink-0" />
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        Target Goals
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">
-                      {task.goal}
-                    </p>
-                  </div>
+                {(task.goal || isCreator) && (
+                  <EditableField field="goal" value={task.goal} label="Target Goals"
+                    placeholder="Nhấn để thêm mục tiêu..."
+                    accentClass="border-l-amber-500 bg-amber-50/20" iconClass="text-amber-500"
+                    icon={<CheckCircleIcon className="h-4.5 w-4.5" />}
+                    isCreator={isCreator} editingField={editingField} editValues={editValues}
+                    busy={busy} onStartEdit={startEdit} onCancel={cancelEdit}
+                    onSave={saveField} onChangeValue={(f, v) => setEditValues(prev => ({ ...prev, [f]: v }))} />
                 )}
 
-                {task.expectedResult && (
-                  <div className="p-4 rounded-xl border border-slate-100 bg-indigo-50/20 border-l-4 border-l-indigo-500 transition duration-150 hover:shadow-sm">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <ListBulletIcon className="h-4.5 w-4.5 text-indigo-500 shrink-0" />
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        Expected Deliverables
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed pl-6">
-                      {task.expectedResult}
-                    </p>
-                  </div>
+                {(task.expectedResult || isCreator) && (
+                  <EditableField field="expectedResult" value={task.expectedResult} label="Expected Deliverables"
+                    placeholder="Nhấn để thêm kết quả mong đợi..."
+                    accentClass="border-l-indigo-500 bg-indigo-50/20" iconClass="text-indigo-500"
+                    icon={<ListBulletIcon className="h-4.5 w-4.5" />}
+                    isCreator={isCreator} editingField={editingField} editValues={editValues}
+                    busy={busy} onStartEdit={startEdit} onCancel={cancelEdit}
+                    onSave={saveField} onChangeValue={(f, v) => setEditValues(prev => ({ ...prev, [f]: v }))} />
                 )}
 
                 {task.assignmentBrief && (

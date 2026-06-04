@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import axios from "axios";
 import { taskService } from "../services/taskService";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -8,6 +9,7 @@ export interface AttachedFile {
   name: string;
   size: number;
   type: string;
+  file: File; // actual File object for upload
 }
 
 export interface RelatedLink {
@@ -152,6 +154,7 @@ export function useSubmitWorkModal(): UseSubmitWorkModalReturn {
                 name: file.name,
                 size: file.size,
                 type: file.type,
+                file,
               },
             ],
           };
@@ -210,19 +213,34 @@ export function useSubmitWorkModal(): UseSubmitWorkModalReturn {
       setErrorMessage("");
 
       try {
+        const baseURL = (import.meta as any).env?.VITE_API_URL || "http://localhost:8080";
+        const token = localStorage.getItem("user_token") ?? "";
+
+        // Upload files to Cloudinary first
+        const uploadedFiles: { name: string; url: string }[] = [];
+        for (const f of form.files) {
+          const formData = new FormData();
+          formData.append("file", f.file);
+          const res = await axios.post(`${baseURL}/api/v1/upload`, formData, {
+            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            withCredentials: true,
+          });
+          const data = res.data?.data ?? res.data;
+          if (data?.url) uploadedFiles.push({ name: f.name, url: data.url });
+        }
+
         // Build the full resultNote string
-        // Backend only stores this as a single text field
         const sections: string[] = [form.summary.trim()];
 
-        // Append file references as text
-        if (form.files.length > 0) {
-          const fileParts = form.files
-            .map((f) => `📎 ${f.name} (${formatFileSize(f.size)})`)
+        // Append uploaded file URLs with original filename encoded
+        if (uploadedFiles.length > 0) {
+          const fileParts = uploadedFiles
+            .map((f) => `📎 ${f.name}|||${f.url}`)
             .join("\n");
           sections.push(fileParts);
         }
 
-        // Append links
+        // Append user-entered links
         const validLinks = form.links.filter((l) => l.url.trim());
         if (validLinks.length > 0) {
           const linkParts = validLinks
