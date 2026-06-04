@@ -680,7 +680,9 @@ const AIAssistantPage: React.FC = () => {
     const roomDetailLocationCode = roomDetailLocationCodeRaw || "-";
     const roomDetailImages = Array.isArray(roomDetail?.images)
       ? roomDetail.images
-          .map((img: any) => (typeof img === "string" ? img : img?.imageUrl || ""))
+          .map((img: any) =>
+            typeof img === "string" ? img : img?.imageUrl || "",
+          )
           .filter(Boolean)
       : [];
     const resolvedImageFromMap = roomDetailLocationCodeRaw
@@ -1665,12 +1667,10 @@ const AIAssistantPage: React.FC = () => {
   };
 
   const handleBookNow = async (suggestion: AiRoomSuggestion) => {
-    const resolved = await resolveSuggestionForNavigation(suggestion);
-    if (!resolved) return;
+    const roomCode = toText(suggestion.locationCode || suggestion.roomId);
+    if (!roomCode) return;
 
-    navigate(ROUTES.ROOM_DETAIL.replace(":roomId", resolved.roomId), {
-      state: { room: resolved.roomState },
-    });
+    await sendMessageToAi(`Đặt phòng ${roomCode} `, "chat");
   };
 
   const handleViewDetails = async (suggestion: AiRoomSuggestion) => {
@@ -1905,8 +1905,54 @@ const AIAssistantPage: React.FC = () => {
     );
   };
 
-  const suggestions = latestSuggestionMessage?.suggestions || [];
-  const isSingleSuggestion = suggestions.length === 1;
+  const suggestions = useMemo(
+    () => latestSuggestionMessage?.suggestions ?? [],
+    [latestSuggestionMessage],
+  );
+  const capacityRange = useMemo(() => {
+    if (!latestSuggestionMessage) return null;
+    const suggestionIndex = selectedMessages.findIndex(
+      (message) => message.id === latestSuggestionMessage.id,
+    );
+    if (suggestionIndex <= 0) return null;
+
+    for (let index = suggestionIndex - 1; index >= 0; index -= 1) {
+      const message = selectedMessages[index];
+      if (message.sender !== "user") continue;
+      const normalizedText = message.text.toLowerCase();
+      if (
+        !normalizedText.includes("người") &&
+        !normalizedText.includes("sức chứa")
+      ) {
+        continue;
+      }
+
+      const match = message.text.match(/(\d+)\s*-\s*(\d+)/);
+      if (!match) continue;
+      const min = Number(match[1]);
+      const max = Number(match[2]);
+      if (!Number.isFinite(min) || !Number.isFinite(max)) continue;
+      return min <= max ? { min, max } : { min: max, max: min };
+    }
+
+    return null;
+  }, [latestSuggestionMessage, selectedMessages]);
+  const suggestionsInCapacityRange = useMemo(() => {
+    if (!capacityRange || suggestions.length === 0) return suggestions;
+
+    const filtered = suggestions.filter((item) => {
+      if (typeof item.capacity !== "number") return false;
+      return (
+        item.capacity >= capacityRange.min && item.capacity <= capacityRange.max
+      );
+    });
+
+    return filtered.length > 0 ? filtered : suggestions;
+  }, [capacityRange, suggestions]);
+  const displaySuggestions = capacityRange
+    ? suggestionsInCapacityRange
+    : suggestions;
+  const isSingleSuggestion = displaySuggestions.length === 1;
   const suggestionKind = latestSuggestionMessage?.suggestionType || "suggested";
   const suggestionLabel =
     suggestionKind === "alternative"
@@ -2130,6 +2176,7 @@ const AIAssistantPage: React.FC = () => {
 
                     <button
                       type="button"
+                      disabled={isSending || !selectedSession}
                       onClick={(event) => {
                         event.stopPropagation();
                         requestDeleteSession(session);
@@ -2235,8 +2282,8 @@ const AIAssistantPage: React.FC = () => {
                       {suggestionLabel}
                     </h3>
                     <p className="mt-0.5 text-[11px] font-medium text-orange-700/80">
-                      {suggestions.length} suggestion
-                      {suggestions.length > 1 ? "s" : ""}
+                      {displaySuggestions.length} suggestion
+                      {displaySuggestions.length > 1 ? "s" : ""}
                     </p>
                   </div>
 
@@ -2254,16 +2301,17 @@ const AIAssistantPage: React.FC = () => {
                     <div className="max-h-[16rem] space-y-2.5 overflow-y-auto pr-1">
                       {showBestMatch && (
                         <div className="mb-2">
-                          {renderSuggestionCard(suggestions[0], true)}
+                          {renderSuggestionCard(displaySuggestions[0], true)}
                         </div>
                       )}
 
-                      {(showBestMatch ? suggestions.slice(1) : suggestions).map(
-                        (s) => renderSuggestionCard(s),
-                      )}
+                      {(showBestMatch
+                        ? displaySuggestions.slice(1)
+                        : displaySuggestions
+                      ).map((s) => renderSuggestionCard(s))}
                     </div>
 
-                    {suggestions.length > 3 && (
+                    {displaySuggestions.length > 3 && (
                       <p className="mt-3 flex items-center justify-center text-[10px] font-medium text-orange-600/80">
                         Scroll to view more suggestions
                       </p>
