@@ -4,6 +4,7 @@ import { Tag, Spin, Modal, Input, DatePicker, Tooltip } from "antd";
 import {
   ArrowLeftIcon, PlusIcon, CalendarIcon, UserGroupIcon,
   FolderIcon, TrashIcon, ChevronDownIcon, ChevronRightIcon,
+  PencilIcon, CheckCircleIcon, XMarkIcon,
 } from "@heroicons/react/24/outline";
 import dayjs from "dayjs";
 import { projectService } from "../../services/projectService";
@@ -52,6 +53,19 @@ const ProjectDetailPage: React.FC = () => {
 
   // Delete project modal
   const [deleteProjectModal, setDeleteProjectModal] = useState(false);
+
+  // Edit project name
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState("");
+  const [savingName, setSavingName] = useState(false);
+
+  // Edit project endDate
+  const [editingEndDate, setEditingEndDate] = useState(false);
+  const [endDateValue, setEndDateValue] = useState("");
+  const [savingEndDate, setSavingEndDate] = useState(false);
+
+  // Mark complete
+  const [completingProject, setCompletingProject] = useState(false);
 
   // Member add
   const [memberSearch, setMemberSearch] = useState("");
@@ -153,6 +167,62 @@ const ProjectDetailPage: React.FC = () => {
     }
   };
 
+  const handleSaveName = async () => {
+    if (!nameValue.trim()) { show("warning", "Tên project không được để trống"); return; }
+    setSavingName(true);
+    try {
+      await projectService.updateProject(projectId!, { name: nameValue.trim() });
+      show("success", "Đã cập nhật tên project");
+      setEditingName(false);
+      void load();
+    } catch {
+      show("error", "Không thể cập nhật tên project");
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const handleSaveEndDate = async () => {
+    setSavingEndDate(true);
+    try {
+      await projectService.updateProject(projectId!, { endDate: endDateValue || null });
+      show("success", "Đã cập nhật hạn chót");
+      setEditingEndDate(false);
+      void load();
+    } catch {
+      show("error", "Không thể cập nhật hạn chót");
+    } finally {
+      setSavingEndDate(false);
+    }
+  };
+
+  const handleMarkComplete = async () => {
+    const incompleteSprints = sprints.filter(s => s.status !== "COMPLETED");
+    const allTasks = sprints.flatMap((s: any) => s.tasks ?? []);
+    const incompleteTasks = allTasks.filter((t: any) => t.status !== "DONE" && t.status !== "CANCELLED");
+
+    if (incompleteSprints.length > 0 || incompleteTasks.length > 0) {
+      const parts: string[] = [];
+      if (incompleteSprints.length > 0)
+        parts.push(`${incompleteSprints.length} sprint chưa hoàn thành (${incompleteSprints.map((s: any) => s.name).join(", ")})`);
+      if (incompleteTasks.length > 0)
+        parts.push(`${incompleteTasks.length} task chưa hoàn thành`);
+      show("warning", `Project chưa hoàn thành: ${parts.join(" • ")}`);
+      return;
+    }
+
+    setCompletingProject(true);
+    try {
+      await projectService.updateProject(projectId!, { status: "COMPLETED" });
+      show("success", "Project đã được đánh dấu hoàn thành!");
+      void load();
+    } catch {
+      show("error", "Không thể cập nhật trạng thái project");
+    } finally {
+      setCompletingProject(false);
+    }
+  };
+
   const isOwner = project?.createdById === userId;
 
   if (loading) return <div className="flex justify-center items-center min-h-screen"><Spin size="large" /></div>;
@@ -169,8 +239,37 @@ const ProjectDetailPage: React.FC = () => {
               <ArrowLeftIcon className="h-4 w-4 text-slate-600" />
             </button>
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
+              <div className="flex items-center gap-3 flex-wrap">
+                {isOwner && editingName ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      autoFocus
+                      value={nameValue}
+                      onChange={e => setNameValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") void handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
+                      className="text-2xl font-bold text-slate-900 border-b-2 border-orange-400 bg-transparent focus:outline-none w-64"
+                    />
+                    <button type="button" onClick={handleSaveName} disabled={savingName}
+                      className="px-3 py-1 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-60 transition">
+                      {savingName ? "..." : "Lưu"}
+                    </button>
+                    <button type="button" onClick={() => setEditingName(false)}
+                      className="p-1 text-slate-400 hover:text-slate-600 transition">
+                      <XMarkIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 group">
+                    <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
+                    {isOwner && (
+                      <button type="button"
+                        onClick={() => { setNameValue(project.name); setEditingName(true); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-slate-100 transition">
+                        <PencilIcon className="h-4 w-4 text-slate-400" />
+                      </button>
+                    )}
+                  </div>
+                )}
                 <Tag color={project.status === "ACTIVE" ? "processing" : project.status === "COMPLETED" ? "success" : "default"}
                   className="m-0 text-xs font-semibold">
                   {project.status === "ACTIVE" ? "Active" : project.status === "COMPLETED" ? "Completed" : "Archived"}
@@ -182,6 +281,13 @@ const ProjectDetailPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {isOwner && project.status === "ACTIVE" && (
+              <button type="button" onClick={handleMarkComplete} disabled={completingProject}
+                className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition shadow-sm disabled:opacity-60">
+                <CheckCircleIcon className="h-4 w-4" />
+                {completingProject ? "Đang kiểm tra..." : "Đánh dấu hoàn thành"}
+              </button>
+            )}
             <button type="button" onClick={() => setSprintModal(true)}
               className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition shadow-sm">
               <PlusIcon className="h-4 w-4" /> Create Sprint
@@ -295,9 +401,51 @@ const ProjectDetailPage: React.FC = () => {
                   <p className="text-slate-700 text-xs leading-relaxed">{project.goal}</p>
                 </div>
               )}
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <CalendarIcon className="h-3.5 w-3.5" />
-                <span>{fmt(project.startDate)} – {fmt(project.endDate)}</span>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <CalendarIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="text-slate-400">Bắt đầu:</span>
+                  <span className="font-medium text-slate-700">{fmt(project.startDate)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500 group">
+                  <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-orange-400" />
+                  <span className="text-slate-400">Hạn chót:</span>
+                  {isOwner && editingEndDate ? (
+                    <div className="flex items-center gap-1 flex-1">
+                      <input
+                        type="date"
+                        autoFocus
+                        value={endDateValue}
+                        onChange={e => setEndDateValue(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") void handleSaveEndDate();
+                          if (e.key === "Escape") setEditingEndDate(false);
+                        }}
+                        className="text-xs border border-orange-300 rounded-md px-1.5 py-0.5 focus:outline-none focus:border-orange-500 flex-1"
+                        disabled={savingEndDate}
+                      />
+                      <button type="button" onClick={handleSaveEndDate} disabled={savingEndDate}
+                        className="p-0.5 text-emerald-600 hover:text-emerald-700 disabled:opacity-50 transition">
+                        <CheckCircleIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <button type="button" onClick={() => setEditingEndDate(false)}
+                        className="p-0.5 text-slate-400 hover:text-slate-600 transition">
+                        <XMarkIcon className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="font-medium text-slate-700">{fmt(project.endDate)}</span>
+                      {isOwner && (
+                        <button type="button"
+                          onClick={() => { setEndDateValue(project.endDate ?? ""); setEditingEndDate(true); }}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-100 transition ml-auto">
+                          <PencilIcon className="h-3 w-3 text-slate-400" />
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <UserGroupIcon className="h-3.5 w-3.5" />

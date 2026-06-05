@@ -27,10 +27,12 @@ import {
 } from "@heroicons/react/24/outline";
 import { taskService } from "../../services/taskService";
 import { userService } from "../../services/userService";
+import { projectService } from "../../services/projectService";
 import CustomMessage, {
   type MessageType,
 } from "../../components/common/CustomMessage";
 import { useTaskNotifications } from "../../hooks/useTaskNotifications";
+import { extractApiMessage } from "../../utils/errorHandlers";
 import dayjs from "dayjs";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -444,18 +446,9 @@ const TaskDetailPage: React.FC = () => {
   );
   const [reviewComment, setReviewComment] = useState("");
 
-  // User search
-  const [userSearch, setUserSearch] = useState("");
-  const [userResults, setUserResults] = useState<
-    { id: string; fullName: string; email: string }[]
-  >([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [assignBrief, setAssignBrief] = useState("");
   const [assignHow, setAssignHow] = useState("");
-  const [projectMemberIds, setProjectMemberIds] = useState<Set<string>>(new Set());
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
 
   // Inline field editing (creator only)
   const [editingField, setEditingField] = useState<string | null>(null);
@@ -486,7 +479,6 @@ const TaskDetailPage: React.FC = () => {
           const memberIds = new Set<string>(
             (proj?.members ?? []).map((m: any) => m.userId ?? m.id)
           );
-          setProjectMemberIds(memberIds);
           setUsers(allUsers.filter((u: any) => memberIds.has(u.id)));
         } catch {
           setUsers(allUsers);
@@ -536,26 +528,10 @@ const TaskDetailPage: React.FC = () => {
       await loadAllDetails();
       show("success", successMsg);
     } catch (e: any) {
-      show("error", e?.response?.data?.meta?.message || "Action failed");
+      show("error", extractApiMessage(e, "Action failed"));
     } finally {
       setBusy(false);
     }
-  };
-
-  const handleSearchUsers = (val: string) => {
-    setUserSearch(val);
-    clearTimeout(searchTimer.current);
-    if (!val.trim()) {
-      setUserResults([]);
-      return;
-    }
-    searchTimer.current = setTimeout(async () => {
-      const r = await userService.searchUsers(val);
-      const filtered = projectMemberIds.size > 0
-        ? r.filter((u: any) => projectMemberIds.has(u.id))
-        : r;
-      setUserResults(filtered);
-    }, 350);
   };
 
   const handleAssign = () =>
@@ -740,11 +716,6 @@ const TaskDetailPage: React.FC = () => {
     isReviewer &&
     task.status === "WAITING_REVIEW" &&
     task.reviewerStatus === "ACCEPTED";
-
-  const userSelectOptions = userResults.map((u) => ({
-    value: u.id,
-    label: `${u.fullName} (${u.email})`,
-  }));
 
   // Initials for avatar
   const getInitials = (name?: string) => {
@@ -1833,8 +1804,6 @@ const TaskDetailPage: React.FC = () => {
           setSelectedUserId("");
           setAssignBrief("");
           setAssignHow("");
-          setUserResults([]);
-          setUserSearch("");
         }}
         title="Assign Task"
         subtitle="Assign a team member to own and complete this task."
@@ -1849,14 +1818,12 @@ const TaskDetailPage: React.FC = () => {
               <SelectUser
                 value={selectedUserId}
                 onChange={setSelectedUserId}
-                placeholder="Search user by name or email..."
-                onSearchRemote={handleSearchUsers}
-                searchResults={userResults.map((u) => ({
+                placeholder="Search project member..."
+                usersList={users.map((u) => ({
                   id: u.id,
                   fullName: u.fullName,
                   email: u.email,
                 }))}
-                isLoading={busy}
               />
             </FormField>
 
@@ -1888,8 +1855,6 @@ const TaskDetailPage: React.FC = () => {
             setSelectedUserId("");
             setAssignBrief("");
             setAssignHow("");
-            setUserResults([]);
-            setUserSearch("");
           }}
           onSubmit={handleAssign}
           submitText="Assign Task"
@@ -1905,8 +1870,6 @@ const TaskDetailPage: React.FC = () => {
         onClose={() => {
           setInviteReviewerModal(false);
           setSelectedUserId("");
-          setUserResults([]);
-          setUserSearch("");
         }}
         title="Invite Reviewer"
         subtitle="Choose a stakeholder or leader to review task deliverables."
@@ -1921,14 +1884,12 @@ const TaskDetailPage: React.FC = () => {
               <SelectUser
                 value={selectedUserId}
                 onChange={setSelectedUserId}
-                placeholder="Search user by name or email..."
-                onSearchRemote={handleSearchUsers}
-                searchResults={userResults.map((u) => ({
+                placeholder="Search project member..."
+                usersList={users.map((u) => ({
                   id: u.id,
                   fullName: u.fullName,
                   email: u.email,
                 }))}
-                isLoading={busy}
               />
             </FormField>
           </div>
@@ -1938,8 +1899,6 @@ const TaskDetailPage: React.FC = () => {
           onCancel={() => {
             setInviteReviewerModal(false);
             setSelectedUserId("");
-            setUserResults([]);
-            setUserSearch("");
           }}
           onSubmit={handleInviteReviewer}
           submitText="Invite Reviewer"

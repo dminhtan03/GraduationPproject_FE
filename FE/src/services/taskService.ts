@@ -13,7 +13,7 @@ export const taskService = {
   },
 
   getTask: async (taskId: string) => {
-    const res = await api.get(`${BASE}/${taskId}`);
+    const res = await api.get(`${BASE}/${taskId}`, { skipDedupe: true });
     return extractData(res);
   },
 
